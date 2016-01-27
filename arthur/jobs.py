@@ -34,13 +34,13 @@ from .errors import NotFoundError
 logger = logging.getLogger(__name__)
 
 
-def execute_perceval_job(queue, origin, backend, **backend_args):
+def execute_perceval_job(qitems, origin, backend, **backend_args):
     """Execute a Perceval job on RQ.
 
     The items fetched during the process will be stored in a
     Redis queue named `queue`.
 
-    :param queue: name of the RQ queue used to store the items
+    :param qitems: name of the RQ queue used to store the items
     :param origin: origin of the source
     :param backend: backend to execute
     :param bakend_args: arguments to execute the backend
@@ -54,7 +54,7 @@ def execute_perceval_job(queue, origin, backend, **backend_args):
     logging.debug("Running job %s (%s)", origin, backend)
 
     for item in items:
-        db.rpush(origin, pickle.dumps(item))
+        db.rpush(qitems, pickle.dumps(item))
         last_dt = item['__metadata__']['updated_on']
 
     logging.debug("Job completed %s (%s) - %s", origin, backend, last_dt)

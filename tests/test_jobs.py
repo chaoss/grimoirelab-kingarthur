@@ -49,12 +49,12 @@ class TestExecuteJob(TestBaseRQ):
         args = {'gitlog' : 'data/git_log.txt'}
 
         q = Queue('queue', async=False)
-        job = q.enqueue(execute_perceval_job, queue='test',
+        job = q.enqueue(execute_perceval_job, qitems='items',
                         origin='test', backend='git', **args)
 
         self.assertEqual(job.return_value, 'Tue Feb 11 22:10:39 2014 -0800')
 
-        commits = self.conn.lrange('test', 0, -1)
+        commits = self.conn.lrange('items', 0, -1)
         commits = [pickle.loads(c) for c in commits]
         commits = [commit['commit'] for commit in commits]
 

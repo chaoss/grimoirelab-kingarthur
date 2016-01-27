@@ -24,7 +24,9 @@
 import inspect
 import logging
 
+import rq
 import perceval.backends
+import pickle
 
 from .errors import NotFoundError
 
@@ -32,12 +34,39 @@ from .errors import NotFoundError
 logger = logging.getLogger(__name__)
 
 
-def execute_perceval_backend(origin, backend, args):
+def execute_perceval_job(queue, origin, backend, **backend_args):
+    """Execute a Perceval job on RQ.
+
+    The items fetched during the process will be stored in a
+    Redis queue named `queue`.
+
+    :param queue: name of the RQ queue used to store the items
+    :param origin: origin of the source
+    :param backend: backend to execute
+    :param bakend_args: arguments to execute the backend
+
+    :raises NotFoundError: raised when the backend is not found
+    """
+    db = rq.get_current_job().connection
+
+    items = execute_perceval_backend(origin, backend, backend_args)
+
+    logging.debug("Running job %s (%s)", origin, backend)
+
+    for item in items:
+        db.rpush(origin, pickle.dumps(item))
+        last_dt = item['__metadata__']['updated_on']
+
+    logging.debug("Job completed %s (%s) - %s", origin, backend, last_dt)
+
+    return last_dt
+
+
+def execute_perceval_backend(origin, backend, backend_args):
     """Execute a backend of Perceval.
 
-    Run a backend of Perceval for the given repository object.
-    The type of the backend and its parameters are obtained
-    from the given object.
+    Run a backend of Perceval for the given origin. The type of
+    the backend and its parameters are need to run the process.
 
     It will raise a `NotFoundError` in two cases: when the
     backend needed is not available or when any of the required
@@ -47,16 +76,12 @@ def execute_perceval_backend(origin, backend, args):
         raise NotFoundError(element=backend)
 
     klass = perceval.backends.PERCEVAL_BACKENDS[backend]
-    kinit = find_signature_parameters(args, klass.__init__)
-    kfetch = find_signature_parameters(args, klass.fetch)
-
-    logging.debug("Running job %s (%s)", origin, backend)
+    kinit = find_signature_parameters(backend_args, klass.__init__)
+    kfetch = find_signature_parameters(backend_args, klass.fetch)
 
     obj = klass(**kinit)
     for item in obj.fetch(**kfetch):
         yield item
-
-    logging.debug("Job completed %s (%s)", origin, backend)
 
 
 def find_signature_parameters(params, callable):

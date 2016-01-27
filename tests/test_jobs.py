@@ -26,26 +26,49 @@ import sys
 if not '..' in sys.path:
     sys.path.insert(0, '..')
 
+import pickle
 import unittest
 
+from rq import Queue, pop_connection, push_connection
+
 from arthur.errors import NotFoundError
-from arthur.jobs import (execute_perceval_backend,
+from arthur.jobs import (execute_perceval_job,
+                         execute_perceval_backend,
                          find_signature_parameters,
                          inspect_signature_parameters)
 
+from tests import find_empty_redis_database, TestBaseRQ
 
-class MockCallable:
-    """Mock class for testing purposes"""
 
-    def __init__(self, *args, **kwargs):
-        pass
+class TestExecuteJob(TestBaseRQ):
+    """Unit tests for execute_perceval_job"""
 
-    def test(self, a, b, c=None):
-        pass
+    def test_job(self):
+        """Execute Git backend job"""
 
-    @classmethod
-    def class_test(cls, a, b):
-        pass
+        args = {'gitlog' : 'data/git_log.txt'}
+
+        q = Queue('queue', async=False)
+        job = q.enqueue(execute_perceval_job, queue='test',
+                        origin='test', backend='git', **args)
+
+        self.assertEqual(job.return_value, 'Tue Feb 11 22:10:39 2014 -0800')
+
+        commits = self.conn.lrange('test', 0, -1)
+        commits = [pickle.loads(c) for c in commits]
+        commits = [commit['commit'] for commit in commits]
+
+        expected = ['bc57a9209f096a130dcc5ba7089a8663f758a703',
+                    '87783129c3f00d2c81a3a8e585eb86a47e39891a',
+                    '7debcf8a2f57f86663809c58b5c07a398be7674c',
+                    'c0d66f92a95e31c77be08dc9d0f11a16715d1885',
+                    'c6ba8f7a1058db3e6b4bc6f1090e932b107605fb',
+                    '589bb080f059834829a2a5955bebfd7c2baa110a',
+                    'ce8e0b86a1e9877f42fe9453ede418519115f367',
+                    '51a3b654f252210572297f47597b31527c475fb8',
+                    '456a68ee1407a77f3e804a30dff245bb6c6b872f']
+
+        self.assertListEqual(commits, expected)
 
 
 class TestExecuteBackend(unittest.TestCase):
@@ -84,6 +107,20 @@ class TestExecuteBackend(unittest.TestCase):
         with self.assertRaises(NotFoundError):
             _ = [item for item in execute_perceval_backend('test', 'git', {})]
             self.assertEqual(e.exception.element, 'gitlog')
+
+
+class MockCallable:
+    """Mock class for testing purposes"""
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def test(self, a, b, c=None):
+        pass
+
+    @classmethod
+    def class_test(cls, a, b):
+        pass
 
 
 class TestFindSignature(unittest.TestCase):

@@ -45,3 +45,9 @@ class NotFoundError(BaseError):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.element = kwargs['element']
+
+
+class InvalidDateError(BaseError):
+    """Exception raised when a date is invalid"""
+
+    message = "%(date)s is not a valid date"

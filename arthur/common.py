@@ -24,3 +24,5 @@
 Q_CREATION_JOBS = 'create'
 Q_UPDATING_JOBS = 'update'
 Q_STORAGE_ITEMS = 'items'
+
+TIMEOUT = 3600 * 24

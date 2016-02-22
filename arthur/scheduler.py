@@ -25,7 +25,10 @@ import logging
 
 from rq import Queue
 
-from .common import Q_CREATION_JOBS, Q_UPDATING_JOBS, Q_STORAGE_ITEMS
+from .common import (Q_CREATION_JOBS,
+                     Q_UPDATING_JOBS,
+                     Q_STORAGE_ITEMS,
+                     TIMEOUT)
 from .errors import NotFoundError
 from .jobs import execute_perceval_job
 
@@ -63,6 +66,7 @@ class Scheduler:
             raise NotFoundError(element=queue_id)
 
         job = self.queues[queue_id].enqueue(execute_perceval_job,
+                                            timeout=TIMEOUT,
                                             qitems=Q_STORAGE_ITEMS,
                                             origin=repository.origin,
                                             backend=repository.backend,

@@ -21,7 +21,11 @@
 #     Santiago Dueñas <sduenas@bitergia.com>
 #
 
+import os
+import shutil
+import subprocess
 import sys
+import tempfile
 import unittest
 
 if not '..' in sys.path:
@@ -35,6 +39,18 @@ from tests import find_empty_redis_database
 class TestArthur(unittest.TestCase):
     """Unit tests for Scheduler class"""
 
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp_path = tempfile.mkdtemp(prefix='arthur_')
+        cls.git_path = os.path.join(cls.tmp_path, 'gittest')
+
+        subprocess.check_call(['tar', '-xzf', 'data/gittest.tar.gz',
+                               '-C', cls.tmp_path])
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp_path)
+
     def setUp(self):
         self.conn = find_empty_redis_database()
         self.conn.flushdb()
@@ -43,8 +59,11 @@ class TestArthur(unittest.TestCase):
         self.conn.flushdb()
 
     def test_items(self):
+        new_path = os.path.join(self.tmp_path, 'newgit')
+
         app = Arthur(self.conn, async_mode=False)
-        app.add('test', 'git', args={'gitlog' : 'data/git_log.txt'})
+        app.add('test', 'git', args={'uri': self.git_path,
+                                     'gitpath' : new_path})
         commits = [item['commit'] for item in app.items()]
 
         expected = ['bc57a9209f096a130dcc5ba7089a8663f758a703',
@@ -58,6 +77,8 @@ class TestArthur(unittest.TestCase):
                     '456a68ee1407a77f3e804a30dff245bb6c6b872f']
 
         self.assertListEqual(commits, expected)
+
+        shutil.rmtree(new_path)
 
 
 if __name__ == "__main__":

@@ -46,27 +46,28 @@ class TestExecuteJob(TestBaseRQ):
     def test_job(self):
         """Execute Git backend job"""
 
-        args = {'gitlog' : 'data/git_log.txt'}
+        args = {'uri' : 'http://example.com/',
+                'gitpath' : 'data/git_log.txt'}
 
         q = Queue('queue', async=False)
         job = q.enqueue(execute_perceval_job, qitems='items',
                         origin='test', backend='git', **args)
 
-        self.assertEqual(job.return_value, 'Tue Feb 11 22:10:39 2014 -0800')
+        self.assertEqual(job.return_value, 1344965413.0)
 
         commits = self.conn.lrange('items', 0, -1)
         commits = [pickle.loads(c) for c in commits]
         commits = [commit['commit'] for commit in commits]
 
-        expected = ['bc57a9209f096a130dcc5ba7089a8663f758a703',
-                    '87783129c3f00d2c81a3a8e585eb86a47e39891a',
-                    '7debcf8a2f57f86663809c58b5c07a398be7674c',
-                    'c0d66f92a95e31c77be08dc9d0f11a16715d1885',
-                    'c6ba8f7a1058db3e6b4bc6f1090e932b107605fb',
-                    '589bb080f059834829a2a5955bebfd7c2baa110a',
-                    'ce8e0b86a1e9877f42fe9453ede418519115f367',
+        expected = ['456a68ee1407a77f3e804a30dff245bb6c6b872f',
                     '51a3b654f252210572297f47597b31527c475fb8',
-                    '456a68ee1407a77f3e804a30dff245bb6c6b872f']
+                    'ce8e0b86a1e9877f42fe9453ede418519115f367',
+                    '589bb080f059834829a2a5955bebfd7c2baa110a',
+                    'c6ba8f7a1058db3e6b4bc6f1090e932b107605fb',
+                    'c0d66f92a95e31c77be08dc9d0f11a16715d1885',
+                    '7debcf8a2f57f86663809c58b5c07a398be7674c',
+                    '87783129c3f00d2c81a3a8e585eb86a47e39891a',
+                    'bc57a9209f096a130dcc5ba7089a8663f758a703']
 
         self.assertListEqual(commits, expected)
 
@@ -77,20 +78,21 @@ class TestExecuteBackend(unittest.TestCase):
     def test_backend(self):
         """Execute Git backend"""
 
-        args = {'gitlog' : 'data/git_log.txt'}
+        args = {'uri' : 'http://example.com/',
+                'gitpath' : 'data/git_log.txt'}
 
         commits = execute_perceval_backend('test', 'git', args)
         commits = [commit['commit'] for commit in commits]
 
-        expected = ['bc57a9209f096a130dcc5ba7089a8663f758a703',
-                    '87783129c3f00d2c81a3a8e585eb86a47e39891a',
-                    '7debcf8a2f57f86663809c58b5c07a398be7674c',
-                    'c0d66f92a95e31c77be08dc9d0f11a16715d1885',
-                    'c6ba8f7a1058db3e6b4bc6f1090e932b107605fb',
-                    '589bb080f059834829a2a5955bebfd7c2baa110a',
-                    'ce8e0b86a1e9877f42fe9453ede418519115f367',
+        expected = ['456a68ee1407a77f3e804a30dff245bb6c6b872f',
                     '51a3b654f252210572297f47597b31527c475fb8',
-                    '456a68ee1407a77f3e804a30dff245bb6c6b872f']
+                    'ce8e0b86a1e9877f42fe9453ede418519115f367',
+                    '589bb080f059834829a2a5955bebfd7c2baa110a',
+                    'c6ba8f7a1058db3e6b4bc6f1090e932b107605fb',
+                    'c0d66f92a95e31c77be08dc9d0f11a16715d1885',
+                    '7debcf8a2f57f86663809c58b5c07a398be7674c',
+                    '87783129c3f00d2c81a3a8e585eb86a47e39891a',
+                    'bc57a9209f096a130dcc5ba7089a8663f758a703']
 
         self.assertListEqual(commits, expected)
 

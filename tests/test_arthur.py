@@ -78,6 +78,10 @@ class TestArthur(unittest.TestCase):
 
         self.assertListEqual(commits, expected)
 
+        commits = [item for item in app.items()]
+
+        self.assertListEqual(commits, [])
+
         shutil.rmtree(new_path)
 
 

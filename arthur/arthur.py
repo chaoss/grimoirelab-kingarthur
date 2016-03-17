@@ -55,6 +55,12 @@ class Arthur:
     def items(self):
         """Get the items fetched by the jobs."""
 
-        for item in self.conn.lrange(Q_STORAGE_ITEMS, 0, -1):
+        # Get and remove queued items in an atomic transaction
+        pipe = self.conn.pipeline()
+        pipe.lrange(Q_STORAGE_ITEMS, 0, -1)
+        pipe.ltrim(Q_STORAGE_ITEMS, 1, 0)
+        items = pipe.execute()[0]
+
+        for item in items:
             item = pickle.loads(item)
             yield item

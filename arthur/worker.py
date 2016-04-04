@@ -21,11 +21,31 @@
 #     Alvaro del Castillo San Felix <acs@bitergia.com>
 #
 
-CH_PUBSUB = 'ch_arthur'
+import logging
+import pickle
 
-Q_CREATION_JOBS = 'create'
-Q_UPDATING_JOBS = 'update'
-Q_STORAGE_ITEMS = 'items'
+import rq
+
+from .common import CH_PUBSUB
 
 
-TIMEOUT = 3600 * 24
+logger = logging.getLogger(__name__)
+
+
+class ArthurWorker(rq.Worker):
+    """Worker class for Arthur"""
+
+    def perform_job(self, job):
+        """Custom method to execute a job and notify of its result"""
+
+        result = super().perform_job(job)
+
+        data = {
+                "job_id" : job.id,
+                "status"  : job.get_status()
+               }
+
+        msg = pickle.dumps(data)
+        self.connection.publish(CH_PUBSUB, msg)
+
+        return result

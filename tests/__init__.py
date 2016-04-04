@@ -61,3 +61,10 @@ class TestBaseRQ(unittest.TestCase):
 
     def tearDown(self):
         self.conn.flushdb()
+
+
+def mock_sum(a, b):
+    return a + b
+
+def mock_failure():
+    raise Exception

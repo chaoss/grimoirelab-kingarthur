@@ -43,7 +43,8 @@ class Arthur:
         push_connection(self.conn)
 
         self.repositories = RepositoryManager()
-        self.scheduler = Scheduler(async_mode=async_mode)
+        self.scheduler = Scheduler(self.conn, async_mode=async_mode)
+        self.scheduler.start()
 
     def add(self, origin, backend, args):
         """Add and schedule a repository."""

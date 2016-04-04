@@ -41,7 +41,7 @@ class TestScheduler(TestBaseRQ):
     def test_queues_initialization(self):
         """Queues must be created"""
 
-        schlr = Scheduler(async_mode=False)
+        schlr = Scheduler(self.conn, async_mode=False)
 
         self.assertIn(Q_CREATION_JOBS, schlr.queues)
         self.assertEqual(schlr.queues[Q_CREATION_JOBS]._async, False)
@@ -56,7 +56,7 @@ class TestScheduler(TestBaseRQ):
                           uri='http://example.com/',
                           gitpath='data/git_log.txt')
 
-        schlr = Scheduler(async_mode=False)
+        schlr = Scheduler(self.conn, async_mode=False)
         job = schlr.add_job(Q_CREATION_JOBS, repo)
 
         self.assertEqual(job.return_value, 1344965413.0)
@@ -67,7 +67,7 @@ class TestScheduler(TestBaseRQ):
         repo = Repository('test', 'git',
                           uri='http://example.com',
                           gitpath='data/git_log.txt')
-        schlr = Scheduler(async_mode=False)
+        schlr = Scheduler(self.conn, async_mode=False)
 
         self.assertRaises(NotFoundError, schlr.add_job, 'myqueue', repo)
 

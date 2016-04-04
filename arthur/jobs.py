@@ -47,15 +47,15 @@ def execute_perceval_job(qitems, origin, backend, **backend_args):
 
     :raises NotFoundError: raised when the backend is not found
     """
-    db = rq.get_current_job().connection
+    conn = rq.get_current_job().connection
 
     items = execute_perceval_backend(origin, backend, backend_args)
 
     logging.debug("Running job %s (%s)", origin, backend)
 
     for item in items:
-        db.rpush(qitems, pickle.dumps(item))
-        last_dt = item['__metadata__']['updated_on']
+        conn.rpush(qitems, pickle.dumps(item))
+        last_dt = item['updated_on']
 
     logging.debug("Job completed %s (%s) - %s", origin, backend, last_dt)
 

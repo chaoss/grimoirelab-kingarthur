@@ -21,15 +21,14 @@
 #     Santiago Dueñas <sduenas@bitergia.com>
 #
 
+import pickle
 import sys
+import unittest
+
+import rq
 
 if not '..' in sys.path:
     sys.path.insert(0, '..')
-
-import pickle
-import unittest
-
-from rq import Queue, pop_connection, push_connection
 
 from arthur.errors import NotFoundError
 from arthur.jobs import (execute_perceval_job,
@@ -37,7 +36,7 @@ from arthur.jobs import (execute_perceval_job,
                          find_signature_parameters,
                          inspect_signature_parameters)
 
-from tests import find_empty_redis_database, TestBaseRQ
+from tests import TestBaseRQ
 
 
 class TestExecuteJob(TestBaseRQ):
@@ -49,7 +48,7 @@ class TestExecuteJob(TestBaseRQ):
         args = {'uri' : 'http://example.com/',
                 'gitpath' : 'data/git_log.txt'}
 
-        q = Queue('queue', async=False)
+        q = rq.Queue('queue', async=False)
         job = q.enqueue(execute_perceval_job, qitems='items',
                         origin='test', backend='git', **args)
 
@@ -57,7 +56,7 @@ class TestExecuteJob(TestBaseRQ):
 
         commits = self.conn.lrange('items', 0, -1)
         commits = [pickle.loads(c) for c in commits]
-        commits = [commit['commit'] for commit in commits]
+        commits = [commit['data']['commit'] for commit in commits]
 
         expected = ['456a68ee1407a77f3e804a30dff245bb6c6b872f',
                     '51a3b654f252210572297f47597b31527c475fb8',
@@ -82,7 +81,7 @@ class TestExecuteBackend(unittest.TestCase):
                 'gitpath' : 'data/git_log.txt'}
 
         commits = execute_perceval_backend('test', 'git', args)
-        commits = [commit['commit'] for commit in commits]
+        commits = [commit['data']['commit'] for commit in commits]
 
         expected = ['456a68ee1407a77f3e804a30dff245bb6c6b872f',
                     '51a3b654f252210572297f47597b31527c475fb8',

@@ -56,7 +56,7 @@ optional arguments:
   -c FILE, --config FILE
                         set configuration file
   -g, --debug           set debug mode on
-  -d, --database        index of the Redis database where jobs are stored (default: 8)
+  -d, --database        URL database connection (default: 'redis://localhost/8')
   -s, --sync            work in synchronous mode (without workers)
   -o, --outfile         output filename
 """
@@ -125,7 +125,7 @@ def parse_args():
                         action='store_true',
                         help=argparse.SUPPRESS)
     parser.add_argument('-d', '--database', dest='database',
-                        default=8,
+                        default='redis://localhost/8',
                         help=argparse.SUPPRESS)
     parser.add_argument('-s', '--sync', dest='sync_mode',
                         action='store_false',
@@ -183,11 +183,11 @@ def configure_logging(debug=False):
         logging.basicConfig(level=logging.DEBUG,
                             format=ARTHUR_DEBUG_LOG_FORMAT)
 
-def connect_to_redis(db_idx):
+def connect_to_redis(db_url):
     """Create a connection with a Redis database"""
 
-    conn = redis.StrictRedis(db=db_idx)
-    logging.debug("Redis connection stablished.")
+    conn = redis.StrictRedis.from_url(db_url)
+    logging.debug("Redis connection stablished with %s.", db_url)
 
     return conn
 

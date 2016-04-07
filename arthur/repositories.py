@@ -38,11 +38,13 @@ class Repository:
 
     :param origin: repository identifier
     :param backend: backend used to fetch data from the repository
+    :param cache_path: path to store the cache
     :param kwargs: keyword arguments required to run the backend
     """
-    def __init__(self, origin, backend, **kwargs):
+    def __init__(self, origin, backend, cache_path, **kwargs):
         self.origin = origin
         self.backend = backend
+        self.cache_path = cache_path
         self.kwargs = kwargs
 
 
@@ -57,7 +59,7 @@ class RepositoryManager:
     def __init__(self):
         self._repositories = {}
 
-    def add(self, origin, backend, **kwargs):
+    def add(self, origin, backend, cache_path=None, **kwargs):
         """Add or update a repository.
 
         This method adds or updates a repository using `origin` as
@@ -65,9 +67,10 @@ class RepositoryManager:
 
         :param origin: repository identifier to add/update
         :param backend: backend used to fetch data from the repository
+        :param cache_path: path to store the cache
         :param kwargs: keyword arguments required to run the backend
         """
-        repo = Repository(origin, backend, **kwargs)
+        repo = Repository(origin, backend, cache_path, **kwargs)
         self._repositories[origin] = repo
         logger.debug("%s repository added", str(origin))
 

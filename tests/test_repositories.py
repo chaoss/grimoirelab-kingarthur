@@ -40,17 +40,20 @@ class TestRepository(unittest.TestCase):
 
         args = {'from_date' : '1970-01-01',
                 'component' : 'test'}
-        repo = Repository('http://example.com/', 'mock_backend', **args)
+        repo = Repository('http://example.com/', 'mock_backend', '/tmp/example',
+                          **args)
 
         self.assertEqual(repo.origin, 'http://example.com/')
         self.assertEqual(repo.backend, 'mock_backend')
+        self.assertEqual(repo.cache_path, '/tmp/example')
         self.assertDictEqual(repo.kwargs, args)
 
-        repo = Repository('http://example.com/', 'mock_backend',
+        repo = Repository('http://example.com/', 'mock_backend', '/tmp/example',
                           from_date='1970-01-01', component='test')
 
         self.assertEqual(repo.origin, 'http://example.com/')
         self.assertEqual(repo.backend, 'mock_backend')
+        self.assertEqual(repo.cache_path, '/tmp/example')
         self.assertDictEqual(repo.kwargs, args)
 
 
@@ -72,7 +75,8 @@ class TestRepositoryManager(unittest.TestCase):
                 'component' : 'test'}
 
         manager = RepositoryManager()
-        manager.add('http://example.com/', 'mock_backend', **args)
+        manager.add('http://example.com/', 'mock_backend', '/tmp/example',
+                    **args)
 
         repos = manager.repositories
         self.assertEqual(len(repos), 1)
@@ -81,6 +85,7 @@ class TestRepositoryManager(unittest.TestCase):
         self.assertIsInstance(repo, Repository)
         self.assertEqual(repo.origin, 'http://example.com/')
         self.assertEqual(repo.backend, 'mock_backend')
+        self.assertEqual(repo.cache_path, '/tmp/example')
         self.assertDictEqual(repo.kwargs, args)
 
     def test_update_repository(self):
@@ -90,10 +95,12 @@ class TestRepositoryManager(unittest.TestCase):
                 'component' : 'test'}
 
         manager = RepositoryManager()
-        manager.add('http://example.com/', 'mock_backend', **args)
+        manager.add('http://example.com/', 'mock_backend', '/tmp/example',
+                    **args)
 
         args['module'] = 'mock'
-        manager.add('http://example.com/', 'test_backend', **args)
+        manager.add('http://example.com/', 'test_backend', '/tmp/example',
+                    **args)
 
         repos = manager.repositories
         self.assertEqual(len(repos), 1)
@@ -102,6 +109,7 @@ class TestRepositoryManager(unittest.TestCase):
         self.assertIsInstance(repo, Repository)
         self.assertEqual(repo.origin, 'http://example.com/')
         self.assertEqual(repo.backend, 'test_backend')
+        self.assertEqual(repo.cache_path, '/tmp/example')
         self.assertDictEqual(repo.kwargs, args)
 
     def test_remove_repository(self):
@@ -111,9 +119,9 @@ class TestRepositoryManager(unittest.TestCase):
                 'component' : 'test'}
 
         manager = RepositoryManager()
-        manager.add('http://example.com/', 'mock_backend', **args)
-        manager.add('http://example.org/', 'to_remove')
-        manager.add('http://example.net/', 'test_backend')
+        manager.add('http://example.com/', 'mock_backend', '/tmp/example.com', **args)
+        manager.add('http://example.org/', 'to_remove', '/tmp/example.org')
+        manager.add('http://example.net/', 'test_backend', '/tmp/example.net')
 
         repos = manager.repositories
         self.assertEqual(len(repos), 3)
@@ -133,7 +141,7 @@ class TestRepositoryManager(unittest.TestCase):
         with self.assertRaises(NotFoundError):
             manager.remove('http://example.com/')
 
-        manager.add('http://example.org/', 'mock_backend')
+        manager.add('http://example.org/', 'mock_backend', '/tmp/example')
 
         with self.assertRaises(NotFoundError):
             manager.remove('http://example.com/')
@@ -145,14 +153,15 @@ class TestRepositoryManager(unittest.TestCase):
                 'component' : 'test'}
 
         manager = RepositoryManager()
-        manager.add('http://example.com/', 'mock_backend', **args)
-        manager.add('http://example.org/', 'to_remove')
-        manager.add('http://example.net/', 'test_backend')
+        manager.add('http://example.com/', 'mock_backend', '/tmp/example.com', **args)
+        manager.add('http://example.org/', 'to_remove', '/tmp/example.org')
+        manager.add('http://example.net/', 'test_backend', '/tmp/example.net')
 
         repo = manager.get('http://example.net/')
         self.assertIsInstance(repo, Repository)
         self.assertEqual(repo.origin, 'http://example.net/')
         self.assertEqual(repo.backend, 'test_backend')
+        self.assertEqual(repo.cache_path, '/tmp/example.net')
 
     def test_get_not_found(self):
         """Check whether it raises an exception when a repo is not found"""
@@ -162,7 +171,7 @@ class TestRepositoryManager(unittest.TestCase):
         with self.assertRaises(NotFoundError):
             manager.get('http://example.com/')
 
-        manager.add('http://example.org/', 'mock_backend')
+        manager.add('http://example.org/', 'mock_backend', '/tmp/example')
 
         with self.assertRaises(NotFoundError):
             manager.get('http://example.com/')

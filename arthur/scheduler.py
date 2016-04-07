@@ -114,14 +114,19 @@ class Scheduler(Thread):
             if data['status'] == 'finished':
                 job = Job.fetch(data['job_id'], connection=self.conn)
 
-                from_date = unixtime_to_datetime(job.result)
+                result = job.result
+
                 kwargs = job.kwargs
-                kwargs['from_date'] = from_date
+
+                if result:
+                    from_date = unixtime_to_datetime(job.result)
+                    kwargs['from_date'] = from_date
+
                 kwargs['cache_path'] = None
                 kwargs['cache_fetch'] = False
 
-                logging.debug("Job #%s finished. Rescheduling to fetch data since %s",
-                              data['job_id'], str(from_date))
+                logging.debug("Job #%s finished. Rescheduling to fetch data",
+                              data['job_id'])
                 time.sleep(10)
 
                 job = self.queues[Q_UPDATING_JOBS].enqueue(execute_perceval_job,

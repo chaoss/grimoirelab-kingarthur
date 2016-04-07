@@ -76,6 +76,8 @@ def execute_perceval_job(qitems, origin, backend,
 
     logging.debug("Running job %s (%s)", origin, backend)
 
+    last_dt = None
+
     try:
         items = execute_perceval_backend(origin, backend, backend_args,
                                          cache_fetch)

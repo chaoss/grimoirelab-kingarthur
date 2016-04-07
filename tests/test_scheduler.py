@@ -54,6 +54,7 @@ class TestScheduler(TestBaseRQ):
 
         repo = Repository('test', 'git',
                           uri='http://example.com/',
+                          cache_path=None,
                           gitpath='data/git_log.txt')
 
         schlr = Scheduler(self.conn, async_mode=False)
@@ -66,6 +67,7 @@ class TestScheduler(TestBaseRQ):
 
         repo = Repository('test', 'git',
                           uri='http://example.com',
+                          cache_path=None,
                           gitpath='data/git_log.txt')
         schlr = Scheduler(self.conn, async_mode=False)
 

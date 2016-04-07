@@ -82,11 +82,18 @@ class Scheduler(Thread):
         if queue_id not in self.queues:
             raise NotFoundError(element=queue_id)
 
+        cache_fetch = repository.kwargs.get('cache_fetch', False)
+
+        if 'cache_fetch' in repository.kwargs:
+            del repository.kwargs['cache_fetch']
+
         job = self.queues[queue_id].enqueue(execute_perceval_job,
                                             timeout=TIMEOUT,
                                             qitems=Q_STORAGE_ITEMS,
                                             origin=repository.origin,
                                             backend=repository.backend,
+                                            cache_path=repository.cache_path,
+                                            cache_fetch=cache_fetch,
                                             **repository.kwargs)
 
         logging.debug("Job #%s %s (%s) enqueued in '%s' queue",
@@ -110,6 +117,8 @@ class Scheduler(Thread):
                 from_date = unixtime_to_datetime(job.result)
                 kwargs = job.kwargs
                 kwargs['from_date'] = from_date
+                kwargs['cache_path'] = None
+                kwargs['cache_fetch'] = False
 
                 logging.debug("Job #%s finished. Rescheduling to fetch data since %s",
                               data['job_id'], str(from_date))

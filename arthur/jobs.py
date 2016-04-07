@@ -25,8 +25,10 @@ import inspect
 import logging
 
 import rq
-import perceval.backends
 import pickle
+
+import perceval.backends
+import perceval.cache
 
 from .errors import NotFoundError
 
@@ -34,35 +36,66 @@ from .errors import NotFoundError
 logger = logging.getLogger(__name__)
 
 
-def execute_perceval_job(qitems, origin, backend, **backend_args):
+def execute_perceval_job(qitems, origin, backend,
+                         cache_path=None, cache_fetch=False,
+                         **backend_args):
     """Execute a Perceval job on RQ.
 
     The items fetched during the process will be stored in a
     Redis queue named `queue`.
 
+    Setting the parameter `cache_path`, raw data will be stored
+    in the cache. The contents from the cache can be retrieved
+    setting the pameter `cache_fetch` to `True`, too. Take into
+    account this behaviour will be only available when the backend
+    supports the use of the cache.
+
     :param qitems: name of the RQ queue used to store the items
     :param origin: origin of the source
     :param backend: backend to execute
+    :param cache_path: patch to the cache
+    :param cache_fetch: fetch from the cache
     :param bakend_args: arguments to execute the backend
 
     :raises NotFoundError: raised when the backend is not found
     """
     conn = rq.get_current_job().connection
 
-    items = execute_perceval_backend(origin, backend, backend_args)
+    if cache_fetch and not cache_path:
+        raise ValueError("cache_path cannot be empty when cache_fetch is set")
+
+    if cache_path:
+        cache = perceval.cache.Cache(cache_path)
+
+        if not cache_fetch:
+            cache.backup()
+    else:
+        cache = None
+
+    backend_args['cache'] = cache
 
     logging.debug("Running job %s (%s)", origin, backend)
 
-    for item in items:
-        conn.rpush(qitems, pickle.dumps(item))
-        last_dt = item['updated_on']
+    try:
+        items = execute_perceval_backend(origin, backend, backend_args,
+                                         cache_fetch)
+
+        for item in items:
+            conn.rpush(qitems, pickle.dumps(item))
+            last_dt = item['updated_on']
+    except Exception as e:
+        logging.debug("Error running job %s (%s) - %s", origin, backend, str(e))
+
+        if cache and not cache_fetch:
+            cache.recover()
+        raise e
 
     logging.debug("Job completed %s (%s) - %s", origin, backend, last_dt)
 
     return last_dt
 
 
-def execute_perceval_backend(origin, backend, backend_args):
+def execute_perceval_backend(origin, backend, backend_args, cache_fetch=False):
     """Execute a backend of Perceval.
 
     Run a backend of Perceval for the given origin. The type of
@@ -71,16 +104,31 @@ def execute_perceval_backend(origin, backend, backend_args):
     It will raise a `NotFoundError` in two cases: when the
     backend needed is not available or when any of the required
     parameters to run the backend are not found.
+
+    :param origin: origin of the source
+    :param backend: backend to execute
+    :param bakend_args: arguments to execute the backend
+    :param cache_fetch: fetch from the cache
+
+    :returns: iterator of items fetched by the backend
+
+    :raises NotFoundError: raised when the backend is not found
     """
     if backend not in perceval.backends.PERCEVAL_BACKENDS:
         raise NotFoundError(element=backend)
 
     klass = perceval.backends.PERCEVAL_BACKENDS[backend]
     kinit = find_signature_parameters(backend_args, klass.__init__)
-    kfetch = find_signature_parameters(backend_args, klass.fetch)
-
     obj = klass(**kinit)
-    for item in obj.fetch(**kfetch):
+
+    if not cache_fetch:
+        fnc_fetch = obj.fetch
+    else:
+        fnc_fetch = obj.fetch_from_cache
+
+    kfetch = find_signature_parameters(backend_args, fnc_fetch)
+
+    for item in fnc_fetch(**kfetch):
         yield item
 
 

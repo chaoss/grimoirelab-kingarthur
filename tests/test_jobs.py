@@ -22,9 +22,12 @@
 #
 
 import pickle
+import shutil
 import sys
+import tempfile
 import unittest
 
+import httpretty
 import rq
 
 if not '..' in sys.path:
@@ -39,8 +42,28 @@ from arthur.jobs import (execute_perceval_job,
 from tests import TestBaseRQ
 
 
+BUGZILLA_SERVER_URL = 'http://example.com'
+BUGZILLA_BUGLIST_URL = BUGZILLA_SERVER_URL + '/buglist.cgi'
+BUGZILLA_BUG_URL = BUGZILLA_SERVER_URL + '/show_bug.cgi'
+BUGZILLA_BUG_ACTIVITY_URL = BUGZILLA_SERVER_URL + '/show_activity.cgi'
+
+
+def read_file(filename, mode='r'):
+    with open(filename, mode) as f:
+        content = f.read()
+    return content
+
+
 class TestExecuteJob(TestBaseRQ):
     """Unit tests for execute_perceval_job"""
+
+    def setUp(self):
+        self.tmp_path = tempfile.mkdtemp(prefix='arthur_')
+        super().setUp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_path)
+        super().tearDown()
 
     def test_job(self):
         """Execute Git backend job"""
@@ -69,6 +92,97 @@ class TestExecuteJob(TestBaseRQ):
                     'bc57a9209f096a130dcc5ba7089a8663f758a703']
 
         self.assertListEqual(commits, expected)
+
+    @httpretty.activate
+    def test_job_cache(self):
+        """Execute a Bugzilla backend job to fetch data from the cache"""
+
+        requests = []
+        bodies_csv = [read_file('data/bugzilla_buglist.csv'),
+                      read_file('data/bugzilla_buglist_next.csv'),
+                      ""]
+        bodies_xml = [read_file('data/bugzilla_version.xml', mode='rb'),
+                      read_file('data/bugzilla_bugs_details.xml', mode='rb'),
+                      read_file('data/bugzilla_bugs_details_next.xml', mode='rb')]
+        bodies_html = [read_file('data/bugzilla_bug_activity.html', mode='rb'),
+                       read_file('data/bugzilla_bug_activity_empty.html', mode='rb')]
+
+        def request_callback(method, uri, headers):
+            if uri.startswith(BUGZILLA_BUGLIST_URL):
+                body = bodies_csv.pop(0)
+            elif uri.startswith(BUGZILLA_BUG_URL):
+                body = bodies_xml.pop(0)
+            else:
+                body = bodies_html[len(requests) % 2]
+
+            requests.append(httpretty.last_request())
+
+            return (200, headers, body)
+
+        httpretty.register_uri(httpretty.GET,
+                               BUGZILLA_BUGLIST_URL,
+                               responses=[
+                                    httpretty.Response(body=request_callback) \
+                                    for _ in range(3)
+                               ])
+        httpretty.register_uri(httpretty.GET,
+                               BUGZILLA_BUG_URL,
+                               responses=[
+                                    httpretty.Response(body=request_callback) \
+                                    for _ in range(3)
+                               ])
+        httpretty.register_uri(httpretty.GET,
+                               BUGZILLA_BUG_ACTIVITY_URL,
+                               responses=[
+                                    httpretty.Response(body=request_callback) \
+                                    for _ in range(7)
+                               ])
+
+        expected = ['5a8a1e25dfda86b961b4146050883cbfc928f8ec',
+                    '1fd4514e56f25a39ffd78eab19e77cfe4dfb7769',
+                    '6a4cb244067c3cfa38f9f563e2ab3cd8ac21762f',
+                    '7e033ed0110032ead6b918be43c1f3f88cd98fd7',
+                    'f90d12b380ffdb47f2b6e96b321f08000181a9d6',
+                    '4b166308f205121bc57704032acdc81b6c9bb8b1',
+                    'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c']
+
+        q = rq.Queue('queue', async=False)
+
+        # First, we fetch the bugs from the server, storing them
+        # in a cache
+        args = {'url' : BUGZILLA_SERVER_URL,
+                'max_bugs' : 5}
+
+        job = q.enqueue(execute_perceval_job, qitems='items',
+                        origin=BUGZILLA_SERVER_URL, backend='bugzilla',
+                        cache_path=self.tmp_path, **args)
+
+        bugs = self.conn.lrange('items', 0, -1)
+        bugs = [pickle.loads(b) for b in bugs]
+        bugs = [bug['uuid'] for bug in bugs]
+        self.conn.ltrim('items', 1, 0)
+
+        self.assertEqual(len(requests), 13)
+        self.assertEqual(job.return_value, 1439404330.0)
+        self.assertListEqual(bugs, expected)
+
+        # Now, we get the bugs from the cache.
+        # The contents should be the same and there won't be
+        # any new request to the server
+
+        job = q.enqueue(execute_perceval_job, qitems='items',
+                        origin=BUGZILLA_SERVER_URL, backend='bugzilla',
+                        cache_path=self.tmp_path, cache_fetch=True,
+                        **args)
+
+        cached_bugs = self.conn.lrange('items', 0, -1)
+        cached_bugs = [pickle.loads(b) for b in cached_bugs]
+        cached_bugs = [bug['uuid'] for bug in cached_bugs]
+        self.conn.ltrim('items', 1, 0)
+
+        self.assertEqual(len(requests), 13)
+        self.assertEqual(job.return_value, 1439404330.0)
+        self.assertListEqual(cached_bugs, bugs)
 
 
 class TestExecuteBackend(unittest.TestCase):

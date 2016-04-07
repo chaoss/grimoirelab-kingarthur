@@ -34,7 +34,7 @@ def find_empty_redis_database():
     Tries to connect a random Redis database (starting on 8) and
     will use/connect it when no keys are stored in there.
     """
-    for db in range(8, 18):
+    for db in range(8, 16):
         conn = StrictRedis(db=db)
         empty = len(conn.keys('*')) == 0
         if empty:

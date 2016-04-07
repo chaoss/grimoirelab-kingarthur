@@ -22,6 +22,7 @@
 #
 
 import logging
+import os
 import pickle
 
 from rq import push_connection
@@ -37,11 +38,12 @@ logger = logging.getLogger(__name__)
 class Arthur:
     """Main class to retrieve data from software repositories."""
 
-    def __init__(self, conn, async_mode=True):
+    def __init__(self, conn, async_mode=True, base_cache_path=None):
         self.conn = conn
         self.conn.flushdb()
         push_connection(self.conn)
 
+        self.base_cache_path = base_cache_path
         self.repositories = RepositoryManager()
         self.scheduler = Scheduler(self.conn, async_mode=async_mode)
         self.scheduler.start()
@@ -49,7 +51,12 @@ class Arthur:
     def add(self, origin, backend, args):
         """Add and schedule a repository."""
 
-        self.repositories.add(origin, backend, **args)
+        repo_cache_path = None
+
+        if self.base_cache_path and args['cache']:
+            repo_cache_path = os.path.join(self.base_cache_path, origin)
+
+        self.repositories.add(origin, backend, repo_cache_path, **args)
         repository = self.repositories.get(origin)
         self.scheduler.add_job(Q_CREATION_JOBS, repository)
 

@@ -46,9 +46,13 @@ class ArthurWorker(rq.Worker):
 
         result = super().perform_job(job)
 
+        job_status = job.get_status()
+        job_result = job.return_value if job_status == 'finished' else None
+
         data = {
                 "job_id" : job.id,
-                "status"  : job.get_status()
+                "status" : job_status,
+                "result" : job_result
                }
 
         msg = pickle.dumps(data)

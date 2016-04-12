@@ -119,7 +119,7 @@ class Scheduler(Thread):
                 kwargs = job.kwargs
 
                 if result:
-                    from_date = unixtime_to_datetime(result.last_date)
+                    from_date = unixtime_to_datetime(data['result'].last_date)
                     kwargs['from_date'] = from_date
 
                 kwargs['cache_path'] = None

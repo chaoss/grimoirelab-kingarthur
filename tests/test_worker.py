@@ -64,11 +64,13 @@ class TestArthurWorker(TestBaseRQ):
         self.assertEqual(job_a.result, 5)
         self.assertEqual(data['job_id'], job_a.id)
         self.assertEqual(data['status'], 'finished')
+        self.assertEqual(data['result'], 5)
 
         data = pickle.loads(msg_b['data'])
         self.assertEqual(job_b.result, None)
         self.assertEqual(data['job_id'], job_b.id)
         self.assertEqual(data['status'], 'failed')
+        self.assertEqual(data['result'], None)
 
 
 if __name__ == "__main__":

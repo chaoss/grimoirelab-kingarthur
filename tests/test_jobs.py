@@ -34,7 +34,8 @@ if not '..' in sys.path:
     sys.path.insert(0, '..')
 
 from arthur.errors import NotFoundError
-from arthur.jobs import (execute_perceval_job,
+from arthur.jobs import (JobResult,
+                         execute_perceval_job,
                          execute_perceval_backend,
                          find_signature_parameters,
                          inspect_signature_parameters)
@@ -52,6 +53,17 @@ def read_file(filename, mode='r'):
     with open(filename, mode) as f:
         content = f.read()
     return content
+
+
+class TestJobResult(unittest.TestCase):
+    """Unit tests for JobResult class"""
+
+    def test_job_result_init(self):
+        result = JobResult('ABCDEFGHIJK', 1344965413.0, 58)
+
+        self.assertEqual(result.last_uuid, 'ABCDEFGHIJK')
+        self.assertEqual(result.last_date, 1344965413.0)
+        self.assertEqual(result.nitems, 58)
 
 
 class TestExecuteJob(TestBaseRQ):
@@ -75,7 +87,10 @@ class TestExecuteJob(TestBaseRQ):
         job = q.enqueue(execute_perceval_job, qitems='items',
                         origin='test', backend='git', **args)
 
-        self.assertEqual(job.return_value, 1344965413.0)
+        result = job.return_value
+        self.assertEqual(result.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
+        self.assertEqual(result.last_date, 1344965413.0)
+        self.assertEqual(result.nitems, 9)
 
         commits = self.conn.lrange('items', 0, -1)
         commits = [pickle.loads(c) for c in commits]
@@ -162,8 +177,12 @@ class TestExecuteJob(TestBaseRQ):
         bugs = [bug['uuid'] for bug in bugs]
         self.conn.ltrim('items', 1, 0)
 
+        result = job.return_value
+        self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
+        self.assertEqual(result.last_date, 1439404330.0)
+        self.assertEqual(result.nitems, 7)
+
         self.assertEqual(len(requests), 13)
-        self.assertEqual(job.return_value, 1439404330.0)
         self.assertListEqual(bugs, expected)
 
         # Now, we get the bugs from the cache.
@@ -180,8 +199,12 @@ class TestExecuteJob(TestBaseRQ):
         cached_bugs = [bug['uuid'] for bug in cached_bugs]
         self.conn.ltrim('items', 1, 0)
 
+        result = job.return_value
+        self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
+        self.assertEqual(result.last_date, 1439404330.0)
+        self.assertEqual(result.nitems, 7)
+
         self.assertEqual(len(requests), 13)
-        self.assertEqual(job.return_value, 1439404330.0)
         self.assertListEqual(cached_bugs, bugs)
 
 

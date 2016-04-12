@@ -36,6 +36,22 @@ from .errors import NotFoundError
 logger = logging.getLogger(__name__)
 
 
+class JobResult:
+    """Class to store the result of a Perceval job.
+
+    It stores useful data such as the UUID and date of the last
+    item generated or the number of items fetched by the backend.
+
+    :param last_uuid: UUID of the last item
+    :param last_date: date of the last iltem
+    :param nitems: number of items fetched by the backend
+    """
+    def __init__(self, last_uuid, last_date, nitems):
+        self.last_uuid = last_uuid
+        self.last_date = last_date
+        self.nitems = nitems
+
+
 def execute_perceval_job(qitems, origin, backend,
                          cache_path=None, cache_fetch=False,
                          **backend_args):
@@ -57,10 +73,10 @@ def execute_perceval_job(qitems, origin, backend,
     :param cache_fetch: fetch from the cache
     :param bakend_args: arguments to execute the backend
 
+    :returns: a `JobResult` instance
+
     :raises NotFoundError: raised when the backend is not found
     """
-    conn = rq.get_current_job().connection
-
     if cache_fetch and not cache_path:
         raise ValueError("cache_path cannot be empty when cache_fetch is set")
 
@@ -74,9 +90,12 @@ def execute_perceval_job(qitems, origin, backend,
 
     backend_args['cache'] = cache
 
+    conn = rq.get_current_job().connection
+
     logging.debug("Running job %s (%s)", origin, backend)
 
-    last_dt = None
+    nitems = 0
+    last_item = None
 
     try:
         items = execute_perceval_backend(origin, backend, backend_args,
@@ -84,7 +103,8 @@ def execute_perceval_job(qitems, origin, backend,
 
         for item in items:
             conn.rpush(qitems, pickle.dumps(item))
-            last_dt = item['updated_on']
+            nitems += 1
+            last_item = item
     except Exception as e:
         logging.debug("Error running job %s (%s) - %s", origin, backend, str(e))
 
@@ -92,9 +112,14 @@ def execute_perceval_job(qitems, origin, backend,
             cache.recover()
         raise e
 
-    logging.debug("Job completed %s (%s) - %s", origin, backend, last_dt)
+    result = JobResult(last_item['uuid'],
+                       last_item['updated_on'],
+                       nitems)
 
-    return last_dt
+    logging.debug("Job completed %s (%s) - %s",
+                  origin, backend, result.last_date)
+
+    return result
 
 
 def execute_perceval_backend(origin, backend, backend_args, cache_fetch=False):

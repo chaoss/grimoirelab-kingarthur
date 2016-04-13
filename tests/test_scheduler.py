@@ -60,7 +60,10 @@ class TestScheduler(TestBaseRQ):
         schlr = Scheduler(self.conn, async_mode=False)
         job = schlr.add_job(Q_CREATION_JOBS, repo)
 
-        self.assertEqual(job.return_value, 1344965413.0)
+        result = job.return_value
+        self.assertEqual(result.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
+        self.assertEqual(result.last_date, 1344965413.0)
+        self.assertEqual(result.nitems, 9)
 
     def test_not_found_queue(self):
         """Raises an error when a queue does not exist"""

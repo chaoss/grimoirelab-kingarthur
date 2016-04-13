@@ -24,6 +24,7 @@
 import logging
 
 from .errors import NotFoundError
+from .utils import RWLock
 
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,7 @@ class RepositoryManager:
     identifier.
     """
     def __init__(self):
+        self._rwlock = RWLock()
         self._repositories = {}
 
     def add(self, origin, backend, cache_path=None, **kwargs):
@@ -71,7 +73,11 @@ class RepositoryManager:
         :param kwargs: keyword arguments required to run the backend
         """
         repo = Repository(origin, backend, cache_path, **kwargs)
+
+        self._rwlock.writer_acquire()
         self._repositories[origin] = repo
+        self._rwlock.writer_release()
+
         logger.debug("%s repository added", str(origin))
 
     def remove(self, origin):
@@ -87,9 +93,12 @@ class RepositoryManager:
             is not found on the registry
         """
         try:
+            self._rwlock.writer_acquire()
             del self._repositories[origin]
+            self._rwlock.writer_release()
             logger.debug("%s repository removed", str(origin))
         except KeyError:
+            self._rwlock.writer_release()
             raise NotFoundError(element=str(origin))
 
     def get(self, origin):
@@ -103,14 +112,21 @@ class RepositoryManager:
             is not found on the registry
         """
         try:
-            return self._repositories[origin]
+            self._rwlock.reader_acquire()
+            result = self._repositories[origin]
+            self._rwlock.reader_release()
+            return result
         except KeyError:
+            self._rwlock.reader_release()
             raise NotFoundError(element=str(origin))
 
     @property
     def repositories(self):
         """Get a list of repositories"""
 
+        self._rwlock.reader_acquire()
         repos = [v for v in self._repositories.values()]
         repos.sort(key=lambda x: x.origin)
+        self._rwlock.reader_release()
+
         return repos

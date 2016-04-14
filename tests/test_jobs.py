@@ -21,6 +21,7 @@
 #     Santiago Dueñas <sduenas@bitergia.com>
 #
 
+import datetime
 import pickle
 import shutil
 import sys
@@ -107,6 +108,26 @@ class TestExecuteJob(TestBaseRQ):
                     'bc57a9209f096a130dcc5ba7089a8663f758a703']
 
         self.assertListEqual(commits, expected)
+
+    def test_job_no_result(self):
+        """Execute a Git backend job that will not produce any results"""
+
+        args = {'uri' : 'http://example.com/',
+                'gitpath' : 'data/git_log_empty.txt',
+                'from_date' : datetime.datetime(2020, 1, 1, 1, 1, 1)}
+
+        q = rq.Queue('queue', async=False)
+        job = q.enqueue(execute_perceval_job, qitems='items',
+                        origin='test', backend='git', **args)
+
+        result = job.return_value
+        self.assertEqual(result.last_uuid, None)
+        self.assertEqual(result.last_date, None)
+        self.assertEqual(result.nitems, 0)
+
+        commits = self.conn.lrange('items', 0, -1)
+        commits = [pickle.loads(c) for c in commits]
+        self.assertListEqual(commits, [])
 
     @httpretty.activate
     def test_job_cache(self):

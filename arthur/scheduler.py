@@ -118,7 +118,7 @@ class Scheduler(Thread):
 
                 kwargs = job.kwargs
 
-                if result:
+                if result.nitems > 0:
                     from_date = unixtime_to_datetime(data['result'].last_date)
                     kwargs['from_date'] = from_date
 

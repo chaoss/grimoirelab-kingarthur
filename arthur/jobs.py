@@ -112,12 +112,15 @@ def execute_perceval_job(qitems, origin, backend,
             cache.recover()
         raise e
 
-    result = JobResult(last_item['uuid'],
-                       last_item['updated_on'],
-                       nitems)
+    if nitems > 0:
+        result = JobResult(last_item['uuid'],
+                           last_item['updated_on'],
+                           nitems)
+    else:
+        result = JobResult(None, None, 0)
 
-    logging.debug("Job completed %s (%s) - %s",
-                  origin, backend, result.last_date)
+    logging.debug("Job completed %s (%s) - %s items fetched",
+                  origin, backend, str(nitems))
 
     return result
 

@@ -60,8 +60,11 @@ class TestJobResult(unittest.TestCase):
     """Unit tests for JobResult class"""
 
     def test_job_result_init(self):
-        result = JobResult('ABCDEFGHIJK', 1344965413.0, 58)
+        result = JobResult('http://example.com/', 'mock_backend',
+                           'ABCDEFGHIJK', 1344965413.0, 58)
 
+        self.assertEqual(result.origin, 'http://example.com/')
+        self.assertEqual(result.backend, 'mock_backend')
         self.assertEqual(result.last_uuid, 'ABCDEFGHIJK')
         self.assertEqual(result.last_date, 1344965413.0)
         self.assertEqual(result.nitems, 58)
@@ -89,6 +92,8 @@ class TestExecuteJob(TestBaseRQ):
                         origin='test', backend='git', **args)
 
         result = job.return_value
+        self.assertEqual(result.origin, 'test')
+        self.assertEqual(result.backend, 'git')
         self.assertEqual(result.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
         self.assertEqual(result.last_date, 1344965413.0)
         self.assertEqual(result.nitems, 9)
@@ -121,6 +126,8 @@ class TestExecuteJob(TestBaseRQ):
                         origin='test', backend='git', **args)
 
         result = job.return_value
+        self.assertEqual(result.origin, 'test')
+        self.assertEqual(result.backend, 'git')
         self.assertEqual(result.last_uuid, None)
         self.assertEqual(result.last_date, None)
         self.assertEqual(result.nitems, 0)
@@ -199,6 +206,8 @@ class TestExecuteJob(TestBaseRQ):
         self.conn.ltrim('items', 1, 0)
 
         result = job.return_value
+        self.assertEqual(result.origin, BUGZILLA_SERVER_URL)
+        self.assertEqual(result.backend, 'bugzilla')
         self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
         self.assertEqual(result.last_date, 1439404330.0)
         self.assertEqual(result.nitems, 7)
@@ -221,6 +230,8 @@ class TestExecuteJob(TestBaseRQ):
         self.conn.ltrim('items', 1, 0)
 
         result = job.return_value
+        self.assertEqual(result.origin, BUGZILLA_SERVER_URL)
+        self.assertEqual(result.backend, 'bugzilla')
         self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
         self.assertEqual(result.last_date, 1439404330.0)
         self.assertEqual(result.nitems, 7)

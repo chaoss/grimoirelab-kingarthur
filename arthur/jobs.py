@@ -39,14 +39,18 @@ logger = logging.getLogger(__name__)
 class JobResult:
     """Class to store the result of a Perceval job.
 
-    It stores useful data such as the UUID and date of the last
+    It stores useful data such as the origin, UUID and date of the last
     item generated or the number of items fetched by the backend.
 
+    :param origin: origin from where items were fetched
+    :param backend: backend used to fetch the items
     :param last_uuid: UUID of the last item
     :param last_date: date of the last iltem
     :param nitems: number of items fetched by the backend
     """
-    def __init__(self, last_uuid, last_date, nitems):
+    def __init__(self, origin, backend, last_uuid, last_date, nitems):
+        self.origin = origin
+        self.backend = backend
         self.last_uuid = last_uuid
         self.last_date = last_date
         self.nitems = nitems
@@ -113,11 +117,12 @@ def execute_perceval_job(qitems, origin, backend,
         raise e
 
     if nitems > 0:
-        result = JobResult(last_item['uuid'],
+        result = JobResult(origin, backend,
+                           last_item['uuid'],
                            last_item['updated_on'],
                            nitems)
     else:
-        result = JobResult(None, None, 0)
+        result = JobResult(origin, backend, None, None, 0)
 
     logging.debug("Job completed %s (%s) - %s items fetched",
                   origin, backend, str(nitems))

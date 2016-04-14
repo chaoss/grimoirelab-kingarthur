@@ -56,7 +56,7 @@ class Arthur:
         if self.base_cache_path and args['cache']:
             repo_cache_path = os.path.join(self.base_cache_path, origin)
 
-        self.repositories.add(origin, backend, repo_cache_path, **args)
+        self.repositories.add(origin, backend, args, repo_cache_path)
         repository = self.repositories.get(origin)
         self.scheduler.add_job(Q_CREATION_JOBS, repository)
 

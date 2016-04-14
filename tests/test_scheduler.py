@@ -52,10 +52,10 @@ class TestScheduler(TestBaseRQ):
     def test_add_job(self):
         """Jobs should be added and executed"""
 
-        repo = Repository('test', 'git',
-                          uri='http://example.com/',
-                          cache_path=None,
-                          gitpath='data/git_log.txt')
+        args = {'uri' : 'http://example.com/',
+                'gitpath' : 'data/git_log.txt'}
+        repo = Repository('test', 'git', args,
+                          cache_path=None)
 
         schlr = Scheduler(self.conn, async_mode=False)
         job = schlr.add_job(Q_CREATION_JOBS, repo)
@@ -68,10 +68,11 @@ class TestScheduler(TestBaseRQ):
     def test_not_found_queue(self):
         """Raises an error when a queue does not exist"""
 
-        repo = Repository('test', 'git',
-                          uri='http://example.com',
-                          cache_path=None,
-                          gitpath='data/git_log.txt')
+        args = {'uri' : 'http://example.com',
+                'gitpath' : 'data/git_log.txt'}
+        repo = Repository('test', 'git', args,
+                          cache_path=None)
+
         schlr = Scheduler(self.conn, async_mode=False)
 
         self.assertRaises(NotFoundError, schlr.add_job, 'myqueue', repo)

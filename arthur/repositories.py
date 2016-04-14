@@ -40,13 +40,13 @@ class Repository:
     :param origin: repository identifier
     :param backend: backend used to fetch data from the repository
     :param cache_path: path to store the cache
-    :param kwargs: keyword arguments required to run the backend
+    :param kwargs: dictionary of arguments required to run the backend
     """
-    def __init__(self, origin, backend, cache_path, **kwargs):
+    def __init__(self, origin, backend, kwargs, cache_path):
         self.origin = origin
         self.backend = backend
-        self.cache_path = cache_path
         self.kwargs = kwargs
+        self.cache_path = cache_path
 
 
 class RepositoryManager:
@@ -61,7 +61,7 @@ class RepositoryManager:
         self._rwlock = RWLock()
         self._repositories = {}
 
-    def add(self, origin, backend, cache_path=None, **kwargs):
+    def add(self, origin, backend, kwargs, cache_path=None):
         """Add or update a repository.
 
         This method adds or updates a repository using `origin` as
@@ -70,9 +70,9 @@ class RepositoryManager:
         :param origin: repository identifier to add/update
         :param backend: backend used to fetch data from the repository
         :param cache_path: path to store the cache
-        :param kwargs: keyword arguments required to run the backend
+        :param kwargs: dictionary of arguments required to run the backend
         """
-        repo = Repository(origin, backend, cache_path, **kwargs)
+        repo = Repository(origin, backend, kwargs, cache_path)
 
         self._rwlock.writer_acquire()
         self._repositories[origin] = repo

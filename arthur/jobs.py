@@ -39,20 +39,20 @@ logger = logging.getLogger(__name__)
 class JobResult:
     """Class to store the result of a Perceval job.
 
-    It stores useful data such as the origin, UUID and date of the last
+    It stores useful data such as the origin, the UUID of the last
     item generated or the number of items fetched by the backend.
 
     :param origin: origin from where items were fetched
     :param backend: backend used to fetch the items
     :param last_uuid: UUID of the last item
-    :param last_date: date of the last iltem
+    :param max_date: maximum date fetched among items
     :param nitems: number of items fetched by the backend
     """
-    def __init__(self, origin, backend, last_uuid, last_date, nitems):
+    def __init__(self, origin, backend, last_uuid, max_date, nitems):
         self.origin = origin
         self.backend = backend
         self.last_uuid = last_uuid
-        self.last_date = last_date
+        self.max_date = max_date
         self.nitems = nitems
 
 
@@ -99,7 +99,8 @@ def execute_perceval_job(qitems, origin, backend,
     logging.debug("Running job %s (%s)", origin, backend)
 
     nitems = 0
-    last_item = None
+    last_uuid = None
+    max_date = 0
 
     try:
         items = execute_perceval_backend(origin, backend, backend_args,
@@ -108,7 +109,10 @@ def execute_perceval_job(qitems, origin, backend,
         for item in items:
             conn.rpush(qitems, pickle.dumps(item))
             nitems += 1
-            last_item = item
+            last_uuid = item['uuid']
+
+            if max_date < item['updated_on']:
+                max_date = item['updated_on']
     except Exception as e:
         logging.debug("Error running job %s (%s) - %s", origin, backend, str(e))
 
@@ -118,8 +122,8 @@ def execute_perceval_job(qitems, origin, backend,
 
     if nitems > 0:
         result = JobResult(origin, backend,
-                           last_item['uuid'],
-                           last_item['updated_on'],
+                           last_uuid,
+                           max_date,
                            nitems)
     else:
         result = JobResult(origin, backend, None, None, 0)

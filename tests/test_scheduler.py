@@ -62,7 +62,7 @@ class TestScheduler(TestBaseRQ):
 
         result = job.return_value
         self.assertEqual(result.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
-        self.assertEqual(result.last_date, 1344965413.0)
+        self.assertEqual(result.max_date, 1392185439.0)
         self.assertEqual(result.nitems, 9)
 
     def test_not_found_queue(self):

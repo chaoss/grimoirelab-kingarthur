@@ -66,7 +66,7 @@ class TestJobResult(unittest.TestCase):
         self.assertEqual(result.origin, 'http://example.com/')
         self.assertEqual(result.backend, 'mock_backend')
         self.assertEqual(result.last_uuid, 'ABCDEFGHIJK')
-        self.assertEqual(result.last_date, 1344965413.0)
+        self.assertEqual(result.max_date, 1344965413.0)
         self.assertEqual(result.nitems, 58)
 
 
@@ -95,7 +95,7 @@ class TestExecuteJob(TestBaseRQ):
         self.assertEqual(result.origin, 'test')
         self.assertEqual(result.backend, 'git')
         self.assertEqual(result.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
-        self.assertEqual(result.last_date, 1344965413.0)
+        self.assertEqual(result.max_date, 1392185439.0)
         self.assertEqual(result.nitems, 9)
 
         commits = self.conn.lrange('items', 0, -1)
@@ -129,7 +129,7 @@ class TestExecuteJob(TestBaseRQ):
         self.assertEqual(result.origin, 'test')
         self.assertEqual(result.backend, 'git')
         self.assertEqual(result.last_uuid, None)
-        self.assertEqual(result.last_date, None)
+        self.assertEqual(result.max_date, None)
         self.assertEqual(result.nitems, 0)
 
         commits = self.conn.lrange('items', 0, -1)
@@ -209,7 +209,7 @@ class TestExecuteJob(TestBaseRQ):
         self.assertEqual(result.origin, BUGZILLA_SERVER_URL)
         self.assertEqual(result.backend, 'bugzilla')
         self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
-        self.assertEqual(result.last_date, 1439404330.0)
+        self.assertEqual(result.max_date, 1439404330.0)
         self.assertEqual(result.nitems, 7)
 
         self.assertEqual(len(requests), 13)
@@ -233,7 +233,7 @@ class TestExecuteJob(TestBaseRQ):
         self.assertEqual(result.origin, BUGZILLA_SERVER_URL)
         self.assertEqual(result.backend, 'bugzilla')
         self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
-        self.assertEqual(result.last_date, 1439404330.0)
+        self.assertEqual(result.max_date, 1439404330.0)
         self.assertEqual(result.nitems, 7)
 
         self.assertEqual(len(requests), 13)

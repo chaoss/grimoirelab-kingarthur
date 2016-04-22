@@ -22,15 +22,19 @@
 #
 
 import copy
+import datetime
 import sys
 import threading
 import time
 import unittest
 
+import dateutil.tz
+
 if not '..' in sys.path:
     sys.path.insert(0, '..')
 
-from arthur.utils import RWLock
+from arthur.errors import InvalidDateError
+from arthur.utils import RWLock, str_to_datetime
 
 
 class RWLockThread(threading.Thread):
@@ -136,6 +140,73 @@ class TestRWLock(unittest.TestCase):
         # The last thread (a reader) will wait till the last writer ends.
         self.assertLess(threads[2].entry_time, threads[3].entry_time)
         self.assertLess(threads[2].exit_time, threads[3].exit_time)
+
+
+class TestStrToDatetime(unittest.TestCase):
+    """Unit tests for str_to_datetime function"""
+
+    def test_dates(self):
+        """Check if it converts some dates to datetime objects"""
+
+        date = str_to_datetime('2001-12-01')
+        expected = datetime.datetime(2001, 12, 1, tzinfo=dateutil.tz.tzutc())
+        self.assertIsInstance(date, datetime.datetime)
+        self.assertEqual(date, expected)
+
+        date = str_to_datetime('13-01-2001')
+        expected = datetime.datetime(2001, 1, 13, tzinfo=dateutil.tz.tzutc())
+        self.assertIsInstance(date, datetime.datetime)
+        self.assertEqual(date, expected)
+
+        date = str_to_datetime('12-01-01')
+        expected = datetime.datetime(2001, 12, 1, tzinfo=dateutil.tz.tzutc())
+        self.assertIsInstance(date, datetime.datetime)
+        self.assertEqual(date, expected)
+
+        date = str_to_datetime('2001-12-01 23:15:32')
+        expected = datetime.datetime(2001, 12, 1, 23, 15, 32,
+                                     tzinfo=dateutil.tz.tzutc())
+        self.assertIsInstance(date, datetime.datetime)
+        self.assertEqual(date, expected)
+
+        date = str_to_datetime('2001-12-01 23:15:32 -0600')
+        expected = datetime.datetime(2001, 12, 1, 23, 15, 32,
+                                     tzinfo=dateutil.tz.tzoffset(None, -21600))
+        self.assertIsInstance(date, datetime.datetime)
+        self.assertEqual(date, expected)
+
+        date = str_to_datetime('2001-12-01 23:15:32Z')
+        expected = datetime.datetime(2001, 12, 1, 23, 15, 32,
+                                     tzinfo=dateutil.tz.tzutc())
+        self.assertIsInstance(date, datetime.datetime)
+        self.assertEqual(date, expected)
+
+        date = str_to_datetime('Wed, 26 Oct 2005 15:20:32 -0100 (GMT+1)')
+        expected = datetime.datetime(2005, 10, 26, 15, 20, 32,
+                                     tzinfo=dateutil.tz.tzoffset(None, -3600))
+        self.assertIsInstance(date, datetime.datetime)
+        self.assertEqual(date, expected)
+
+        date = str_to_datetime('Wed, 22 Jul 2009 11:15:50 +0300 (FLE Daylight Time)')
+        expected = datetime.datetime(2009, 7, 22, 11, 15, 50,
+                                     tzinfo=dateutil.tz.tzoffset(None, 10800))
+        self.assertIsInstance(date, datetime.datetime)
+        self.assertEqual(date, expected)
+
+    def test_invalid_date(self):
+        """Check whether it fails with an invalid date"""
+
+        self.assertRaises(InvalidDateError, str_to_datetime, '2001-13-01')
+        self.assertRaises(InvalidDateError, str_to_datetime, '2001-04-31')
+
+    def test_invalid_format(self):
+        """Check whether it fails with invalid formats"""
+
+        self.assertRaises(InvalidDateError, str_to_datetime, '2001-12-01mm')
+        self.assertRaises(InvalidDateError, str_to_datetime, '2001-12-01 02:00 +08888')
+        self.assertRaises(InvalidDateError, str_to_datetime, 'nodate')
+        self.assertRaises(InvalidDateError, str_to_datetime, None)
+        self.assertRaises(InvalidDateError, str_to_datetime, '')
 
 
 if __name__ == "__main__":

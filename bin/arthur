@@ -29,11 +29,11 @@ import os.path
 import sys
 import time
 
-import dateutil.parser
 import redis
 
 from arthur.arthur import Arthur
 from arthur.errors import InvalidDateError
+from arthur.utils import str_to_datetime
 
 
 ARTHUR_USAGE_MSG = \
@@ -201,28 +201,6 @@ def connect_to_redis(db_url):
     logging.debug("Redis connection stablished with %s.", db_url)
 
     return conn
-
-
-def str_to_datetime(ts):
-    """Format a string to a datetime object.
-
-    This functions supports several date formats like YYYY-MM-DD,
-    MM-DD-YYYY and YY-MM-DD.
-
-    :param ts: string to convert
-
-    :returns: a datetime object
-
-    :raises IvalidDateError: when the given string cannot be converted into
-        a valid date
-    """
-    if not ts:
-        raise InvalidDateError(date=str(ts))
-
-    try:
-        return dateutil.parser.parse(ts).replace(tzinfo=None)
-    except Exception:
-        raise InvalidDateError(date=str(ts))
 
 
 if __name__ == '__main__':

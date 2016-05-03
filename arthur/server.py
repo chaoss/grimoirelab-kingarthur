@@ -23,7 +23,11 @@
 
 import logging
 
+import threading
+import time
+
 import cherrypy
+
 
 from .arthur import Arthur
 from .utils import str_to_datetime
@@ -36,7 +40,22 @@ class ArthurServer(Arthur):
     """Arthur REST server"""
 
     def __init__(self, *args, **kwargs):
+        if 'writer' in kwargs:
+            writer = kwargs.pop('writer')
+
         super().__init__(*args, **kwargs)
+
+        if writer:
+            self.writer_th = threading.Thread(target=self.write_items,
+                                              args=(writer, self.items))
+            self.writer_th.start()
+
+    @classmethod
+    def write_items(cls, writer, items_generator):
+        while True:
+            items = items_generator()
+            writer.write(items)
+            time.sleep(1)
 
     @cherrypy.expose
     @cherrypy.tools.json_in()

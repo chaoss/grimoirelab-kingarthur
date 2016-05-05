@@ -23,6 +23,7 @@
 
 import logging
 import json
+import time
 
 import requests
 
@@ -30,6 +31,30 @@ from .errors import BaseError
 
 
 logger = logging.getLogger(__name__)
+
+
+NOT_ANALIZE_STRINGS_MAPPING = {
+    'dynamic_templates' : [{
+        'notanalyzed' : {
+            'match' : '*',
+            'match_mapping_type' : 'string',
+            'mapping' : {
+                'type' : 'string',
+                'index' : 'not_analyzed'
+            }
+        }
+    }]
+}
+
+DISABLE_DYNAMIC_MAPPING = {
+    'dynamic' : True,
+    'properties' : {
+        'data' : {
+            'dynamic' : False,
+            'properties' : {}
+        }
+    }
+}
 
 
 class ElasticSearchError(BaseError):
@@ -41,7 +66,11 @@ class ElasticItemsWriter:
 
     def __init__(self,  idx_url, clean=False):
         self.idx_url = idx_url
-        self.create_index(self.idx_url, clean=clean)
+        was_created = self.create_index(self.idx_url, clean=clean)
+
+        if was_created:
+            self.create_mapping(idx_url, NOT_ANALIZE_STRINGS_MAPPING)
+            self.create_mapping(idx_url, DISABLE_DYNAMIC_MAPPING)
 
     def write(self, items, max_items=100):
         url = self.idx_url + '/items/_bulk'
@@ -107,7 +136,35 @@ class ElasticItemsWriter:
                 raise ElasticSearchError(cause=cause)
 
             logger.info("Index %s created", idx_url)
+            return True
         elif r.status_code == 200 and clean:
             requests.delete(idx_url)
             requests.post(idx_url)
-            logger.info("Index deleted and created" + idx_url)
+            logger.info("Index deleted and created (index: %s)", idx_url)
+            return True
+
+        return False
+
+    @staticmethod
+    def create_mapping(idx_url, mapping):
+        """Create a mapping"""
+
+        mapping_url = idx_url + '/items/_mapping'
+        mapping = json.dumps(mapping)
+
+        try:
+            r = requests.put(mapping_url, data=mapping)
+        except requests.exceptions.ConnectionError:
+            cause = "Error connecting to Elastic Search (index: %s, url: %s)" \
+                % (idx_url, mapping_url)
+            raise ElasticSearchError(cause=cause)
+
+        if r.status_code != 200:
+            reason = r.json()['error']['reason']
+            logger.info("Can't create mapping in %s. %s",
+                        mapping_url, reason)
+            cause = "Error creating Elastic Search mapping %s. %s" % \
+                (mapping_url, reason)
+            raise ElasticSearchError(cause=cause)
+        else:
+            logger.info("Mapping created in %s", mapping_url)

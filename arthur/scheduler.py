@@ -60,9 +60,6 @@ class Scheduler(Thread):
         self.daemon = True
 
         self.conn = conn
-        self.pubsub = self.conn.pubsub()
-        self.pubsub.subscribe(CH_PUBSUB)
-
         self.queues = {
                        Q_CREATION_JOBS : Queue(Q_CREATION_JOBS, async=async_mode),
                        Q_UPDATING_JOBS : Queue(Q_UPDATING_JOBS, async=async_mode)
@@ -105,7 +102,23 @@ class Scheduler(Thread):
     def run(self):
         """Run thread to reschedule finished jobs"""
 
-        for msg in self.pubsub.listen():
+        import traceback
+
+        pubsub = self.conn.pubsub()
+        pubsub.subscribe(CH_PUBSUB)
+
+        try:
+            self._schedule(pubsub)
+        except Exception:
+            logger.error("Scheduler crashed")
+            logger.error(traceback.format_exc())
+
+    def _schedule(self, pubsub):
+        """Listen for new jobs to schedule"""
+
+        for msg in pubsub.listen():
+            logger.debug("New message received of type %s", str(msg['type']))
+
             if msg['type'] != 'message':
                 continue
 
@@ -115,7 +128,6 @@ class Scheduler(Thread):
                 job = Job.fetch(data['job_id'], connection=self.conn)
 
                 result = job.result
-
                 kwargs = job.kwargs
 
                 if result.nitems > 0:

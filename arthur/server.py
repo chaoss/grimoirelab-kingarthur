@@ -48,6 +48,12 @@ class ArthurServer(Arthur):
         if writer:
             self.writer_th = threading.Thread(target=self.write_items,
                                               args=(writer, self.items))
+
+        cherrypy.engine.subscribe('start', self.start, 100)
+
+    def start(self):
+        super().start()
+        if self.writer_th:
             self.writer_th.start()
 
     @classmethod

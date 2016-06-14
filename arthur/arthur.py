@@ -46,6 +46,8 @@ class Arthur:
         self.base_cache_path = base_cache_path
         self.repositories = RepositoryManager()
         self.scheduler = Scheduler(self.conn, async_mode=async_mode)
+
+    def start(self):
         self.scheduler.start()
 
     def add(self, origin, backend, args):

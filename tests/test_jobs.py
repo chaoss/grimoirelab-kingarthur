@@ -68,6 +68,13 @@ class TestJobResult(unittest.TestCase):
         self.assertEqual(result.last_uuid, 'ABCDEFGHIJK')
         self.assertEqual(result.max_date, 1344965413.0)
         self.assertEqual(result.nitems, 58)
+        self.assertEqual(result.offset, None)
+
+        result = JobResult('http://example.com/', 'mock_backend',
+                           'ABCDEFGHIJK', 1344965413.0, 58,
+                           offset=128)
+
+        self.assertEqual(result.offset, 128)
 
 
 class TestExecuteJob(TestBaseRQ):
@@ -97,6 +104,7 @@ class TestExecuteJob(TestBaseRQ):
         self.assertEqual(result.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
         self.assertEqual(result.max_date, 1392185439.0)
         self.assertEqual(result.nitems, 9)
+        self.assertEqual(result.offset, None)
 
         commits = self.conn.lrange('items', 0, -1)
         commits = [pickle.loads(c) for c in commits]
@@ -131,6 +139,7 @@ class TestExecuteJob(TestBaseRQ):
         self.assertEqual(result.last_uuid, None)
         self.assertEqual(result.max_date, None)
         self.assertEqual(result.nitems, 0)
+        self.assertEqual(result.offset, None)
 
         commits = self.conn.lrange('items', 0, -1)
         commits = [pickle.loads(c) for c in commits]

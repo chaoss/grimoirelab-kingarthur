@@ -131,8 +131,11 @@ class Scheduler(Thread):
                 kwargs = job.kwargs
 
                 if result.nitems > 0:
-                    from_date = unixtime_to_datetime(data['result'].max_date)
+                    from_date = unixtime_to_datetime(result.max_date)
                     kwargs['from_date'] = from_date
+
+                    if result.offset:
+                        kwargs['offset'] = result.offset
 
                 kwargs['cache_path'] = None
                 kwargs['cache_fetch'] = False

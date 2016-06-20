@@ -47,13 +47,16 @@ class JobResult:
     :param last_uuid: UUID of the last item
     :param max_date: maximum date fetched among items
     :param nitems: number of items fetched by the backend
+    :param offset: maximum offset fetched among items
     """
-    def __init__(self, origin, backend, last_uuid, max_date, nitems):
+    def __init__(self, origin, backend, last_uuid, max_date, nitems,
+                 offset=None):
         self.origin = origin
         self.backend = backend
         self.last_uuid = last_uuid
         self.max_date = max_date
         self.nitems = nitems
+        self.offset = offset
 
 
 def execute_perceval_job(qitems, origin, backend,
@@ -101,6 +104,7 @@ def execute_perceval_job(qitems, origin, backend,
     nitems = 0
     last_uuid = None
     max_date = 0
+    offset = None
 
     try:
         items = execute_perceval_backend(origin, backend, backend_args,
@@ -113,6 +117,8 @@ def execute_perceval_job(qitems, origin, backend,
 
             if max_date < item['updated_on']:
                 max_date = item['updated_on']
+            if 'offset' in item:
+                offset = item['offset']
     except Exception as e:
         logging.debug("Error running job %s (%s) - %s", origin, backend, str(e))
 
@@ -124,7 +130,8 @@ def execute_perceval_job(qitems, origin, backend,
         result = JobResult(origin, backend,
                            last_uuid,
                            max_date,
-                           nitems)
+                           nitems,
+                           offset=offset)
     else:
         result = JobResult(origin, backend, None, None, 0)
 

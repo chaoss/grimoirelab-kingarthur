@@ -41,10 +41,10 @@ class ArthurWorker(rq.Worker):
         rq.push_connection(self.connection)
         super().prepare_job_execution(job)
 
-    def perform_job(self, job):
+    def perform_job(self, job, queue):
         """Custom method to execute a job and notify of its result"""
 
-        result = super().perform_job(job)
+        result = super().perform_job(job, queue)
 
         job_status = job.get_status()
         job_result = job.return_value if job_status == 'finished' else None

@@ -174,10 +174,12 @@ class Scheduler(Thread):
         job_args['cache_path'] = None
         job_args['cache_fetch'] = False
 
-        logging.debug("Job #%s finished. Rescheduling to fetch data",
-                      job.get_id())
+        delay = job_args.get('scheduler_delay', WAIT_FOR_QUEUING)
 
-        self._schedule_job(WAIT_FOR_QUEUING, Q_UPDATING_JOBS, job_args)
+        logging.debug("Job #%s finished. Rescheduling to fetch data on %s",
+                      job.get_id(), delay)
+
+        self._schedule_job(delay, Q_UPDATING_JOBS, job_args)
 
     def _enque_job(self, queue_id, job_args):
         job = self.queues[queue_id].enqueue(execute_perceval_job,

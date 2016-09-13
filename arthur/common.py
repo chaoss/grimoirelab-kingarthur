@@ -27,5 +27,6 @@ Q_CREATION_JOBS = 'create'
 Q_UPDATING_JOBS = 'update'
 Q_STORAGE_ITEMS = 'items'
 
-
 TIMEOUT = 3600 * 24
+
+WAIT_FOR_QUEUING = 10 # In seconds

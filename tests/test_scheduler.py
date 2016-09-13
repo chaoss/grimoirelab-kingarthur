@@ -58,9 +58,12 @@ class TestScheduler(TestBaseRQ):
                           cache_path=None)
 
         schlr = Scheduler(self.conn, async_mode=False)
-        job = schlr.add_job(Q_CREATION_JOBS, repo)
+        job_id = schlr.add_job(Q_CREATION_JOBS, repo)
+        schlr.run_sync()
 
+        job = schlr.queues[Q_CREATION_JOBS].fetch_job(job_id)
         result = job.return_value
+
         self.assertEqual(result.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
         self.assertEqual(result.max_date, 1392185439.0)
         self.assertEqual(result.nitems, 9)

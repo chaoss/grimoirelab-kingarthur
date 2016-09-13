@@ -64,6 +64,8 @@ class TestArthur(unittest.TestCase):
         app = Arthur(self.conn, async_mode=False)
         app.add('test', 'git', args={'uri': self.git_path,
                                      'gitpath' : new_path})
+        app.scheduler.run_sync()
+
         commits = [item['data']['commit'] for item in app.items()]
 
         expected = ['bc57a9209f096a130dcc5ba7089a8663f758a703',

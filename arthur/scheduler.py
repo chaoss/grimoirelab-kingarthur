@@ -21,10 +21,13 @@
 #     Alvaro del Castillo San Felix <acs@bitergia.com>
 #
 
+import copy
 import datetime
 import logging
 import pickle
 import time
+import sched
+import uuid
 
 from threading import Thread
 
@@ -37,7 +40,8 @@ from .common import (CH_PUBSUB,
                      Q_CREATION_JOBS,
                      Q_UPDATING_JOBS,
                      Q_STORAGE_ITEMS,
-                     TIMEOUT)
+                     TIMEOUT,
+                     WAIT_FOR_QUEUING)
 from .errors import NotFoundError, InvalidDateError
 from .jobs import execute_perceval_job
 
@@ -65,13 +69,15 @@ class Scheduler(Thread):
                        Q_UPDATING_JOBS : Queue(Q_UPDATING_JOBS, async=async_mode)
                       }
 
+        self._scheduler = sched.scheduler()
+
     def add_job(self, queue_id, repository):
         """Add a Perceval job to a queue.
 
         :param queue_id: identifier of the queue where the job will be added
         :param repository: input repository for the job
 
-        :returns: the scheduled job
+        :returns: the job identifier of the scheduled job
 
         :raises NotFoundError: when the queue set to run the job does not
             exist.
@@ -84,37 +90,55 @@ class Scheduler(Thread):
         if 'cache_fetch' in repository.kwargs:
             del repository.kwargs['cache_fetch']
 
-        job = self.queues[queue_id].enqueue(execute_perceval_job,
-                                            timeout=TIMEOUT,
-                                            qitems=Q_STORAGE_ITEMS,
-                                            origin=repository.origin,
-                                            backend=repository.backend,
-                                            cache_path=repository.cache_path,
-                                            cache_fetch=cache_fetch,
-                                            **repository.kwargs)
+        job_args = copy.deepcopy(repository.kwargs)
+        job_args['job_id'] =  'arthur-' + str(uuid.uuid4())
+        job_args['timeout'] = TIMEOUT
+        job_args['qitems'] = Q_STORAGE_ITEMS
+        job_args['origin'] = repository.origin
+        job_args['backend'] = repository.backend
+        job_args['cache_path'] = repository.cache_path
+        job_args['cache_fetch'] = cache_fetch
 
-        logging.debug("Job #%s %s (%s) enqueued in '%s' queue",
-                      job.get_id(), repository.origin,
-                      repository.backend, queue_id)
+        # Schedule the job as soon as possible
+        self._schedule_job(0, Q_CREATION_JOBS, job_args)
 
-        return job
+        return job_args['job_id']
 
     def run(self):
-        """Run thread to reschedule finished jobs"""
+        """Run thread to schedule jobs."""
 
         import traceback
 
-        pubsub = self.conn.pubsub()
-        pubsub.subscribe(CH_PUBSUB)
-
         try:
-            self._schedule(pubsub)
+            self._schedule()
         except Exception:
             logger.error("Scheduler crashed")
             logger.error(traceback.format_exc())
 
-    def _schedule(self, pubsub):
-        """Listen for new jobs to schedule"""
+    def run_sync(self):
+        """Run scheduler in sync mode"""
+
+        self._scheduler.run()
+
+    def _schedule(self):
+        """Main method that runs scheduling threads"""
+
+        # Create a thread to listen and re-schedule
+        # completed jobs
+        t = Thread(target=self._reschedule)
+        t.start()
+
+        while True:
+            self._scheduler.run(blocking=False)
+            time.sleep(0) # Let other threads run
+
+        t.join()
+
+    def _reschedule(self):
+        """Listen for completed jobs and reschedule successful ones"""
+
+        pubsub = self.conn.pubsub()
+        pubsub.subscribe(CH_PUBSUB)
 
         for msg in pubsub.listen():
             logger.debug("New message received of type %s", str(msg['type']))
@@ -126,32 +150,42 @@ class Scheduler(Thread):
 
             if data['status'] == 'finished':
                 job = Job.fetch(data['job_id'], connection=self.conn)
-
-                result = job.result
-                kwargs = job.kwargs
-
-                if result.nitems > 0:
-                    from_date = unixtime_to_datetime(result.max_date)
-                    kwargs['from_date'] = from_date
-
-                    if result.offset:
-                        kwargs['offset'] = result.offset
-
-                kwargs['cache_path'] = None
-                kwargs['cache_fetch'] = False
-
-                logging.debug("Job #%s finished. Rescheduling to fetch data",
-                              data['job_id'])
-                time.sleep(10)
-
-                job = self.queues[Q_UPDATING_JOBS].enqueue(execute_perceval_job,
-                                                           **kwargs)
-
-                logging.debug("Job #%s %s (%s) enqueued in '%s' queue",
-                              job.get_id(), kwargs['origin'],
-                              kwargs['backend'], Q_UPDATING_JOBS)
+                self._reschedule_job(job)
             elif data['status'] == 'failed':
                 logging.debug("Job #%s failed", data['job_id'])
+
+    def _schedule_job(self, delay, queue_id, job_args):
+        self._scheduler.enter(delay, 1, self._enque_job,
+                              argument=(queue_id, job_args,))
+
+    def _reschedule_job(self, job):
+        result = job.result
+        job_args = job.kwargs
+
+        job_args['job_id'] = job.get_id()
+
+        if result.nitems > 0:
+            from_date = unixtime_to_datetime(result.max_date)
+            job_args['from_date'] = from_date
+
+            if result.offset:
+                job_args['offset'] = result.offset
+
+        job_args['cache_path'] = None
+        job_args['cache_fetch'] = False
+
+        logging.debug("Job #%s finished. Rescheduling to fetch data",
+                      job.get_id())
+
+        self._schedule_job(WAIT_FOR_QUEUING, Q_UPDATING_JOBS, job_args)
+
+    def _enque_job(self, queue_id, job_args):
+        job = self.queues[queue_id].enqueue(execute_perceval_job,
+                                            **job_args)
+
+        logging.debug("Job #%s %s (%s) enqueued in '%s' queue",
+                      job.get_id(), job_args['origin'],
+                      job_args['backend'], queue_id)
 
 
 def unixtime_to_datetime(ut):

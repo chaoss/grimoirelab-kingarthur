@@ -47,10 +47,12 @@ Repositories are transformed into Perceval jobs that will be
 scheduled and run using a distributed job queue platform.
 
 optional arguments:
-  -h, --help            show this help message and exit
+  -?, --help            show this help message and exit
   -c FILE, --config FILE
                         set configuration file
   -g, --debug           set debug mode on
+  -h, --host            set the host name or IP address on which to listen for connections
+  -p, --port            set listening TCP port (default: 8080)
   -d, --database        URL database connection (default: 'redis://localhost/8')
   -s, --sync            work in synchronous mode (without workers)
   --es-index            output ElasticSearch server index
@@ -97,6 +99,12 @@ def main():
         logging.info("King Arthur running in daemon mode.")
         cherrypy.process.plugins.Daemonizer(cherrypy.engine).subscribe()
 
+    cfg = {
+        'server.socket_host' : args.host,
+        'server.socket_port' : args.port
+    }
+    cherrypy.config.update(cfg)
+
     cherrypy.quickstart(app)
 
 
@@ -108,13 +116,19 @@ def parse_args():
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
                                      add_help=False)
 
-    parser.add_argument('-h', '--help', action='help',
+    parser.add_argument('-?', '--help', action='help',
                        help=argparse.SUPPRESS)
     parser.add_argument('-c', '--config', dest='config_file',
                         default=os.path.expanduser('~/.arthur/arthur.cfg'),
                         help=argparse.SUPPRESS)
     parser.add_argument('-g', '--debug', dest='debug',
                         action='store_true',
+                        help=argparse.SUPPRESS)
+    parser.add_argument('-h', '--host', dest='host',
+                        default='127.0.0.1',
+                        help=argparse.SUPPRESS)
+    parser.add_argument('-p', '--port', dest='port',
+                        type=int, default=8080,
                         help=argparse.SUPPRESS)
     parser.add_argument('-d', '--database', dest='database',
                         default='redis://localhost/8',

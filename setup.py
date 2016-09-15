@@ -29,4 +29,4 @@ setup(name="arthur",
       author="Bitergia",
       author_email="sduenas@bitergia.com",
       packages=["arthur"],
-      scripts=["bin/arthur", "bin/arthurd"])
+      scripts=["bin/arthur", "bin/arthurd", "bin/arthurw"])

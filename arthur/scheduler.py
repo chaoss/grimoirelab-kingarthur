@@ -49,6 +49,10 @@ from .jobs import execute_perceval_job
 logger = logging.getLogger(__name__)
 
 
+# Poll scheduler after this seconds
+SCHED_POLLING = 0.5
+
+
 class Scheduler(Thread):
     """Scheduler of jobs.
 
@@ -130,7 +134,7 @@ class Scheduler(Thread):
 
         while True:
             self._scheduler.run(blocking=False)
-            time.sleep(0) # Let other threads run
+            time.sleep(SCHED_POLLING) # Let other threads run
 
         t.join()
 

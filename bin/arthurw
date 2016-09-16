@@ -22,10 +22,12 @@
 #
 
 import argparse
+import logging
 import sys
 
 import redis
 import rq
+import rq.utils
 
 from arthur.common import Q_CREATION_JOBS, Q_UPDATING_JOBS
 from arthur.worker import ArthurWorker
@@ -43,9 +45,14 @@ positional arguments:
 
 optional arguments:
   -?, --help            show this help message and exit
+  -g, --debug           set debug mode on
   -d, --database        URL database connection (default: 'redis://localhost/8')
   -b, --burst           Run in burst mode (quit after all work is done)
 """
+
+# Logging formats
+ARTHURW_LOG_FORMAT = "[%(asctime)s] - %(message)s"
+ARTHURW_DEBUG_LOG_FORMAT = "[%(asctime)s - %(name)s - %(levelname)s] - %(message)s"
 
 
 def main():
@@ -57,6 +64,8 @@ def main():
 
     queues = args.queues or [Q_CREATION_JOBS, Q_UPDATING_JOBS]
     burst = args.burst
+
+    configure_logging(args.debug)
 
     try:
         queues = [rq.Queue(queue, connection=conn) for queue in queues]
@@ -78,6 +87,9 @@ def parse_args():
 
     parser.add_argument('-?', '--help', action='help',
                        help=argparse.SUPPRESS)
+    parser.add_argument('-g', '--debug', dest='debug',
+                        action='store_true',
+                        help=argparse.SUPPRESS)
     parser.add_argument('-d', '--database', dest='database',
                         default='redis://localhost/8',
                         help=argparse.SUPPRESS)
@@ -90,11 +102,37 @@ def parse_args():
     return parser.parse_args()
 
 
+def configure_logging(debug=False):
+    """Configure Arthur's worker logging.
+
+    The function configures the log messages produced by Arthur
+    worker and Perceval backends. By default, log messages are sent
+    to stderr. Set the parameter `debug` to activate the debug
+    mode.
+
+    :param log_path: path where logs will be stored
+    :param debug: set the debug mode
+    """
+    logger = logging.getLogger()
+
+    if not debug:
+        logger.setLevel(logging.INFO)
+        formatter = logging.Formatter(fmt=ARTHURW_LOG_FORMAT)
+        logging.getLogger('requests').setLevel(logging.WARNING)
+        logging.getLogger('urrlib3').setLevel(logging.WARNING)
+    else:
+        logger.setLevel(logging.DEBUG)
+        formatter = logging.Formatter(fmt=ARTHURW_DEBUG_LOG_FORMAT)
+
+    handler = rq.utils.ColorizingStreamHandler()
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
+
 def connect_to_redis(url):
     """Create a connection with a Redis database"""
 
     conn = redis.StrictRedis.from_url(url)
-    #logging.debug("Redis connection stablished with %s.", url)
 
     return conn
 

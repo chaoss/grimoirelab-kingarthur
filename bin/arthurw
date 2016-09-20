@@ -34,7 +34,7 @@ from arthur.worker import ArthurWorker
 
 
 ARTHURW_USAGE_MSG = \
-"""%(prog)s [-d <database>] [--burst] [<queue1> .. <queueN>] | --help """
+"""%(prog)s [-g] [-d <database>] [--burst] [<queue1>...<queueN>] | --help """
 
 ARTHURW_DESC_MSG = \
 """King Arthur's worker. It will run Perceval jobs on the quest
@@ -42,6 +42,7 @@ to retrieve data from software repositories.
 
 positional arguments:
    queues               list of queues this worker will listen for
+                        ('create' and 'update', by default)
 
 optional arguments:
   -?, --help            show this help message and exit

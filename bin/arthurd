@@ -35,14 +35,16 @@ from arthur.writers import ElasticItemsWriter
 
 
 ARTHURD_USAGE_MSG = \
-"""%(prog)s [-c <file>] [-g] <repositories> | --help """
+"""%(prog)s [-c <file>] [-g] [-h <host>] [-p <port>] [-d <database>]
+               [--es-index <index>] [--log-path <path>] [--cache-path <cpath>]
+               [--no-cache] [--no-daemon] | --help """
 
 ARTHURD_DESC_MSG = \
 """King Arthur commands his loyal knight Perceval on the quest
 to retrieve data from software repositories.
 
 This command runs an Arthur daemon that waits for HTTP requests
-on port 8080. Repositories to analyze are added using an API REST.
+on port 8080. Repositories to analyze are added using an REST API.
 Repositories are transformed into Perceval jobs that will be
 scheduled and run using a distributed job queue platform.
 

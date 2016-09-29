@@ -22,7 +22,6 @@
 #
 
 import logging
-
 import threading
 import time
 
@@ -30,10 +29,19 @@ import cherrypy
 
 
 from .arthur import Arthur
-from .utils import str_to_datetime
+from .utils import JSONEncoder, str_to_datetime
 
 
 logger = logging.getLogger(__name__)
+
+
+def json_encoder(*args, **kwargs):
+    """Custom JSON encoder handler"""
+
+    obj = cherrypy.serving.request._json_inner_handler(*args, **kwargs)
+
+    for chunk in JSONEncoder().iterencode(obj):
+        yield chunk.encode('utf-8')
 
 
 class ArthurServer(Arthur):
@@ -80,3 +88,15 @@ class ArthurServer(Arthur):
         logger.debug("Done. Ready to work!")
 
         return "Repositories added"
+
+    @cherrypy.expose
+    @cherrypy.tools.json_out(handler=json_encoder)
+    def repos(self):
+        logger.debug("API 'repos' method called")
+
+        result = [repo.to_dict() for repo in self.repositories.repositories]
+        result = {'repositories' : result}
+
+        logger.debug("Ready to send repositories list")
+
+        return result

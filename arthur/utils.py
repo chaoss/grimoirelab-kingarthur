@@ -21,6 +21,8 @@
 #     Alvaro del Castillo San Felix <acs@bitergia.com>
 #
 
+import datetime
+import json
 import threading
 
 import dateutil.parser
@@ -80,6 +82,19 @@ class RWLock:
         """Release the lock after writting"""
 
         self._access_mutex.release()
+
+
+class JSONEncoder(json.JSONEncoder):
+    """JSON encoder which encodes datetime objects too"""
+
+    def default(self, o):
+        if isinstance(o, datetime.datetime):
+            return o.isoformat()
+        return super().default(o)
+
+    def iterencode(self, o, _one_shot=False):
+        for chunk in super().iterencode(o, _one_shot=_one_shot):
+            yield chunk
 
 
 def str_to_datetime(ts):

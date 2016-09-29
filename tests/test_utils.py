@@ -23,6 +23,7 @@
 
 import copy
 import datetime
+import json
 import sys
 import threading
 import time
@@ -34,7 +35,7 @@ if not '..' in sys.path:
     sys.path.insert(0, '..')
 
 from arthur.errors import InvalidDateError
-from arthur.utils import RWLock, str_to_datetime
+from arthur.utils import RWLock, JSONEncoder, str_to_datetime
 
 
 class RWLockThread(threading.Thread):
@@ -140,6 +141,48 @@ class TestRWLock(unittest.TestCase):
         # The last thread (a reader) will wait till the last writer ends.
         self.assertLess(threads[2].entry_time, threads[3].entry_time)
         self.assertLess(threads[2].exit_time, threads[3].exit_time)
+
+
+class TestJSONEncoder(unittest.TestCase):
+    """Unit tests for JSONEncoder class"""
+
+    def test_default(self):
+        """Test default method"""
+
+        encoder = JSONEncoder()
+
+        dt = datetime.datetime(2016, 1, 1, 8, 8, 8)
+        value = encoder.default(dt)
+        self.assertEqual(value, "2016-01-01T08:08:08")
+
+        # This method will raise TypeError exceptions for those
+        # objects that are not instances of `datetime`
+        self.assertRaises(TypeError, encoder.default, 8)
+        self.assertRaises(TypeError, encoder.default, 'test')
+        self.assertRaises(TypeError, encoder.default, {})
+        self.assertRaises(TypeError, encoder.default, [1, 2, 3])
+
+    def test_iterencode(self):
+        """Test iterencode method"""
+
+        encoder = JSONEncoder()
+
+        obj = {
+            'l' : [None],
+            'dt' : datetime.datetime(2016, 1, 1, 8, 8, 8),
+            's' : "a string",
+            'i' : 8
+        }
+
+        expected = obj
+        expected['dt'] = "2016-01-01T08:08:08"
+
+        # Join the encoded JSON parts and decode the result
+        # into a new object. This is needed because the joined
+        # string does not follow always the same order.
+        result = ''.join([chunk for chunk in encoder.iterencode(obj)])
+        result = json.loads(result)
+        self.assertEqual(result, obj)
 
 
 class TestStrToDatetime(unittest.TestCase):

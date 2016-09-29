@@ -48,6 +48,12 @@ class Repository:
         self.kwargs = kwargs
         self.cache_path = cache_path
 
+    def to_dict(self):
+        return {
+            'origin' : self.origin,
+            'backend' : self.backend,
+            'args' : self.kwargs
+        }
 
 class RepositoryManager:
     """Basic structure to manage repositories.

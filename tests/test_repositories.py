@@ -48,6 +48,24 @@ class TestRepository(unittest.TestCase):
         self.assertDictEqual(repo.kwargs, args)
         self.assertEqual(repo.cache_path, '/tmp/example')
 
+    def test_to_dict(self):
+        """Check whether the object is converted into a dict"""
+
+        args = {'from_date' : '1970-01-01',
+                'component' : 'test'}
+        repo = Repository('http://example.com/', 'mock_backend',
+                          args, '/tmp/example')
+
+        d = repo.to_dict()
+
+        expected = {
+            'origin' : 'http://example.com/',
+            'backend' : 'mock_backend',
+            'args' : args
+        }
+
+        self.assertDictEqual(d, expected)
+
 
 class TestRepositoryManager(unittest.TestCase):
     """Unit tests for RepositoryManager"""

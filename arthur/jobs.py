@@ -30,6 +30,7 @@ import pickle
 import perceval.backends
 import perceval.cache
 
+from ._version import __version__
 from .errors import NotFoundError
 
 
@@ -114,6 +115,7 @@ def execute_perceval_job(qitems, origin, backend,
                                          cache_fetch)
 
         for item in items:
+            item = add_arthur_metadata(item, job)
             conn.rpush(qitems, pickle.dumps(item))
             nitems += 1
             last_uuid = item['uuid']
@@ -211,3 +213,23 @@ def inspect_signature_parameters(callable):
     params = [v for p, v in signature.parameters.items() \
               if p not in ('self', 'cls')]
     return params
+
+
+def add_arthur_metadata(item, job):
+    """Add metadata to an item.
+
+    Function that adds metadata to the given item such as the identifier
+    of the job that generated it or the version of the system. The
+    function returns a shallow copy of the item with the new data added.
+
+    :param item: fetched item
+    :param item: job object
+
+    :returns: a shallow copy of the item with the metadata
+    """
+    new_item = item.copy()
+
+    new_item['arthur_version'] = __version__
+    new_item['job_id'] = job.get_id()
+
+    return new_item

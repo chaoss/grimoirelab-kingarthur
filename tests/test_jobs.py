@@ -34,8 +34,10 @@ import rq
 if not '..' in sys.path:
     sys.path.insert(0, '..')
 
+from arthur import __version__
 from arthur.errors import NotFoundError
 from arthur.jobs import (JobResult,
+                         add_arthur_metadata,
                          execute_perceval_job,
                          execute_perceval_backend,
                          find_signature_parameters,
@@ -112,7 +114,7 @@ class TestExecuteJob(TestBaseRQ):
 
         commits = self.conn.lrange('items', 0, -1)
         commits = [pickle.loads(c) for c in commits]
-        commits = [commit['data']['commit'] for commit in commits]
+        commits = [(commit['job_id'], commit['data']['commit']) for commit in commits]
 
         expected = ['456a68ee1407a77f3e804a30dff245bb6c6b872f',
                     '51a3b654f252210572297f47597b31527c475fb8',
@@ -124,7 +126,10 @@ class TestExecuteJob(TestBaseRQ):
                     '87783129c3f00d2c81a3a8e585eb86a47e39891a',
                     'bc57a9209f096a130dcc5ba7089a8663f758a703']
 
-        self.assertListEqual(commits, expected)
+        for x in range(len(expected)):
+            item = commits[x]
+            self.assertEqual(item[0], result.job_id)
+            self.assertEqual(item[1], expected[x])
 
     def test_job_no_result(self):
         """Execute a Git backend job that will not produce any results"""
@@ -253,6 +258,7 @@ class TestExecuteJob(TestBaseRQ):
         self.assertEqual(result.nitems, 7)
 
         self.assertEqual(len(requests), 13)
+
         self.assertListEqual(cached_bugs, bugs)
 
 
@@ -355,6 +361,29 @@ class TestInspectSignature(unittest.TestCase):
         params = inspect_signature_parameters(MockCallable.class_test)
         params = [p.name for p in params]
         self.assertListEqual(params, expected)
+
+
+class MockJob:
+    """Mock job class for testing purposes"""
+
+    def get_id(self):
+        return 8
+
+
+class TestAddMetadata(unittest.TestCase):
+    """Unit tests for add_arthur_metadata"""
+
+    def test_add_metadata(self):
+        """Check if it adds the metadata information"""
+
+        item = {}
+        job = MockJob()
+
+        result = add_arthur_metadata(item, job)
+
+        self.assertDictEqual(item, {})
+        self.assertEqual(result['arthur_version'], __version__)
+        self.assertEqual(result['job_id'], 8)
 
 
 if __name__ == "__main__":

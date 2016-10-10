@@ -42,6 +42,7 @@ class JobResult:
     It stores useful data such as the origin, the UUID of the last
     item generated or the number of items fetched by the backend.
 
+    :param job_id: job identifier
     :param origin: origin from where items were fetched
     :param backend: backend used to fetch the items
     :param last_uuid: UUID of the last item
@@ -49,8 +50,9 @@ class JobResult:
     :param nitems: number of items fetched by the backend
     :param offset: maximum offset fetched among items
     """
-    def __init__(self, origin, backend, last_uuid, max_date, nitems,
-                 offset=None):
+    def __init__(self, job_id, origin, backend, last_uuid,
+                 max_date, nitems, offset=None):
+        self.job_id = job_id
         self.origin = origin
         self.backend = backend
         self.last_uuid = last_uuid
@@ -97,7 +99,8 @@ def execute_perceval_job(qitems, origin, backend,
 
     backend_args['cache'] = cache
 
-    conn = rq.get_current_job().connection
+    job = rq.get_current_job()
+    conn = job.connection
 
     logging.debug("Running job %s (%s)", origin, backend)
 
@@ -127,16 +130,15 @@ def execute_perceval_job(qitems, origin, backend,
         raise e
 
     if nitems > 0:
-        result = JobResult(origin, backend,
-                           last_uuid,
-                           max_date,
-                           nitems,
+        result = JobResult(job.get_id(), origin, backend,
+                           last_uuid, max_date, nitems,
                            offset=offset)
     else:
-        result = JobResult(origin, backend, None, None, 0)
+        result = JobResult(job.get_id(), origin, backend, None, None, 0)
 
-    logging.debug("Job completed %s (%s) - %s items fetched",
-                  origin, backend, str(nitems))
+    logging.debug("Job %s completed %s (%s) - %s items fetched",
+                  result.job_id, result.origin, result.backend,
+                  str(result.nitems))
 
     return result
 

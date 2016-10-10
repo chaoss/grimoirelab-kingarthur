@@ -60,9 +60,11 @@ class TestJobResult(unittest.TestCase):
     """Unit tests for JobResult class"""
 
     def test_job_result_init(self):
-        result = JobResult('http://example.com/', 'mock_backend',
+        result = JobResult('arthur-job-1234567890',
+                           'http://example.com/', 'mock_backend',
                            'ABCDEFGHIJK', 1344965413.0, 58)
 
+        self.assertEqual(result.job_id, 'arthur-job-1234567890')
         self.assertEqual(result.origin, 'http://example.com/')
         self.assertEqual(result.backend, 'mock_backend')
         self.assertEqual(result.last_uuid, 'ABCDEFGHIJK')
@@ -70,7 +72,8 @@ class TestJobResult(unittest.TestCase):
         self.assertEqual(result.nitems, 58)
         self.assertEqual(result.offset, None)
 
-        result = JobResult('http://example.com/', 'mock_backend',
+        result = JobResult('arthur-job-1234567890',
+                           'http://example.com/', 'mock_backend',
                            'ABCDEFGHIJK', 1344965413.0, 58,
                            offset=128)
 
@@ -99,6 +102,7 @@ class TestExecuteJob(TestBaseRQ):
                         origin='test', backend='git', **args)
 
         result = job.return_value
+        self.assertEqual(result.job_id, job.get_id())
         self.assertEqual(result.origin, 'test')
         self.assertEqual(result.backend, 'git')
         self.assertEqual(result.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
@@ -134,6 +138,7 @@ class TestExecuteJob(TestBaseRQ):
                         origin='test', backend='git', **args)
 
         result = job.return_value
+        self.assertEqual(result.job_id, job.get_id())
         self.assertEqual(result.origin, 'test')
         self.assertEqual(result.backend, 'git')
         self.assertEqual(result.last_uuid, None)
@@ -215,6 +220,7 @@ class TestExecuteJob(TestBaseRQ):
         self.conn.ltrim('items', 1, 0)
 
         result = job.return_value
+        self.assertEqual(result.job_id, job.get_id())
         self.assertEqual(result.origin, BUGZILLA_SERVER_URL)
         self.assertEqual(result.backend, 'bugzilla')
         self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
@@ -239,6 +245,7 @@ class TestExecuteJob(TestBaseRQ):
         self.conn.ltrim('items', 1, 0)
 
         result = job.return_value
+        self.assertEqual(result.job_id, job.get_id())
         self.assertEqual(result.origin, BUGZILLA_SERVER_URL)
         self.assertEqual(result.backend, 'bugzilla')
         self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')

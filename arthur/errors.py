@@ -37,6 +37,16 @@ class BaseError(Exception):
         return self.msg
 
 
+class AlreadyExistsError(BaseError):
+    """Exception raised when an element already exists"""
+
+    message = "%(element)s already exists"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.element = kwargs['element']
+
+
 class NotFoundError(BaseError):
     """Exception raised when an element is not found"""
 

@@ -67,6 +67,22 @@ class TestBaseError(unittest.TestCase):
         self.assertRaises(KeyError, MockErrorArgs, **kwargs)
 
 
+class TestAlreadyExistsError(unittest.TestCase):
+    """Tests for AlreadyExistsError class"""
+
+    def test_message(self):
+        """Make sure that prints the correct error"""
+
+        e = errors.AlreadyExistsError(element='task1')
+        self.assertEqual(str(e), 'task1 already exists')
+
+    def test_entity(self):
+        """Entity attribute should have a value"""
+
+        e = errors.AlreadyExistsError(element='task1')
+        self.assertEqual(e.element, 'task1')
+
+
 class TestNotFoundError(unittest.TestCase):
 
     def test_message(self):

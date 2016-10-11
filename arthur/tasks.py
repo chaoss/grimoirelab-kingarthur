@@ -25,6 +25,9 @@ import logging
 
 from datetime import datetime
 
+from .errors import AlreadyExistsError, NotFoundError
+from .utils import RWLock
+
 
 logger = logging.getLogger(__name__)
 
@@ -68,3 +71,110 @@ class Task:
             'cache' : self.cache_args,
             'scheduler' : self.sched_args
         }
+
+
+class TaskRegistry:
+    """Structure to register tasks.
+
+    Tasks are stored using instances of `Task` class. Each task
+    is added using its tag as unique identifier. Following accesses
+    to the registry (i.e, to get or remove) will require of this
+    identifier.
+
+    The registry ensures mutual exclusion among threads using a
+    reading-writting lock (`RWLock` on `utils` module).
+    """
+    def __init__(self):
+        self._rwlock = RWLock()
+        self._tasks = {}
+
+    def add(self, task_id, backend, backend_args,
+            cache_args=None, sched_args=None):
+        """Add a task to the registry.
+
+        This method adds task using `task_id` as identifier. If a task
+        with the same identifier already exists on the registry, a
+        `AlreadyExistsError` exception will be raised.
+
+        :param task_id: identifier of the task to add
+        :param backend: backend used to fetch data from the repository
+        :param backend_args: dictionary of arguments required to run the backend
+        :param cache_args: dict of arguments to configure the cache, if needed
+        :param sched_args: dict of arguments to configure the scheduler, if needed
+
+        :returns: the new task added to the registry
+
+        :raises AlreadyExistsError: raised when the given task identifier
+            exists on the registry
+        """
+        self._rwlock.writer_acquire()
+
+        if task_id in self._tasks:
+            self._rwlock.writer_release()
+            raise AlreadyExistsError(element=str(task_id))
+
+        task = Task(task_id, backend, backend_args,
+                    cache_args=cache_args,
+                    sched_args=sched_args)
+        self._tasks[task_id] = task
+
+        self._rwlock.writer_release()
+
+        logger.debug("Task %s added to the registry", str(task_id))
+
+        return task
+
+    def remove(self, task_id):
+        """Remove a task from the registry.
+
+        To remove it, pass its identifier with `taks_id` parameter.
+        When the identifier is not found, a `NotFoundError` exception
+        is raised.
+
+        :param task_id: identifier of the task to remove
+
+        :raises NotFoundError: raised when the given task identifier
+            is not found on the registry
+        """
+        try:
+            self._rwlock.writer_acquire()
+            del self._tasks[task_id]
+            self._rwlock.writer_release()
+            logger.debug("Task %s removed from the registry", str(task_id))
+        except KeyError:
+            self._rwlock.writer_release()
+            raise NotFoundError(element=str(task_id))
+
+    def get(self, task_id):
+        """Get a task from the registry.
+
+        Retrieve a task from the registry using its task identifier. When
+        the task does not exist, a `NotFoundError` exception will be
+        raised.
+
+        :param task_id: task identifier
+
+        :returns: a task object
+
+        :raises NotFoundError: raised when the requested task is not
+            found on the registry
+        """
+        try:
+            self._rwlock.reader_acquire()
+            task = self._tasks[task_id]
+            self._rwlock.reader_release()
+            return task
+        except KeyError:
+            self._rwlock.reader_release()
+            raise NotFoundError(element=str(task_id))
+
+    @property
+    def tasks(self):
+        """Get the list of tasks"""
+
+        self._rwlock.reader_acquire()
+        tl = [v for v in self._tasks.values()]
+        tl.sort(key=lambda x: x.task_id)
+        self._rwlock.reader_release()
+
+        return tl

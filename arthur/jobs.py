@@ -40,21 +40,19 @@ logger = logging.getLogger(__name__)
 class JobResult:
     """Class to store the result of a Perceval job.
 
-    It stores useful data such as the origin, the UUID of the last
+    It stores useful data such as the taks_id, the UUID of the last
     item generated or the number of items fetched by the backend.
 
     :param job_id: job identifier
-    :param origin: origin from where items were fetched
     :param backend: backend used to fetch the items
     :param last_uuid: UUID of the last item
     :param max_date: maximum date fetched among items
     :param nitems: number of items fetched by the backend
     :param offset: maximum offset fetched among items
     """
-    def __init__(self, job_id, origin, backend, last_uuid,
+    def __init__(self, job_id, backend, last_uuid,
                  max_date, nitems, offset=None):
         self.job_id = job_id
-        self.origin = origin
         self.backend = backend
         self.last_uuid = last_uuid
         self.max_date = max_date
@@ -62,9 +60,8 @@ class JobResult:
         self.offset = offset
 
 
-def execute_perceval_job(qitems, origin, backend,
-                         cache_path=None, cache_fetch=False,
-                         **backend_args):
+def execute_perceval_job(backend, backend_args, qitems,
+                         cache_path=None, fetch_from_cache=False):
     """Execute a Perceval job on RQ.
 
     The items fetched during the process will be stored in a
@@ -72,38 +69,33 @@ def execute_perceval_job(qitems, origin, backend,
 
     Setting the parameter `cache_path`, raw data will be stored
     in the cache. The contents from the cache can be retrieved
-    setting the pameter `cache_fetch` to `True`, too. Take into
+    setting the pameter `fetch_from_cache` to `True`, too. Take into
     account this behaviour will be only available when the backend
     supports the use of the cache.
 
-    :param qitems: name of the RQ queue used to store the items
-    :param origin: origin of the source
     :param backend: backend to execute
-    :param cache_path: patch to the cache
-    :param cache_fetch: fetch from the cache
-    :param bakend_args: arguments to execute the backend
+    :param bakend_args: dict of arguments for running the backend
+    :param qitems: name of the RQ queue used to store the items
+    :param cache_path: path to the cache
+    :param fetch_from_cache: retrieve items from the cache
 
     :returns: a `JobResult` instance
 
     :raises NotFoundError: raised when the backend is not found
     """
-    if cache_fetch and not cache_path:
-        raise ValueError("cache_path cannot be empty when cache_fetch is set")
+    job = rq.get_current_job()
+
+    logger.debug("Running job %s (%s)", job.id, backend)
+
+    conn = job.connection
 
     if cache_path:
-        cache = perceval.cache.Cache(cache_path)
-
-        if not cache_fetch:
-            cache.backup()
+        backup = not fetch_from_cache
+        cache = __initialize_perceval_cache(cache_path, backup)
     else:
         cache = None
 
     backend_args['cache'] = cache
-
-    job = rq.get_current_job()
-    conn = job.connection
-
-    logging.debug("Running job %s (%s)", origin, backend)
 
     nitems = 0
     last_uuid = None
@@ -111,8 +103,8 @@ def execute_perceval_job(qitems, origin, backend,
     offset = None
 
     try:
-        items = execute_perceval_backend(origin, backend, backend_args,
-                                         cache_fetch)
+        items = execute_perceval_backend(backend, backend_args,
+                                         fetch_from_cache=fetch_from_cache)
 
         for item in items:
             item = add_arthur_metadata(item, job)
@@ -125,40 +117,40 @@ def execute_perceval_job(qitems, origin, backend,
             if 'offset' in item:
                 offset = item['offset']
     except Exception as e:
-        logging.debug("Error running job %s (%s) - %s", origin, backend, str(e))
+        logger.debug("Error running job of task %s (%s) - %s",
+                      task_id, backend, str(e))
 
         if cache and not cache_fetch:
             cache.recover()
         raise e
 
     if nitems > 0:
-        result = JobResult(job.get_id(), origin, backend,
+        result = JobResult(job.get_id(), backend,
                            last_uuid, max_date, nitems,
                            offset=offset)
     else:
-        result = JobResult(job.get_id(), origin, backend, None, None, 0)
+        result = JobResult(job.get_id(), backend, None, None, 0)
 
-    logging.debug("Job %s completed %s (%s) - %s items fetched",
-                  result.job_id, result.origin, result.backend,
-                  str(result.nitems))
+    logger.debug("Job %s completed (%s) - %s items fetched",
+                 result.job_id, result.backend, str(result.nitems))
 
     return result
 
 
-def execute_perceval_backend(origin, backend, backend_args, cache_fetch=False):
+def execute_perceval_backend(backend, backend_args, fetch_from_cache=False):
     """Execute a backend of Perceval.
 
-    Run a backend of Perceval for the given origin. The type of
-    the backend and its parameters are need to run the process.
+    Run a backend of Perceval using the given backend. The backend
+    parameters are also needed to run the process. Items will be tagged
+    using the label assigned to `tag`.
 
     It will raise a `NotFoundError` in two cases: when the
     backend needed is not available or when any of the required
     parameters to run the backend are not found.
 
-    :param origin: origin of the source
     :param backend: backend to execute
     :param bakend_args: arguments to execute the backend
-    :param cache_fetch: fetch from the cache
+    :param fetch_from_cache: retieve items from the cache
 
     :returns: iterator of items fetched by the backend
 
@@ -171,7 +163,7 @@ def execute_perceval_backend(origin, backend, backend_args, cache_fetch=False):
     kinit = find_signature_parameters(backend_args, klass.__init__)
     obj = klass(**kinit)
 
-    if not cache_fetch:
+    if not fetch_from_cache:
         fnc_fetch = obj.fetch
     else:
         fnc_fetch = obj.fetch_from_cache
@@ -233,3 +225,31 @@ def add_arthur_metadata(item, job):
     new_item['job_id'] = job.get_id()
 
     return new_item
+
+
+def __initialize_perceval_cache(dirpath, backup=False):
+    """Initializes a cache object.
+
+    The function initializes and returns a `Cache` handler which
+    stores its data under `dirpath`. When `backup` is set, the
+    object will keep a copy of the data for restoring.
+
+    :param dirpath: path to the cache data
+    :param backup: keep a copy of the cache data
+
+    :returns: a cache object
+    """
+    if not dirpath:
+        raise ValueError("dirpath requieres a value")
+
+    logger.debug("Initializing cache on '%s' completed", dirpath)
+
+    cache = perceval.cache.Cache(dirpath)
+
+    if backup:
+        cache.backup()
+        logger.debug("Cache backup on '%s' completed", dirpath)
+
+    logger.debug("Cache on '%s' initialized", dirpath)
+
+    return cache

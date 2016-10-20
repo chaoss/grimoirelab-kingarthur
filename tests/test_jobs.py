@@ -62,20 +62,17 @@ class TestJobResult(unittest.TestCase):
     """Unit tests for JobResult class"""
 
     def test_job_result_init(self):
-        result = JobResult('arthur-job-1234567890',
-                           'http://example.com/', 'mock_backend',
+        result = JobResult('arthur-job-1234567890', 'mock_backend',
                            'ABCDEFGHIJK', 1344965413.0, 58)
 
         self.assertEqual(result.job_id, 'arthur-job-1234567890')
-        self.assertEqual(result.origin, 'http://example.com/')
         self.assertEqual(result.backend, 'mock_backend')
         self.assertEqual(result.last_uuid, 'ABCDEFGHIJK')
         self.assertEqual(result.max_date, 1344965413.0)
         self.assertEqual(result.nitems, 58)
         self.assertEqual(result.offset, None)
 
-        result = JobResult('arthur-job-1234567890',
-                           'http://example.com/', 'mock_backend',
+        result = JobResult('arthur-job-1234567890', 'mock_backend',
                            'ABCDEFGHIJK', 1344965413.0, 58,
                            offset=128)
 
@@ -100,12 +97,12 @@ class TestExecuteJob(TestBaseRQ):
                 'gitpath' : 'data/git_log.txt'}
 
         q = rq.Queue('queue', async=False)
-        job = q.enqueue(execute_perceval_job, qitems='items',
-                        origin='test', backend='git', **args)
+        job = q.enqueue(execute_perceval_job,
+                        backend='git', backend_args=args,
+                        qitems='items')
 
         result = job.return_value
         self.assertEqual(result.job_id, job.get_id())
-        self.assertEqual(result.origin, 'test')
         self.assertEqual(result.backend, 'git')
         self.assertEqual(result.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
         self.assertEqual(result.max_date, 1392185439.0)
@@ -139,12 +136,12 @@ class TestExecuteJob(TestBaseRQ):
                 'from_date' : datetime.datetime(2020, 1, 1, 1, 1, 1)}
 
         q = rq.Queue('queue', async=False)
-        job = q.enqueue(execute_perceval_job, qitems='items',
-                        origin='test', backend='git', **args)
+        job = q.enqueue(execute_perceval_job,
+                        backend='git', backend_args=args,
+                        qitems='items')
 
         result = job.return_value
         self.assertEqual(result.job_id, job.get_id())
-        self.assertEqual(result.origin, 'test')
         self.assertEqual(result.backend, 'git')
         self.assertEqual(result.last_uuid, None)
         self.assertEqual(result.max_date, None)
@@ -215,9 +212,10 @@ class TestExecuteJob(TestBaseRQ):
         args = {'url' : BUGZILLA_SERVER_URL,
                 'max_bugs' : 5}
 
-        job = q.enqueue(execute_perceval_job, qitems='items',
-                        origin=BUGZILLA_SERVER_URL, backend='bugzilla',
-                        cache_path=self.tmp_path, **args)
+        job = q.enqueue(execute_perceval_job,
+                        backend='bugzilla', backend_args=args,
+                        qitems='items',
+                        cache_path=self.tmp_path)
 
         bugs = self.conn.lrange('items', 0, -1)
         bugs = [pickle.loads(b) for b in bugs]
@@ -226,7 +224,6 @@ class TestExecuteJob(TestBaseRQ):
 
         result = job.return_value
         self.assertEqual(result.job_id, job.get_id())
-        self.assertEqual(result.origin, BUGZILLA_SERVER_URL)
         self.assertEqual(result.backend, 'bugzilla')
         self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
         self.assertEqual(result.max_date, 1439404330.0)
@@ -239,10 +236,10 @@ class TestExecuteJob(TestBaseRQ):
         # The contents should be the same and there won't be
         # any new request to the server
 
-        job = q.enqueue(execute_perceval_job, qitems='items',
-                        origin=BUGZILLA_SERVER_URL, backend='bugzilla',
-                        cache_path=self.tmp_path, cache_fetch=True,
-                        **args)
+        job = q.enqueue(execute_perceval_job,
+                        backend='bugzilla', backend_args=args,
+                        qitems='items',
+                        cache_path=self.tmp_path, fetch_from_cache=True)
 
         cached_bugs = self.conn.lrange('items', 0, -1)
         cached_bugs = [pickle.loads(b) for b in cached_bugs]
@@ -251,7 +248,6 @@ class TestExecuteJob(TestBaseRQ):
 
         result = job.return_value
         self.assertEqual(result.job_id, job.get_id())
-        self.assertEqual(result.origin, BUGZILLA_SERVER_URL)
         self.assertEqual(result.backend, 'bugzilla')
         self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
         self.assertEqual(result.max_date, 1439404330.0)
@@ -271,7 +267,7 @@ class TestExecuteBackend(unittest.TestCase):
         args = {'uri' : 'http://example.com/',
                 'gitpath' : 'data/git_log.txt'}
 
-        commits = execute_perceval_backend('test', 'git', args)
+        commits = execute_perceval_backend('git', args)
         commits = [commit['data']['commit'] for commit in commits]
 
         expected = ['456a68ee1407a77f3e804a30dff245bb6c6b872f',
@@ -290,14 +286,14 @@ class TestExecuteBackend(unittest.TestCase):
         """Check if it fails when a backend is not found"""
 
         with self.assertRaises(NotFoundError):
-            _ = [item for item in execute_perceval_backend('test', 'mock_backend', {})]
+            _ = [item for item in execute_perceval_backend('mock_backend', {})]
             self.assertEqual(e.exception.element, 'mock_backend')
 
     def test_not_found_parameters(self):
         """Check if it fails when a required backend parameter is not found"""
 
         with self.assertRaises(NotFoundError):
-            _ = [item for item in execute_perceval_backend('test', 'git', {})]
+            _ = [item for item in execute_perceval_backend('git', {})]
             self.assertEqual(e.exception.element, 'gitlog')
 
 

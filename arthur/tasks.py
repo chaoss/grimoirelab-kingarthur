@@ -139,11 +139,12 @@ class TaskRegistry:
         try:
             self._rwlock.writer_acquire()
             del self._tasks[task_id]
-            self._rwlock.writer_release()
-            logger.debug("Task %s removed from the registry", str(task_id))
         except KeyError:
-            self._rwlock.writer_release()
             raise NotFoundError(element=str(task_id))
+        finally:
+            self._rwlock.writer_release()
+
+        logger.debug("Task %s removed from the registry", str(task_id))
 
     def get(self, task_id):
         """Get a task from the registry.
@@ -162,11 +163,12 @@ class TaskRegistry:
         try:
             self._rwlock.reader_acquire()
             task = self._tasks[task_id]
-            self._rwlock.reader_release()
-            return task
         except KeyError:
-            self._rwlock.reader_release()
             raise NotFoundError(element=str(task_id))
+        finally:
+            self._rwlock.reader_release()
+
+        return task
 
     @property
     def tasks(self):

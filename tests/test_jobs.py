@@ -22,6 +22,7 @@
 #
 
 import datetime
+import os
 import pickle
 import shutil
 import sys
@@ -31,17 +32,19 @@ import unittest
 import httpretty
 import rq
 
+from perceval.cache import Cache
+
 if not '..' in sys.path:
     sys.path.insert(0, '..')
 
 from arthur import __version__
 from arthur.errors import NotFoundError
 from arthur.jobs import (JobResult,
-                         add_arthur_metadata,
+                         PercevalJob,
                          execute_perceval_job,
-                         execute_perceval_backend,
                          find_signature_parameters,
-                         inspect_signature_parameters)
+                         inspect_signature_parameters,
+                         metadata)
 
 from tests import TestBaseRQ
 
@@ -56,6 +59,84 @@ def read_file(filename, mode='r'):
     with open(filename, mode) as f:
         content = f.read()
     return content
+
+
+def setup_mock_bugzilla_server():
+    """Setup a mock Bugzilla server for testing"""
+
+    http_requests = []
+    bodies_csv = [read_file('data/bugzilla_buglist.csv'),
+                  read_file('data/bugzilla_buglist_next.csv'),
+                  ""]
+    bodies_xml = [read_file('data/bugzilla_version.xml', mode='rb'),
+                  read_file('data/bugzilla_bugs_details.xml', mode='rb'),
+                  read_file('data/bugzilla_bugs_details_next.xml', mode='rb')]
+    bodies_html = [read_file('data/bugzilla_bug_activity.html', mode='rb'),
+                   read_file('data/bugzilla_bug_activity_empty.html', mode='rb')]
+
+    def request_callback(method, uri, headers):
+        if uri.startswith(BUGZILLA_BUGLIST_URL):
+            body = bodies_csv.pop(0)
+        elif uri.startswith(BUGZILLA_BUG_URL):
+            body = bodies_xml.pop(0)
+        else:
+            body = bodies_html[len(http_requests) % 2]
+
+        http_requests.append(httpretty.last_request())
+
+        return (200, headers, body)
+
+    httpretty.register_uri(httpretty.GET,
+                           BUGZILLA_BUGLIST_URL,
+                           responses=[
+                                httpretty.Response(body=request_callback) \
+                                for _ in range(3)
+                           ])
+    httpretty.register_uri(httpretty.GET,
+                           BUGZILLA_BUG_URL,
+                           responses=[
+                                httpretty.Response(body=request_callback) \
+                                for _ in range(3)
+                           ])
+    httpretty.register_uri(httpretty.GET,
+                           BUGZILLA_BUG_ACTIVITY_URL,
+                           responses=[
+                                httpretty.Response(body=request_callback) \
+                                for _ in range(7)
+                           ])
+
+    return http_requests
+
+
+class MockJob:
+    """Mock job class for testing purposes"""
+
+    def __init__(self, job_id):
+        self.job_id = job_id
+
+    @metadata
+    def execute(self):
+        for x in range(5):
+            item = {'item' : x}
+            yield item
+
+
+class TestMetadata(unittest.TestCase):
+    """Unit tests for metadata decorator"""
+
+    def test_decorator(self):
+        """Check if the decorator works"""
+
+        job = MockJob(8)
+
+        items = [item for item in job.execute()]
+
+        for x in range(5):
+            item = items[x]
+
+            self.assertEqual(item['arthur_version'], __version__)
+            self.assertEqual(item['job_id'], 8)
+            self.assertEqual(item['item'], x)
 
 
 class TestJobResult(unittest.TestCase):
@@ -79,6 +160,230 @@ class TestJobResult(unittest.TestCase):
         self.assertEqual(result.offset, 128)
 
 
+class TestPercevalJob(TestBaseRQ):
+    """Unit tests for PercevalJob class"""
+
+    def setUp(self):
+        self.tmp_path = tempfile.mkdtemp(prefix='arthur_')
+        super().setUp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_path)
+        super().tearDown()
+
+    def test_init(self):
+        """Test the initialization of the object"""
+
+        job = PercevalJob('arthur-job-1234567890', 'git',
+                          self.conn, 'items')
+
+        self.assertEqual(job.job_id, 'arthur-job-1234567890')
+        self.assertEqual(job.backend, 'git')
+        self.assertEqual(job.conn, self.conn)
+        self.assertEqual(job.qitems, 'items')
+        self.assertEqual(job.cache, None)
+
+        result = job.result
+        self.assertIsInstance(job.result, JobResult)
+        self.assertEqual(result.job_id, 'arthur-job-1234567890')
+        self.assertEqual(result.backend, 'git')
+        self.assertEqual(result.last_uuid, None)
+        self.assertEqual(result.max_date, None)
+        self.assertEqual(result.nitems, 0)
+        self.assertEqual(result.offset, None)
+
+    def test_backend_not_found(self):
+        """Test if it raises an exception when a backend is not found"""
+
+        with self.assertRaises(NotFoundError) as e:
+            _ = PercevalJob('arthur-job-1234567890', 'mock_backend',
+                            self.conn, 'items')
+            self.assertEqual(e.exception.element, 'mock_backend')
+
+    def test_run(self):
+        """Test run method using the Git backend"""
+
+        job = PercevalJob('arthur-job-1234567890', 'git',
+                          self.conn, 'items')
+        args = {
+            'uri' : 'http://example.com/',
+            'gitpath' : 'data/git_log.txt'
+        }
+
+        job.run(args, fetch_from_cache=False)
+
+        result = job.result
+        self.assertIsInstance(job.result, JobResult)
+        self.assertEqual(result.job_id, 'arthur-job-1234567890')
+        self.assertEqual(result.backend, 'git')
+        self.assertEqual(result.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
+        self.assertEqual(result.max_date, 1392185439.0)
+        self.assertEqual(result.nitems, 9)
+        self.assertEqual(result.offset, None)
+
+        commits = self.conn.lrange('items', 0, -1)
+        commits = [pickle.loads(c) for c in commits]
+        commits = [commit['data']['commit'] for commit in commits]
+
+        expected = ['456a68ee1407a77f3e804a30dff245bb6c6b872f',
+                    '51a3b654f252210572297f47597b31527c475fb8',
+                    'ce8e0b86a1e9877f42fe9453ede418519115f367',
+                    '589bb080f059834829a2a5955bebfd7c2baa110a',
+                    'c6ba8f7a1058db3e6b4bc6f1090e932b107605fb',
+                    'c0d66f92a95e31c77be08dc9d0f11a16715d1885',
+                    '7debcf8a2f57f86663809c58b5c07a398be7674c',
+                    '87783129c3f00d2c81a3a8e585eb86a47e39891a',
+                    'bc57a9209f096a130dcc5ba7089a8663f758a703']
+
+        self.assertEqual(commits, expected)
+
+    @httpretty.activate
+    def test_fetch_from_cache(self):
+        """Test run method fetching from the cache"""
+
+        http_requests = setup_mock_bugzilla_server()
+
+        expected = ['5a8a1e25dfda86b961b4146050883cbfc928f8ec',
+                    '1fd4514e56f25a39ffd78eab19e77cfe4dfb7769',
+                    '6a4cb244067c3cfa38f9f563e2ab3cd8ac21762f',
+                    '7e033ed0110032ead6b918be43c1f3f88cd98fd7',
+                    'f90d12b380ffdb47f2b6e96b321f08000181a9d6',
+                    '4b166308f205121bc57704032acdc81b6c9bb8b1',
+                    'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c']
+
+        # First, we fetch the bugs from the server, storing them
+        # in a cache
+        args = {
+            'url' : BUGZILLA_SERVER_URL,
+            'max_bugs' : 5
+        }
+
+        job = PercevalJob('arthur-job-1234567890', 'bugzilla',
+                          self.conn, 'items')
+        job.initialize_cache(self.tmp_path)
+
+        job.run(args, fetch_from_cache=False)
+
+        bugs = self.conn.lrange('items', 0, -1)
+        bugs = [pickle.loads(b) for b in bugs]
+        bugs = [bug['uuid'] for bug in bugs]
+        self.conn.ltrim('items', 1, 0)
+
+        result = job.result
+        self.assertEqual(result.job_id, job.job_id)
+        self.assertEqual(result.backend, 'bugzilla')
+        self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
+        self.assertEqual(result.max_date, 1439404330.0)
+        self.assertEqual(result.nitems, 7)
+        self.assertEqual(result.offset, None)
+
+        self.assertEqual(len(http_requests), 13)
+        self.assertListEqual(bugs, expected)
+
+        # Now, we get the bugs from the cache.
+        # The contents should be the same and there won't be
+        # any new request to the server
+        job_cache = PercevalJob('arthur-job-1234567890-bis', 'bugzilla',
+                                self.conn, 'items')
+        job_cache.initialize_cache(self.tmp_path)
+
+        job_cache.run(args, fetch_from_cache=True)
+
+        cached_bugs = self.conn.lrange('items', 0, -1)
+        cached_bugs = [pickle.loads(b) for b in cached_bugs]
+        cached_bugs = [bug['uuid'] for bug in cached_bugs]
+        self.conn.ltrim('items', 1, 0)
+
+        result = job_cache.result
+        self.assertEqual(result.job_id, job_cache.job_id)
+        self.assertEqual(result.backend, 'bugzilla')
+        self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
+        self.assertEqual(result.max_date, 1439404330.0)
+        self.assertEqual(result.nitems, 7)
+        self.assertEqual(result.offset, None)
+
+        self.assertEqual(len(http_requests), 13)
+
+        self.assertListEqual(cached_bugs, bugs)
+
+    def test_run_not_found_parameters(self):
+        """Check if it fails when a required backend parameter is not found"""
+
+        job = PercevalJob('arthur-job-1234567890', 'git',
+                          self.conn, 'items')
+        args = {
+            'uri' : 'http://example.com/'
+        }
+
+        with self.assertRaises(NotFoundError) as e:
+            job.run(args, fetch_from_cache=False)
+            self.assertEqual(e.exception.element, 'gitlog')
+
+    def test_initialize_cache(self):
+        """Test if the cache is initialized"""
+
+        job = PercevalJob('arthur-job-1234567890', 'git',
+                          self.conn, 'items')
+        job.initialize_cache(self.tmp_path)
+
+        self.assertIsInstance(job.cache, Cache)
+        self.assertEqual(job.cache.cache_path, self.tmp_path)
+
+    def test_invalid_path_for_cache(self):
+        """Test whether it raises an exception when the cache path is invalid"""
+
+        job = PercevalJob('arthur-job-1234567890', 'git',
+                          self.conn, 'items')
+
+        with self.assertRaises(ValueError):
+            job.initialize_cache(None)
+
+        with self.assertRaises(ValueError):
+            job.initialize_cache("")
+
+    def test_backup_and_recover_cache(self):
+        """Test if it does a backup of the cache and recovers its data"""
+
+        # Create a new job with and empty cache
+        job = PercevalJob('arthur-job-1234567890', 'git',
+                          self.conn, 'items')
+        job.initialize_cache(self.tmp_path)
+
+        contents = [item for item in job.cache.retrieve()]
+        self.assertEqual(len(contents), 0)
+
+        items = [1, 2, 3, 4, 5]
+        job.cache.store(*items)
+
+        # Initialize a new job and make a backup of the data
+        job = PercevalJob('arthur-job-1234567890-bis', 'git',
+                          self.conn, 'items')
+        job.initialize_cache(self.tmp_path, backup=True)
+
+        contents = [item for item in job.cache.retrieve()]
+        self.assertListEqual(contents, items)
+
+        # Hard cleaning of the cache data
+        job.cache.clean()
+        contents = [item for item in job.cache.retrieve()]
+        self.assertListEqual(contents, [])
+
+        # Recover the data
+        job.recover_cache()
+        contents = [item for item in job.cache.retrieve()]
+        self.assertListEqual(contents, items)
+
+    def test_recover_unitialized_cache(self):
+        """Test if not fails recovering from a cache not initialized"""
+
+        job = PercevalJob('arthur-job-1234567890', 'git',
+                          self.conn, 'items')
+        self.assertEqual(job.cache, None)
+
+        job.recover_cache()
+        self.assertEqual(job.cache, None)
+
+
 class TestExecuteJob(TestBaseRQ):
     """Unit tests for execute_perceval_job"""
 
@@ -93,8 +398,10 @@ class TestExecuteJob(TestBaseRQ):
     def test_job(self):
         """Execute Git backend job"""
 
-        args = {'uri' : 'http://example.com/',
-                'gitpath' : 'data/git_log.txt'}
+        args = {
+            'uri' : 'http://example.com/',
+            'gitpath' : 'data/git_log.txt'
+        }
 
         q = rq.Queue('queue', async=False)
         job = q.enqueue(execute_perceval_job,
@@ -131,9 +438,11 @@ class TestExecuteJob(TestBaseRQ):
     def test_job_no_result(self):
         """Execute a Git backend job that will not produce any results"""
 
-        args = {'uri' : 'http://example.com/',
-                'gitpath' : 'data/git_log_empty.txt',
-                'from_date' : datetime.datetime(2020, 1, 1, 1, 1, 1)}
+        args = {
+            'uri' : 'http://example.com/',
+            'gitpath' : 'data/git_log_empty.txt',
+            'from_date' : datetime.datetime(2020, 1, 1, 1, 1, 1)
+        }
 
         q = rq.Queue('queue', async=False)
         job = q.enqueue(execute_perceval_job,
@@ -156,46 +465,7 @@ class TestExecuteJob(TestBaseRQ):
     def test_job_cache(self):
         """Execute a Bugzilla backend job to fetch data from the cache"""
 
-        requests = []
-        bodies_csv = [read_file('data/bugzilla_buglist.csv'),
-                      read_file('data/bugzilla_buglist_next.csv'),
-                      ""]
-        bodies_xml = [read_file('data/bugzilla_version.xml', mode='rb'),
-                      read_file('data/bugzilla_bugs_details.xml', mode='rb'),
-                      read_file('data/bugzilla_bugs_details_next.xml', mode='rb')]
-        bodies_html = [read_file('data/bugzilla_bug_activity.html', mode='rb'),
-                       read_file('data/bugzilla_bug_activity_empty.html', mode='rb')]
-
-        def request_callback(method, uri, headers):
-            if uri.startswith(BUGZILLA_BUGLIST_URL):
-                body = bodies_csv.pop(0)
-            elif uri.startswith(BUGZILLA_BUG_URL):
-                body = bodies_xml.pop(0)
-            else:
-                body = bodies_html[len(requests) % 2]
-
-            requests.append(httpretty.last_request())
-
-            return (200, headers, body)
-
-        httpretty.register_uri(httpretty.GET,
-                               BUGZILLA_BUGLIST_URL,
-                               responses=[
-                                    httpretty.Response(body=request_callback) \
-                                    for _ in range(3)
-                               ])
-        httpretty.register_uri(httpretty.GET,
-                               BUGZILLA_BUG_URL,
-                               responses=[
-                                    httpretty.Response(body=request_callback) \
-                                    for _ in range(3)
-                               ])
-        httpretty.register_uri(httpretty.GET,
-                               BUGZILLA_BUG_ACTIVITY_URL,
-                               responses=[
-                                    httpretty.Response(body=request_callback) \
-                                    for _ in range(7)
-                               ])
+        http_requests = setup_mock_bugzilla_server()
 
         expected = ['5a8a1e25dfda86b961b4146050883cbfc928f8ec',
                     '1fd4514e56f25a39ffd78eab19e77cfe4dfb7769',
@@ -209,8 +479,10 @@ class TestExecuteJob(TestBaseRQ):
 
         # First, we fetch the bugs from the server, storing them
         # in a cache
-        args = {'url' : BUGZILLA_SERVER_URL,
-                'max_bugs' : 5}
+        args = {
+            'url' : BUGZILLA_SERVER_URL,
+            'max_bugs' : 5
+        }
 
         job = q.enqueue(execute_perceval_job,
                         backend='bugzilla', backend_args=args,
@@ -229,7 +501,7 @@ class TestExecuteJob(TestBaseRQ):
         self.assertEqual(result.max_date, 1439404330.0)
         self.assertEqual(result.nitems, 7)
 
-        self.assertEqual(len(requests), 13)
+        self.assertEqual(len(http_requests), 13)
         self.assertListEqual(bugs, expected)
 
         # Now, we get the bugs from the cache.
@@ -253,48 +525,9 @@ class TestExecuteJob(TestBaseRQ):
         self.assertEqual(result.max_date, 1439404330.0)
         self.assertEqual(result.nitems, 7)
 
-        self.assertEqual(len(requests), 13)
+        self.assertEqual(len(http_requests), 13)
 
         self.assertListEqual(cached_bugs, bugs)
-
-
-class TestExecuteBackend(unittest.TestCase):
-    """Unit tests for execute_perceval_backend"""
-
-    def test_backend(self):
-        """Execute Git backend"""
-
-        args = {'uri' : 'http://example.com/',
-                'gitpath' : 'data/git_log.txt'}
-
-        commits = execute_perceval_backend('git', args)
-        commits = [commit['data']['commit'] for commit in commits]
-
-        expected = ['456a68ee1407a77f3e804a30dff245bb6c6b872f',
-                    '51a3b654f252210572297f47597b31527c475fb8',
-                    'ce8e0b86a1e9877f42fe9453ede418519115f367',
-                    '589bb080f059834829a2a5955bebfd7c2baa110a',
-                    'c6ba8f7a1058db3e6b4bc6f1090e932b107605fb',
-                    'c0d66f92a95e31c77be08dc9d0f11a16715d1885',
-                    '7debcf8a2f57f86663809c58b5c07a398be7674c',
-                    '87783129c3f00d2c81a3a8e585eb86a47e39891a',
-                    'bc57a9209f096a130dcc5ba7089a8663f758a703']
-
-        self.assertListEqual(commits, expected)
-
-    def test_not_found_backend(self):
-        """Check if it fails when a backend is not found"""
-
-        with self.assertRaises(NotFoundError):
-            _ = [item for item in execute_perceval_backend('mock_backend', {})]
-            self.assertEqual(e.exception.element, 'mock_backend')
-
-    def test_not_found_parameters(self):
-        """Check if it fails when a required backend parameter is not found"""
-
-        with self.assertRaises(NotFoundError):
-            _ = [item for item in execute_perceval_backend('git', {})]
-            self.assertEqual(e.exception.element, 'gitlog')
 
 
 class MockCallable:
@@ -357,29 +590,6 @@ class TestInspectSignature(unittest.TestCase):
         params = inspect_signature_parameters(MockCallable.class_test)
         params = [p.name for p in params]
         self.assertListEqual(params, expected)
-
-
-class MockJob:
-    """Mock job class for testing purposes"""
-
-    def get_id(self):
-        return 8
-
-
-class TestAddMetadata(unittest.TestCase):
-    """Unit tests for add_arthur_metadata"""
-
-    def test_add_metadata(self):
-        """Check if it adds the metadata information"""
-
-        item = {}
-        job = MockJob()
-
-        result = add_arthur_metadata(item, job)
-
-        self.assertDictEqual(item, {})
-        self.assertEqual(result['arthur_version'], __version__)
-        self.assertEqual(result['job_id'], 8)
 
 
 if __name__ == "__main__":

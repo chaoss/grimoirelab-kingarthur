@@ -210,8 +210,13 @@ class PercevalJob:
         logger.debug("Cache of job %s on path '%s' recovered",
                      self.job_id, self.cache.cache_path)
 
+    def has_caching(self):
+        """Returns if the job supports items caching"""
+
+        return self._bklass.has_caching()
+
     def has_resuming(self):
-        """Returns if the backend can be resumed when it fails"""
+        """Returns if the job can be resumed when it fails"""
 
         return self._bklass.has_resuming()
 
@@ -266,7 +271,8 @@ def execute_perceval_job(backend, backend_args, qitems,
     in the cache. The contents from the cache can be retrieved
     setting the pameter `fetch_from_cache` to `True`, too. Take into
     account this behaviour will be only available when the backend
-    supports the use of the cache.
+    supports the use of the cache. If caching is not supported, an
+    `AttributeErrror` exception will be raised.
 
     :param backend: backend to execute
     :param bakend_args: dict of arguments for running the backend
@@ -278,6 +284,8 @@ def execute_perceval_job(backend, backend_args, qitems,
     :returns: a `JobResult` instance
 
     :raises NotFoundError: raised when the backend is not found
+    :raises AttributeError: raised when caching is not supported but
+        any of the cache parameters were set
     """
     rq_job = rq.get_current_job()
 
@@ -285,6 +293,9 @@ def execute_perceval_job(backend, backend_args, qitems,
                       rq_job.connection, qitems)
 
     logger.debug("Running job %s (%s)", job.job_id, backend)
+
+    if not job.has_caching() and (cache_path or fetch_from_cache):
+        raise AttributeError("cache attributes set but cache is not supported")
 
     if cache_path:
         job.initialize_cache(cache_path, not fetch_from_cache)

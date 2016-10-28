@@ -753,6 +753,26 @@ class TestExecuteJob(TestBaseRQ):
 
         self.assertListEqual(cached_bugs, bugs)
 
+    def test_job_caching_not_supported(self):
+        """Check if it fails when caching is not supported"""
+
+        args = {
+            'uri' : 'http://example.com/',
+            'gitpath' : 'data/git_log.txt'
+        }
+
+        q = rq.Queue('queue', async=False)
+
+        with self.assertRaises(AttributeError):
+            job = q.enqueue(execute_perceval_job,
+                            backend='git', backend_args=args,
+                            qitems='items', cache_path=self.tmp_path)
+
+        with self.assertRaises(AttributeError):
+            job = q.enqueue(execute_perceval_job,
+                            backend='git', backend_args=args,
+                            qitems='items', fetch_from_cache=True)
+
 
 class MockCallable:
     """Mock class for testing purposes"""

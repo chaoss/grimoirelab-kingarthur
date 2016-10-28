@@ -220,7 +220,7 @@ class PercevalJob:
         """Execute a backend of Perceval.
 
         Run the backend of Perceval assigned to this job using the
-        given arguments. It will raise a `NotFoundError` when any of
+        given arguments. It will raise an `AttributeError` when any of
         the required parameters to run the backend are not found.
         Other exceptions related to the execution of the backend
         will be raised too.
@@ -237,7 +237,7 @@ class PercevalJob:
 
         :returns: iterator of items fetched by the backend
 
-        :raises NotFoundError: raised when any of the required
+        :raises AttributeError: raised when any of the required
             parameters is not found
         """
         kinit = find_signature_parameters(backend_args, self._bklass.__init__)
@@ -296,7 +296,7 @@ def execute_perceval_job(backend, backend_args, qitems,
     while run_job:
         try:
             job.run(backend_args, resume=resume, fetch_from_cache=fetch_from_cache)
-        except NotFoundError as e:
+        except AttributeError as e:
             raise e
         except Exception as e:
             logger.debug("Error running job %s (%s) - %s",
@@ -331,7 +331,7 @@ def find_signature_parameters(params, callable):
 
     Returns a dict with the parameters found on a callable. When
     any of the required parameters of a callable is not found,
-    it raises a `NotFoundError` exception.
+    it raises a `AttributeError` exception.
     """
     to_match = inspect_signature_parameters(callable)
 
@@ -344,7 +344,8 @@ def find_signature_parameters(params, callable):
         elif p.default == inspect.Parameter.empty:
             # Parameters which its default value is empty are
             # considered as required
-            raise NotFoundError(element=name)
+            raise AttributeError("required argument %s not found" % name,
+                                 name)
     return result
 
 

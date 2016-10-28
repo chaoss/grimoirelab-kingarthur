@@ -344,9 +344,9 @@ class TestPercevalJob(TestBaseRQ):
             'uri' : 'http://example.com/'
         }
 
-        with self.assertRaises(NotFoundError) as e:
+        with self.assertRaises(AttributeError) as e:
             job.run(args, fetch_from_cache=False)
-            self.assertEqual(e.exception.element, 'gitlog')
+            self.assertEqual(e.exception.args[1], 'gitlog')
 
     @httpretty.activate
     def test_fetch_from_cache(self):
@@ -784,9 +784,10 @@ class TestFindSignature(unittest.TestCase):
         found = find_signature_parameters(params, MockCallable.test)
         self.assertDictEqual(found, expected)
 
-        with self.assertRaises(NotFoundError):
+        with self.assertRaises(AttributeError) as e:
             params = {'a' : 1, 'd' : 3}
             found = find_signature_parameters(params, MockCallable.test)
+            self.assertEqual(e.exception.args[1], 'b')
 
 
 class TestInspectSignature(unittest.TestCase):

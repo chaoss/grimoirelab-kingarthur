@@ -32,7 +32,9 @@ import perceval.backends
 import perceval.cache
 
 from ._version import __version__
+from .common import MAX_JOB_RETRIES
 from .errors import NotFoundError
+from .utils import unixtime_to_datetime
 
 
 logger = logging.getLogger(__name__)
@@ -71,15 +73,17 @@ class JobResult:
     :param max_date: maximum date fetched among items
     :param nitems: number of items fetched by the backend
     :param offset: maximum offset fetched among items
+    :param nresumed: number of time the job was resumed
     """
     def __init__(self, job_id, backend, last_uuid,
-                 max_date, nitems, offset=None):
+                 max_date, nitems, offset=None, nresumed=0):
         self.job_id = job_id
         self.backend = backend
         self.last_uuid = last_uuid
         self.max_date = max_date
         self.nitems = nitems
         self.offset = offset
+        self.nresumed = nresumed
 
 
 class PercevalJob:
@@ -99,28 +103,34 @@ class PercevalJob:
         in Perceval
     """
     def __init__(self, job_id, backend, conn, qitems):
-        if backend not in perceval.backends.PERCEVAL_BACKENDS:
+        try:
+            self._bklass = perceval.backends.PERCEVAL_BACKENDS[backend]
+        except KeyError:
             raise NotFoundError(element=backend)
 
         self.job_id = job_id
         self.backend = backend
         self.conn = conn
         self.qitems = qitems
+        self.retries = 0
         self.cache = None
         self._result = JobResult(self.job_id, self.backend,
-                                 None, None, 0, offset=None)
+                                 None, None, 0, offset=None,
+                                 nresumed=0)
 
     @property
     def result(self):
         return self._result
 
-    def run(self, backend_args, fetch_from_cache=False):
+    def run(self, backend_args, resume=False, fetch_from_cache=False):
         """Run the backend with the given parameters.
 
         The method will run the backend assigned to this job,
         storing the fetched items in a Redis queue. The ongoing
         status of the job, can be accessed through the property
-        `result`.
+        `result`. When `resume` is set, the job will start from
+        the last execution, overewritting 'from_date' and 'offset'
+        parameters, if needed.
 
         Setting to `True` the parameter `fetch_from_cache`, items can
         be fetched from the cache assigned to this job.
@@ -130,9 +140,22 @@ class PercevalJob:
 
         :param backend_args: parameters used to un the backend
         :param fetch_from_cache: fetch items from the cache
+        :param resume: fetch items starting where the last
+            execution stopped
         """
         args = backend_args.copy()
         args['cache'] = self.cache
+
+        if not resume:
+            self._result = JobResult(self.job_id, self.backend,
+                                     None, None, 0, offset=None,
+                                     nresumed=0)
+        else:
+            if self.result.max_date:
+                args['from_date'] = unixtime_to_datetime(self.result.max_date)
+            if self.result.offset:
+                args['offset'] = self.result.offset
+            self._result.nresumed += 1
 
         for item in self._execute(args, fetch_from_cache):
             self.conn.rpush(self.qitems, pickle.dumps(item))
@@ -187,6 +210,11 @@ class PercevalJob:
         logger.debug("Cache of job %s on path '%s' recovered",
                      self.job_id, self.cache.cache_path)
 
+    def has_resuming(self):
+        """Returns if the backend can be resumed when it fails"""
+
+        return self._bklass.has_resuming()
+
     @metadata
     def _execute(self, backend_args, fetch_from_cache):
         """Execute a backend of Perceval.
@@ -212,9 +240,8 @@ class PercevalJob:
         :raises NotFoundError: raised when any of the required
             parameters is not found
         """
-        klass = perceval.backends.PERCEVAL_BACKENDS[self.backend]
-        kinit = find_signature_parameters(backend_args, klass.__init__)
-        obj = klass(**kinit)
+        kinit = find_signature_parameters(backend_args, self._bklass.__init__)
+        obj = self._bklass(**kinit)
 
         if not fetch_from_cache:
             fnc_fetch = obj.fetch
@@ -228,7 +255,8 @@ class PercevalJob:
 
 
 def execute_perceval_job(backend, backend_args, qitems,
-                         cache_path=None, fetch_from_cache=False):
+                         cache_path=None, fetch_from_cache=False,
+                         max_retries=MAX_JOB_RETRIES):
     """Execute a Perceval job on RQ.
 
     The items fetched during the process will be stored in a
@@ -245,6 +273,7 @@ def execute_perceval_job(backend, backend_args, qitems,
     :param qitems: name of the RQ queue used to store the items
     :param cache_path: path to the cache
     :param fetch_from_cache: retrieve items from the cache
+    :param max_retries: maximum number of retries if a job fails
 
     :returns: a `JobResult` instance
 
@@ -260,15 +289,34 @@ def execute_perceval_job(backend, backend_args, qitems,
     if cache_path:
         job.initialize_cache(cache_path, not fetch_from_cache)
 
-    try:
-        job.run(backend_args, fetch_from_cache=fetch_from_cache)
-    except Exception as e:
-        logger.debug("Error running job %s (%s) - %s",
-                     job.job_id, backend, str(e))
+    run_job = True
+    resume = False
+    failures = 0
 
-        if cache_path and not fetch_from_cache:
-            job.recover_cache()
-        raise e
+    while run_job:
+        try:
+            job.run(backend_args, resume=resume, fetch_from_cache=fetch_from_cache)
+        except NotFoundError as e:
+            raise e
+        except Exception as e:
+            logger.debug("Error running job %s (%s) - %s",
+                         job.job_id, backend, str(e))
+            failures += 1
+
+            if cache_path and not fetch_from_cache:
+                job.recover_cache()
+                job.cache = None
+
+            if not job.has_resuming() or failures >= max_retries:
+                logger.error("Cancelling job %s (%s)", job.job_id, backend)
+                raise e
+
+            logger.warning("Resuming job %s (%s) due to a failure (n %s, max %s)",
+                           job.job_id, backend, failures, max_retries)
+            resume = True
+        else:
+            # No failure, do not retry
+            run_job = False
 
     result = job.result
 

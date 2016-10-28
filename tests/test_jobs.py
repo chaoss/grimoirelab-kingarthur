@@ -30,6 +30,7 @@ import tempfile
 import unittest
 
 import httpretty
+import requests
 import rq
 
 from perceval.cache import Cache
@@ -54,6 +55,13 @@ BUGZILLA_BUGLIST_URL = BUGZILLA_SERVER_URL + '/buglist.cgi'
 BUGZILLA_BUG_URL = BUGZILLA_SERVER_URL + '/show_bug.cgi'
 BUGZILLA_BUG_ACTIVITY_URL = BUGZILLA_SERVER_URL + '/show_activity.cgi'
 
+REDMINE_URL = 'http://example.com'
+REDMINE_ISSUES_URL = REDMINE_URL + '/issues.json'
+REDMINE_ISSUE_2_URL = REDMINE_URL + '/issues/2.json'
+REDMINE_ISSUE_5_URL = REDMINE_URL + '/issues/5.json'
+REDMINE_ISSUE_9_URL = REDMINE_URL + '/issues/9.json'
+REDMINE_ISSUE_7311_URL = REDMINE_URL + '/issues/7311.json'
+
 
 def read_file(filename, mode='r'):
     with open(filename, mode) as f:
@@ -73,6 +81,7 @@ def setup_mock_bugzilla_server():
                   read_file('data/bugzilla_bugs_details_next.xml', mode='rb')]
     bodies_html = [read_file('data/bugzilla_bug_activity.html', mode='rb'),
                    read_file('data/bugzilla_bug_activity_empty.html', mode='rb')]
+
 
     def request_callback(method, uri, headers):
         if uri.startswith(BUGZILLA_BUGLIST_URL):
@@ -103,6 +112,91 @@ def setup_mock_bugzilla_server():
                            responses=[
                                 httpretty.Response(body=request_callback) \
                                 for _ in range(7)
+                           ])
+
+    return http_requests
+
+
+def setup_mock_redmine_server(max_failures=0):
+    """Setup a mock Redmine HTTP server"""
+
+    http_requests = []
+    failures = max_failures
+
+    issues_body = read_file('data/redmine/redmine_issues.json', 'rb')
+    issues_next_body = read_file('data/redmine/redmine_issues_next.json', 'rb')
+    issues_empty_body = read_file('data/redmine/redmine_issues_empty.json', 'rb')
+    issue_2_body = read_file('data/redmine/redmine_issue_2.json', 'rb')
+    issue_5_body = read_file('data/redmine/redmine_issue_5.json', 'rb')
+    issue_9_body = read_file('data/redmine/redmine_issue_9.json', 'rb')
+    issue_7311_body = read_file('data/redmine/redmine_issue_7311.json', 'rb')
+
+    def request_callback(method, uri, headers):
+        nonlocal failures
+
+        status = 200
+        last_request = httpretty.last_request()
+        params = last_request.querystring
+
+        if uri.startswith(REDMINE_ISSUES_URL):
+            if params['updated_on'][0] == '>=1970-01-01T00:00:00Z' and \
+                params['offset'][0] == '0':
+                body = issues_body
+            elif params['updated_on'][0] == '>=1970-01-01T00:00:00Z' and \
+                params['offset'][0] == '3':
+                body = issues_next_body
+            elif params['updated_on'][0] == '>=2016-07-27T00:00:00Z' and \
+                params['offset'][0] == '0':
+                body = issues_next_body
+            elif params['updated_on'][0] == '>=2011-12-08T17:58:37Z' and \
+                params['offset'][0] == '0':
+                body = issues_next_body
+            else:
+                body = issues_empty_body
+        elif uri.startswith(REDMINE_ISSUE_2_URL):
+            body = issue_2_body
+        elif uri.startswith(REDMINE_ISSUE_5_URL):
+            body = issue_5_body
+        elif uri.startswith(REDMINE_ISSUE_9_URL):
+            body = issue_9_body
+        elif uri.startswith(REDMINE_ISSUE_7311_URL):
+            if failures > 0:
+                status = 500
+                body = "Internal Server Error"
+                failures -= 1
+            else:
+                body = issue_7311_body
+        else:
+            raise
+
+        http_requests.append(last_request)
+
+        return (status, headers, body)
+
+    httpretty.register_uri(httpretty.GET,
+                           REDMINE_ISSUES_URL,
+                           responses=[
+                                httpretty.Response(body=request_callback)
+                           ])
+    httpretty.register_uri(httpretty.GET,
+                           REDMINE_ISSUE_2_URL,
+                           responses=[
+                                httpretty.Response(body=request_callback)
+                           ])
+    httpretty.register_uri(httpretty.GET,
+                           REDMINE_ISSUE_5_URL,
+                           responses=[
+                                httpretty.Response(body=request_callback)
+                           ])
+    httpretty.register_uri(httpretty.GET,
+                           REDMINE_ISSUE_9_URL,
+                           responses=[
+                                httpretty.Response(body=request_callback)
+                           ])
+    httpretty.register_uri(httpretty.GET,
+                           REDMINE_ISSUE_7311_URL,
+                           responses=[
+                                httpretty.Response(body=request_callback)
                            ])
 
     return http_requests
@@ -152,12 +246,14 @@ class TestJobResult(unittest.TestCase):
         self.assertEqual(result.max_date, 1344965413.0)
         self.assertEqual(result.nitems, 58)
         self.assertEqual(result.offset, None)
+        self.assertEqual(result.nresumed, 0)
 
         result = JobResult('arthur-job-1234567890', 'mock_backend',
                            'ABCDEFGHIJK', 1344965413.0, 58,
-                           offset=128)
+                           offset=128, nresumed=10)
 
         self.assertEqual(result.offset, 128)
+        self.assertEqual(result.nresumed, 10)
 
 
 class TestPercevalJob(TestBaseRQ):
@@ -191,6 +287,7 @@ class TestPercevalJob(TestBaseRQ):
         self.assertEqual(result.max_date, None)
         self.assertEqual(result.nitems, 0)
         self.assertEqual(result.offset, None)
+        self.assertEqual(result.nresumed, 0)
 
     def test_backend_not_found(self):
         """Test if it raises an exception when a backend is not found"""
@@ -220,6 +317,7 @@ class TestPercevalJob(TestBaseRQ):
         self.assertEqual(result.max_date, 1392185439.0)
         self.assertEqual(result.nitems, 9)
         self.assertEqual(result.offset, None)
+        self.assertEqual(result.nresumed, 0)
 
         commits = self.conn.lrange('items', 0, -1)
         commits = [pickle.loads(c) for c in commits]
@@ -236,6 +334,19 @@ class TestPercevalJob(TestBaseRQ):
                     'bc57a9209f096a130dcc5ba7089a8663f758a703']
 
         self.assertEqual(commits, expected)
+
+    def test_run_not_found_parameters(self):
+        """Check if it fails when a required backend parameter is not found"""
+
+        job = PercevalJob('arthur-job-1234567890', 'git',
+                          self.conn, 'items')
+        args = {
+            'uri' : 'http://example.com/'
+        }
+
+        with self.assertRaises(NotFoundError) as e:
+            job.run(args, fetch_from_cache=False)
+            self.assertEqual(e.exception.element, 'gitlog')
 
     @httpretty.activate
     def test_fetch_from_cache(self):
@@ -276,6 +387,7 @@ class TestPercevalJob(TestBaseRQ):
         self.assertEqual(result.max_date, 1439404330.0)
         self.assertEqual(result.nitems, 7)
         self.assertEqual(result.offset, None)
+        self.assertEqual(result.nresumed, 0)
 
         self.assertEqual(len(http_requests), 13)
         self.assertListEqual(bugs, expected)
@@ -301,23 +413,67 @@ class TestPercevalJob(TestBaseRQ):
         self.assertEqual(result.max_date, 1439404330.0)
         self.assertEqual(result.nitems, 7)
         self.assertEqual(result.offset, None)
+        self.assertEqual(result.nresumed, 0)
 
         self.assertEqual(len(http_requests), 13)
 
         self.assertListEqual(cached_bugs, bugs)
 
-    def test_run_not_found_parameters(self):
-        """Check if it fails when a required backend parameter is not found"""
+    @httpretty.activate
+    def test_resuming(self):
+        """Test if it resumes when a failure is reached"""
 
-        job = PercevalJob('arthur-job-1234567890', 'git',
-                          self.conn, 'items')
+        http_requests = setup_mock_redmine_server(max_failures=1)
+
         args = {
-            'uri' : 'http://example.com/'
+            'url' : REDMINE_URL,
+            'api_token' : 'AAAA',
+            'max_issues' : 3
         }
 
-        with self.assertRaises(NotFoundError) as e:
-            job.run(args, fetch_from_cache=False)
-            self.assertEqual(e.exception.element, 'gitlog')
+        job = PercevalJob('arthur-job-1234567890', 'redmine',
+                          self.conn, 'items')
+
+        with self.assertRaises(requests.exceptions.HTTPError):
+            job.run(args)
+
+        result = job.result
+        self.assertEqual(result.job_id, 'arthur-job-1234567890')
+        self.assertEqual(result.backend, 'redmine')
+        self.assertEqual(result.last_uuid, '3c3d67925b108a37f88cc6663f7f7dd493fa818c')
+        self.assertEqual(result.max_date, 1323367117.0)
+        self.assertEqual(result.nitems, 3)
+        self.assertEqual(result.offset, None)
+        self.assertEqual(result.nresumed, 0)
+
+        issues = self.conn.lrange('items', 0, -1)
+        issues = [pickle.loads(i) for i in issues]
+        issues = [i['uuid'] for i in issues]
+        self.conn.ltrim('items', 1, 0)
+
+        expected = ['91a8349c2f6ebffcccc49409529c61cfd3825563',
+                    'c4aeb9e77fec8e4679caa23d4012e7cc36ae8b98',
+                    '3c3d67925b108a37f88cc6663f7f7dd493fa818c']
+        self.assertEqual(issues, expected)
+
+        job.run(args, resume=True)
+
+        result = job.result
+        self.assertEqual(result.job_id, 'arthur-job-1234567890')
+        self.assertEqual(result.backend, 'redmine')
+        self.assertEqual(result.last_uuid, '4ab289ab60aee93a66e5490529799cf4a2b4d94c')
+        self.assertEqual(result.max_date, 1469607427.0)
+        self.assertEqual(result.nitems, 4)
+        self.assertEqual(result.offset, None)
+        self.assertEqual(result.nresumed, 1)
+
+        issues = self.conn.lrange('items', 0, -1)
+        issues = [pickle.loads(i) for i in issues]
+        issues = [i['uuid'] for i in issues]
+        self.conn.ltrim('items', 1, 0)
+
+        expected = ['4ab289ab60aee93a66e5490529799cf4a2b4d94c']
+        self.assertEqual(issues, expected)
 
     def test_initialize_cache(self):
         """Test if the cache is initialized"""
@@ -404,6 +560,7 @@ class TestExecuteJob(TestBaseRQ):
         }
 
         q = rq.Queue('queue', async=False)
+
         job = q.enqueue(execute_perceval_job,
                         backend='git', backend_args=args,
                         qitems='items')
@@ -415,6 +572,7 @@ class TestExecuteJob(TestBaseRQ):
         self.assertEqual(result.max_date, 1392185439.0)
         self.assertEqual(result.nitems, 9)
         self.assertEqual(result.offset, None)
+        self.assertEqual(result.nresumed, 0)
 
         commits = self.conn.lrange('items', 0, -1)
         commits = [pickle.loads(c) for c in commits]
@@ -434,6 +592,69 @@ class TestExecuteJob(TestBaseRQ):
             item = commits[x]
             self.assertEqual(item[0], result.job_id)
             self.assertEqual(item[1], expected[x])
+
+    @httpretty.activate
+    def test_retry_job(self):
+        """Test if the job will be succesful after some retries"""
+
+        http_requests = setup_mock_redmine_server(max_failures=2)
+
+        args = {
+            'url' : REDMINE_URL,
+            'api_token' : 'AAAA',
+            'max_issues' : 3
+        }
+
+        q = rq.Queue('queue', async=False)
+        job = q.enqueue(execute_perceval_job,
+                        backend='redmine', backend_args=args,
+                        qitems='items', max_retries=3)
+
+        result = job.return_value
+        self.assertEqual(result.job_id, job.get_id())
+        self.assertEqual(result.backend, 'redmine')
+        self.assertEqual(result.last_uuid, '4ab289ab60aee93a66e5490529799cf4a2b4d94c')
+        self.assertEqual(result.max_date, 1469607427.0)
+        self.assertEqual(result.nitems, 4)
+        self.assertEqual(result.offset, None)
+        self.assertEqual(result.nresumed, 2)
+
+        issues = self.conn.lrange('items', 0, -1)
+        issues = [pickle.loads(i) for i in issues]
+        issues = [(issue['job_id'], issue['uuid']) for issue in issues]
+        self.conn.ltrim('items', 1, 0)
+
+        expected = ['91a8349c2f6ebffcccc49409529c61cfd3825563',
+                    'c4aeb9e77fec8e4679caa23d4012e7cc36ae8b98',
+                    '3c3d67925b108a37f88cc6663f7f7dd493fa818c',
+                    '4ab289ab60aee93a66e5490529799cf4a2b4d94c']
+
+        self.assertEqual(len(issues), len(expected))
+
+        for x in range(len(expected)):
+            item = issues[x]
+            self.assertEqual(item[0], result.job_id)
+            self.assertEqual(item[1], expected[x])
+
+    @httpretty.activate
+    def test_max_retries_job(self):
+        """Test if the job will fail after max_retries limit is reached"""
+
+        http_requests = setup_mock_redmine_server(max_failures=2)
+
+        args = {
+            'url' : REDMINE_URL,
+            'api_token' : 'AAAA',
+            'max_issues' : 3
+        }
+
+        q = rq.Queue('queue', async=False)
+
+        with self.assertRaises(requests.exceptions.HTTPError):
+            job = q.enqueue(execute_perceval_job,
+                            backend='redmine', backend_args=args,
+                            qitems='items', max_retries=1)
+            self.assertEqual(job.is_failed, True)
 
     def test_job_no_result(self):
         """Execute a Git backend job that will not produce any results"""
@@ -456,6 +677,7 @@ class TestExecuteJob(TestBaseRQ):
         self.assertEqual(result.max_date, None)
         self.assertEqual(result.nitems, 0)
         self.assertEqual(result.offset, None)
+        self.assertEqual(result.nresumed, 0)
 
         commits = self.conn.lrange('items', 0, -1)
         commits = [pickle.loads(c) for c in commits]
@@ -500,6 +722,7 @@ class TestExecuteJob(TestBaseRQ):
         self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
         self.assertEqual(result.max_date, 1439404330.0)
         self.assertEqual(result.nitems, 7)
+        self.assertEqual(result.nresumed, 0)
 
         self.assertEqual(len(http_requests), 13)
         self.assertListEqual(bugs, expected)
@@ -524,6 +747,7 @@ class TestExecuteJob(TestBaseRQ):
         self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
         self.assertEqual(result.max_date, 1439404330.0)
         self.assertEqual(result.nitems, 7)
+        self.assertEqual(result.nresumed, 0)
 
         self.assertEqual(len(http_requests), 13)
 

@@ -61,6 +61,16 @@ REDMINE_ISSUE_2_URL = REDMINE_URL + '/issues/2.json'
 REDMINE_ISSUE_5_URL = REDMINE_URL + '/issues/5.json'
 REDMINE_ISSUE_9_URL = REDMINE_URL + '/issues/9.json'
 REDMINE_ISSUE_7311_URL = REDMINE_URL + '/issues/7311.json'
+REDMINE_USER_3_URL = REDMINE_URL + '/users/3.json'
+REDMINE_USER_4_URL = REDMINE_URL + '/users/4.json'
+REDMINE_USER_24_URL = REDMINE_URL + '/users/24.json'
+REDMINE_USER_25_URL = REDMINE_URL + '/users/25.json'
+
+REDMINE_URL_LIST = [
+    REDMINE_ISSUES_URL, REDMINE_ISSUE_2_URL, REDMINE_ISSUE_5_URL,
+    REDMINE_ISSUE_9_URL, REDMINE_ISSUE_7311_URL, REDMINE_USER_3_URL,
+    REDMINE_USER_4_URL, REDMINE_USER_24_URL, REDMINE_USER_25_URL
+]
 
 
 def read_file(filename, mode='r'):
@@ -130,6 +140,10 @@ def setup_mock_redmine_server(max_failures=0):
     issue_5_body = read_file('data/redmine/redmine_issue_5.json', 'rb')
     issue_9_body = read_file('data/redmine/redmine_issue_9.json', 'rb')
     issue_7311_body = read_file('data/redmine/redmine_issue_7311.json', 'rb')
+    user_3_body = read_file('data/redmine/redmine_user_3.json', 'rb')
+    user_4_body = read_file('data/redmine/redmine_user_4.json', 'rb')
+    user_24_body = read_file('data/redmine/redmine_user_24.json', 'rb')
+    user_25_body = read_file('data/redmine/redmine_user_25.json', 'rb')
 
     def request_callback(method, uri, headers):
         nonlocal failures
@@ -166,6 +180,14 @@ def setup_mock_redmine_server(max_failures=0):
                 failures -= 1
             else:
                 body = issue_7311_body
+        elif uri.startswith(REDMINE_USER_3_URL):
+            body = user_3_body
+        elif uri.startswith(REDMINE_USER_4_URL):
+            body = user_4_body
+        elif uri.startswith(REDMINE_USER_24_URL):
+            body = user_24_body
+        elif uri.startswith(REDMINE_USER_25_URL):
+            body = user_25_body
         else:
             raise
 
@@ -173,31 +195,12 @@ def setup_mock_redmine_server(max_failures=0):
 
         return (status, headers, body)
 
-    httpretty.register_uri(httpretty.GET,
-                           REDMINE_ISSUES_URL,
-                           responses=[
-                                httpretty.Response(body=request_callback)
-                           ])
-    httpretty.register_uri(httpretty.GET,
-                           REDMINE_ISSUE_2_URL,
-                           responses=[
-                                httpretty.Response(body=request_callback)
-                           ])
-    httpretty.register_uri(httpretty.GET,
-                           REDMINE_ISSUE_5_URL,
-                           responses=[
-                                httpretty.Response(body=request_callback)
-                           ])
-    httpretty.register_uri(httpretty.GET,
-                           REDMINE_ISSUE_9_URL,
-                           responses=[
-                                httpretty.Response(body=request_callback)
-                           ])
-    httpretty.register_uri(httpretty.GET,
-                           REDMINE_ISSUE_7311_URL,
-                           responses=[
-                                httpretty.Response(body=request_callback)
-                           ])
+    for url in REDMINE_URL_LIST:
+        httpretty.register_uri(httpretty.GET,
+                               url,
+                               responses=[
+                                    httpretty.Response(body=request_callback)
+                               ])
 
     return http_requests
 

@@ -237,10 +237,11 @@ class TestJobResult(unittest.TestCase):
     """Unit tests for JobResult class"""
 
     def test_job_result_init(self):
-        result = JobResult('arthur-job-1234567890', 'mock_backend',
+        result = JobResult('arthur-job-1234567890', 'mytask', 'mock_backend',
                            'ABCDEFGHIJK', 1344965413.0, 58)
 
         self.assertEqual(result.job_id, 'arthur-job-1234567890')
+        self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'mock_backend')
         self.assertEqual(result.last_uuid, 'ABCDEFGHIJK')
         self.assertEqual(result.max_date, 1344965413.0)
@@ -248,7 +249,7 @@ class TestJobResult(unittest.TestCase):
         self.assertEqual(result.offset, None)
         self.assertEqual(result.nresumed, 0)
 
-        result = JobResult('arthur-job-1234567890', 'mock_backend',
+        result = JobResult('arthur-job-1234567890', 'mytask', 'mock_backend',
                            'ABCDEFGHIJK', 1344965413.0, 58,
                            offset=128, nresumed=10)
 
@@ -270,10 +271,11 @@ class TestPercevalJob(TestBaseRQ):
     def test_init(self):
         """Test the initialization of the object"""
 
-        job = PercevalJob('arthur-job-1234567890', 'git',
+        job = PercevalJob('arthur-job-1234567890', 'mytask', 'git',
                           self.conn, 'items')
 
         self.assertEqual(job.job_id, 'arthur-job-1234567890')
+        self.assertEqual(job.task_id, 'mytask')
         self.assertEqual(job.backend, 'git')
         self.assertEqual(job.conn, self.conn)
         self.assertEqual(job.qitems, 'items')
@@ -282,6 +284,7 @@ class TestPercevalJob(TestBaseRQ):
         result = job.result
         self.assertIsInstance(job.result, JobResult)
         self.assertEqual(result.job_id, 'arthur-job-1234567890')
+        self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'git')
         self.assertEqual(result.last_uuid, None)
         self.assertEqual(result.max_date, None)
@@ -293,14 +296,14 @@ class TestPercevalJob(TestBaseRQ):
         """Test if it raises an exception when a backend is not found"""
 
         with self.assertRaises(NotFoundError) as e:
-            _ = PercevalJob('arthur-job-1234567890', 'mock_backend',
+            _ = PercevalJob('arthur-job-1234567890', 'mytask', 'mock_backend',
                             self.conn, 'items')
             self.assertEqual(e.exception.element, 'mock_backend')
 
     def test_run(self):
         """Test run method using the Git backend"""
 
-        job = PercevalJob('arthur-job-1234567890', 'git',
+        job = PercevalJob('arthur-job-1234567890', 'mytask', 'git',
                           self.conn, 'items')
         args = {
             'uri' : 'http://example.com/',
@@ -312,6 +315,7 @@ class TestPercevalJob(TestBaseRQ):
         result = job.result
         self.assertIsInstance(job.result, JobResult)
         self.assertEqual(result.job_id, 'arthur-job-1234567890')
+        self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'git')
         self.assertEqual(result.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
         self.assertEqual(result.max_date, 1392185439.0)
@@ -338,7 +342,7 @@ class TestPercevalJob(TestBaseRQ):
     def test_run_not_found_parameters(self):
         """Check if it fails when a required backend parameter is not found"""
 
-        job = PercevalJob('arthur-job-1234567890', 'git',
+        job = PercevalJob('arthur-job-1234567890', 'mytask', 'git',
                           self.conn, 'items')
         args = {
             'uri' : 'http://example.com/'
@@ -369,7 +373,7 @@ class TestPercevalJob(TestBaseRQ):
             'max_bugs' : 5
         }
 
-        job = PercevalJob('arthur-job-1234567890', 'bugzilla',
+        job = PercevalJob('arthur-job-1234567890', 'mytask', 'bugzilla',
                           self.conn, 'items')
         job.initialize_cache(self.tmp_path)
 
@@ -382,6 +386,7 @@ class TestPercevalJob(TestBaseRQ):
 
         result = job.result
         self.assertEqual(result.job_id, job.job_id)
+        self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'bugzilla')
         self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
         self.assertEqual(result.max_date, 1439404330.0)
@@ -395,7 +400,7 @@ class TestPercevalJob(TestBaseRQ):
         # Now, we get the bugs from the cache.
         # The contents should be the same and there won't be
         # any new request to the server
-        job_cache = PercevalJob('arthur-job-1234567890-bis', 'bugzilla',
+        job_cache = PercevalJob('arthur-job-1234567890-bis', 'mytask', 'bugzilla',
                                 self.conn, 'items')
         job_cache.initialize_cache(self.tmp_path)
 
@@ -408,6 +413,7 @@ class TestPercevalJob(TestBaseRQ):
 
         result = job_cache.result
         self.assertEqual(result.job_id, job_cache.job_id)
+        self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'bugzilla')
         self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
         self.assertEqual(result.max_date, 1439404330.0)
@@ -431,7 +437,7 @@ class TestPercevalJob(TestBaseRQ):
             'max_issues' : 3
         }
 
-        job = PercevalJob('arthur-job-1234567890', 'redmine',
+        job = PercevalJob('arthur-job-1234567890', 'mytask', 'redmine',
                           self.conn, 'items')
 
         with self.assertRaises(requests.exceptions.HTTPError):
@@ -439,6 +445,7 @@ class TestPercevalJob(TestBaseRQ):
 
         result = job.result
         self.assertEqual(result.job_id, 'arthur-job-1234567890')
+        self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'redmine')
         self.assertEqual(result.last_uuid, '3c3d67925b108a37f88cc6663f7f7dd493fa818c')
         self.assertEqual(result.max_date, 1323367117.0)
@@ -460,6 +467,7 @@ class TestPercevalJob(TestBaseRQ):
 
         result = job.result
         self.assertEqual(result.job_id, 'arthur-job-1234567890')
+        self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'redmine')
         self.assertEqual(result.last_uuid, '4ab289ab60aee93a66e5490529799cf4a2b4d94c')
         self.assertEqual(result.max_date, 1469607427.0)
@@ -478,7 +486,7 @@ class TestPercevalJob(TestBaseRQ):
     def test_initialize_cache(self):
         """Test if the cache is initialized"""
 
-        job = PercevalJob('arthur-job-1234567890', 'git',
+        job = PercevalJob('arthur-job-1234567890', 'mytask', 'git',
                           self.conn, 'items')
         job.initialize_cache(self.tmp_path)
 
@@ -488,7 +496,7 @@ class TestPercevalJob(TestBaseRQ):
     def test_invalid_path_for_cache(self):
         """Test whether it raises an exception when the cache path is invalid"""
 
-        job = PercevalJob('arthur-job-1234567890', 'git',
+        job = PercevalJob('arthur-job-1234567890', 'mytaks', 'git',
                           self.conn, 'items')
 
         with self.assertRaises(ValueError):
@@ -501,7 +509,7 @@ class TestPercevalJob(TestBaseRQ):
         """Test if it does a backup of the cache and recovers its data"""
 
         # Create a new job with and empty cache
-        job = PercevalJob('arthur-job-1234567890', 'git',
+        job = PercevalJob('arthur-job-1234567890', 'mytask', 'git',
                           self.conn, 'items')
         job.initialize_cache(self.tmp_path)
 
@@ -512,7 +520,7 @@ class TestPercevalJob(TestBaseRQ):
         job.cache.store(*items)
 
         # Initialize a new job and make a backup of the data
-        job = PercevalJob('arthur-job-1234567890-bis', 'git',
+        job = PercevalJob('arthur-job-1234567890-bis', 'mytask', 'git',
                           self.conn, 'items')
         job.initialize_cache(self.tmp_path, backup=True)
 
@@ -532,7 +540,7 @@ class TestPercevalJob(TestBaseRQ):
     def test_recover_unitialized_cache(self):
         """Test if not fails recovering from a cache not initialized"""
 
-        job = PercevalJob('arthur-job-1234567890', 'git',
+        job = PercevalJob('arthur-job-1234567890', 'mytask', 'git',
                           self.conn, 'items')
         self.assertEqual(job.cache, None)
 
@@ -563,10 +571,11 @@ class TestExecuteJob(TestBaseRQ):
 
         job = q.enqueue(execute_perceval_job,
                         backend='git', backend_args=args,
-                        qitems='items')
+                        qitems='items', task_id='mytask')
 
         result = job.return_value
         self.assertEqual(result.job_id, job.get_id())
+        self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'git')
         self.assertEqual(result.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
         self.assertEqual(result.max_date, 1392185439.0)
@@ -608,10 +617,12 @@ class TestExecuteJob(TestBaseRQ):
         q = rq.Queue('queue', async=False)
         job = q.enqueue(execute_perceval_job,
                         backend='redmine', backend_args=args,
-                        qitems='items', max_retries=3)
+                        qitems='items', task_id='mytask',
+                        max_retries=3)
 
         result = job.return_value
         self.assertEqual(result.job_id, job.get_id())
+        self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'redmine')
         self.assertEqual(result.last_uuid, '4ab289ab60aee93a66e5490529799cf4a2b4d94c')
         self.assertEqual(result.max_date, 1469607427.0)
@@ -653,7 +664,8 @@ class TestExecuteJob(TestBaseRQ):
         with self.assertRaises(requests.exceptions.HTTPError):
             job = q.enqueue(execute_perceval_job,
                             backend='redmine', backend_args=args,
-                            qitems='items', max_retries=1)
+                            qitems='items', task_id='mytask',
+                            max_retries=1)
             self.assertEqual(job.is_failed, True)
 
     def test_job_no_result(self):
@@ -668,10 +680,11 @@ class TestExecuteJob(TestBaseRQ):
         q = rq.Queue('queue', async=False)
         job = q.enqueue(execute_perceval_job,
                         backend='git', backend_args=args,
-                        qitems='items')
+                        qitems='items', task_id='mytask')
 
         result = job.return_value
         self.assertEqual(result.job_id, job.get_id())
+        self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'git')
         self.assertEqual(result.last_uuid, None)
         self.assertEqual(result.max_date, None)
@@ -708,7 +721,7 @@ class TestExecuteJob(TestBaseRQ):
 
         job = q.enqueue(execute_perceval_job,
                         backend='bugzilla', backend_args=args,
-                        qitems='items',
+                        qitems='items', task_id='mytask',
                         cache_path=self.tmp_path)
 
         bugs = self.conn.lrange('items', 0, -1)
@@ -718,6 +731,7 @@ class TestExecuteJob(TestBaseRQ):
 
         result = job.return_value
         self.assertEqual(result.job_id, job.get_id())
+        self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'bugzilla')
         self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
         self.assertEqual(result.max_date, 1439404330.0)
@@ -733,7 +747,7 @@ class TestExecuteJob(TestBaseRQ):
 
         job = q.enqueue(execute_perceval_job,
                         backend='bugzilla', backend_args=args,
-                        qitems='items',
+                        qitems='items', task_id='mytask',
                         cache_path=self.tmp_path, fetch_from_cache=True)
 
         cached_bugs = self.conn.lrange('items', 0, -1)
@@ -743,6 +757,7 @@ class TestExecuteJob(TestBaseRQ):
 
         result = job.return_value
         self.assertEqual(result.job_id, job.get_id())
+        self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'bugzilla')
         self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
         self.assertEqual(result.max_date, 1439404330.0)
@@ -766,12 +781,14 @@ class TestExecuteJob(TestBaseRQ):
         with self.assertRaises(AttributeError):
             job = q.enqueue(execute_perceval_job,
                             backend='git', backend_args=args,
-                            qitems='items', cache_path=self.tmp_path)
+                            qitems='items', task_id='mytask',
+                            cache_path=self.tmp_path)
 
         with self.assertRaises(AttributeError):
             job = q.enqueue(execute_perceval_job,
                             backend='git', backend_args=args,
-                            qitems='items', fetch_from_cache=True)
+                            qitems='items', task_id='mytask',
+                            fetch_from_cache=True)
 
 
 class MockCallable:

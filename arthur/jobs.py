@@ -68,6 +68,7 @@ class JobResult:
     item generated or the number of items fetched by the backend.
 
     :param job_id: job identifier
+    :param task_id: identitifer of the task linked to this job
     :param backend: backend used to fetch the items
     :param last_uuid: UUID of the last item
     :param max_date: maximum date fetched among items
@@ -75,9 +76,10 @@ class JobResult:
     :param offset: maximum offset fetched among items
     :param nresumed: number of time the job was resumed
     """
-    def __init__(self, job_id, backend, last_uuid,
+    def __init__(self, job_id, task_id, backend, last_uuid,
                  max_date, nitems, offset=None, nresumed=0):
         self.job_id = job_id
+        self.task_id = task_id
         self.backend = backend
         self.last_uuid = last_uuid
         self.max_date = max_date
@@ -95,6 +97,7 @@ class PercevalJob:
     accesing to the property `result` of this object.
 
     :param job_id: job identifier
+    :param task_id: identitifer of the task linked to this job
     :param backend: name of the backend to execute
     :param conn: connection with a Redis database
     :param qitems: name of the queue where items will be stored
@@ -102,19 +105,20 @@ class PercevalJob:
     :rasises NotFoundError: raised when the backend is not avaliable
         in Perceval
     """
-    def __init__(self, job_id, backend, conn, qitems):
+    def __init__(self, job_id, task_id, backend, conn, qitems):
         try:
             self._bklass = perceval.backends.PERCEVAL_BACKENDS[backend]
         except KeyError:
             raise NotFoundError(element=backend)
 
         self.job_id = job_id
+        self.task_id = task_id
         self.backend = backend
         self.conn = conn
         self.qitems = qitems
         self.retries = 0
         self.cache = None
-        self._result = JobResult(self.job_id, self.backend,
+        self._result = JobResult(self.job_id, self.task_id, self.backend,
                                  None, None, 0, offset=None,
                                  nresumed=0)
 
@@ -147,7 +151,7 @@ class PercevalJob:
         args['cache'] = self.cache
 
         if not resume:
-            self._result = JobResult(self.job_id, self.backend,
+            self._result = JobResult(self.job_id, self.task_id, self.backend,
                                      None, None, 0, offset=None,
                                      nresumed=0)
         else:
@@ -259,7 +263,7 @@ class PercevalJob:
             yield item
 
 
-def execute_perceval_job(backend, backend_args, qitems,
+def execute_perceval_job(backend, backend_args, qitems, task_id,
                          cache_path=None, fetch_from_cache=False,
                          max_retries=MAX_JOB_RETRIES):
     """Execute a Perceval job on RQ.
@@ -277,6 +281,7 @@ def execute_perceval_job(backend, backend_args, qitems,
     :param backend: backend to execute
     :param bakend_args: dict of arguments for running the backend
     :param qitems: name of the RQ queue used to store the items
+    :param task_id: identifier of the task linked to this job
     :param cache_path: path to the cache
     :param fetch_from_cache: retrieve items from the cache
     :param max_retries: maximum number of retries if a job fails
@@ -289,10 +294,11 @@ def execute_perceval_job(backend, backend_args, qitems,
     """
     rq_job = rq.get_current_job()
 
-    job = PercevalJob(rq_job.id, backend,
+    job = PercevalJob(rq_job.id, task_id, backend,
                       rq_job.connection, qitems)
 
-    logger.debug("Running job %s (%s)", job.job_id, backend)
+    logger.debug("Running job #%s (task: %s) (%s)",
+                 job.job_id, task_id, backend)
 
     if not job.has_caching() and (cache_path or fetch_from_cache):
         raise AttributeError("cache attributes set but cache is not supported")
@@ -306,7 +312,8 @@ def execute_perceval_job(backend, backend_args, qitems,
 
     while run_job:
         try:
-            job.run(backend_args, resume=resume, fetch_from_cache=fetch_from_cache)
+            job.run(backend_args, resume=resume,
+                    fetch_from_cache=fetch_from_cache)
         except AttributeError as e:
             raise e
         except Exception as e:
@@ -319,11 +326,12 @@ def execute_perceval_job(backend, backend_args, qitems,
                 job.cache = None
 
             if not job.has_resuming() or failures >= max_retries:
-                logger.error("Cancelling job %s (%s)", job.job_id, backend)
+                logger.error("Cancelling job #%s (task: %s) (%s)",
+                             job.job_id, task_id, backend)
                 raise e
 
-            logger.warning("Resuming job %s (%s) due to a failure (n %s, max %s)",
-                           job.job_id, backend, failures, max_retries)
+            logger.warning("Resuming job #%s (task: %s) (%s) due to a failure (n %s, max %s)",
+                           job.job_id, task_id, backend, failures, max_retries)
             resume = True
         else:
             # No failure, do not retry
@@ -331,8 +339,8 @@ def execute_perceval_job(backend, backend_args, qitems,
 
     result = job.result
 
-    logger.debug("Job %s completed (%s) - %s items fetched",
-                 result.job_id, result.backend, str(result.nitems))
+    logger.debug("Job #%s (task: %s) completed (%s) - %s items fetched",
+                 result.job_id, task_id, result.backend, str(result.nitems))
 
     return result
 

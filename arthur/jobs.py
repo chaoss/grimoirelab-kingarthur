@@ -28,6 +28,7 @@ import logging
 import rq
 import pickle
 
+import perceval
 import perceval.backends
 import perceval.cache
 
@@ -107,7 +108,7 @@ class PercevalJob:
     """
     def __init__(self, job_id, task_id, backend, conn, qitems):
         try:
-            self._bklass = perceval.backends.PERCEVAL_BACKENDS[backend]
+            self._bklass = perceval.find_backends(perceval.backends)[0][backend]
         except KeyError:
             raise NotFoundError(element=backend)
 

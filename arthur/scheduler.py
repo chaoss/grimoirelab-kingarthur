@@ -22,28 +22,25 @@
 #
 
 import copy
-import datetime
 import logging
 import pickle
+import threading
 import time
+import traceback
 import sched
 import uuid
 
-from threading import Thread
-
-import dateutil
-
-from rq import Queue
-from rq.job import Job
+import rq
+import rq.job
 
 from .common import (CH_PUBSUB,
                      Q_CREATION_JOBS,
                      Q_UPDATING_JOBS,
                      Q_STORAGE_ITEMS,
-                     TIMEOUT,
-                     WAIT_FOR_QUEUING)
-from .errors import NotFoundError, InvalidDateError
+                     TIMEOUT)
+from .errors import NotFoundError
 from .jobs import execute_perceval_job
+from .utils import unixtime_to_datetime
 
 
 logger = logging.getLogger(__name__)
@@ -53,93 +50,123 @@ logger = logging.getLogger(__name__)
 SCHED_POLLING = 0.5
 
 
-class Scheduler(Thread):
-    """Scheduler of jobs.
+class _JobScheduler(threading.Thread):
+    """Class handler for scheduling jobs.
 
-    This class is able to schedule Perceval jobs. Jobs are added to
-    two predefined queues: one for creation of repositories and
-    one for updating those repositories. Successful jobs will be
-    rescheduled once they finished.
+    Private class needed to schedule jobs. The scheduler does not really
+    runs the job. It queues jobs in some predefined worker queues.
+    Depending on the overhead of these queue, the jobs will execute sooner.
+    These queues are created during the initialization of the class,
+    giving a list of queues identifiers in the paramater `queues`.
 
-    :param asyc_mode: set to run in asynchronous mode
+    Take into account that the enqueuing of a job can be delayed using a
+    waiting time. The scheduler will poll jobs to check their waiting
+    times. Once it is expired, the tasks will be enqueued. Polling time
+    can be configured using the attribute `polling`. By default, it is
+    set to `SCHED_POLLING` value.
+
+    :param conn: connection to the Redis database
+    :param queues: list of queues created during the initialization
+    :param polling: sleep time to poll jobs
+    :param async_mode: run in async mode (with workers); set to `False`
+        for debugging purposes
     """
-    def __init__(self, conn, async_mode=True):
+    def __init__(self, conn, queues, polling=SCHED_POLLING, async_mode=True):
         super().__init__()
-        self.daemon = True
-
         self.conn = conn
-        self.queues = {
-                       Q_CREATION_JOBS : Queue(Q_CREATION_JOBS, async=async_mode),
-                       Q_UPDATING_JOBS : Queue(Q_UPDATING_JOBS, async=async_mode)
-                      }
+        self.polling = polling
+        self.async_mode = async_mode
 
         self._scheduler = sched.scheduler()
-
-    def add_job(self, queue_id, repository):
-        """Add a Perceval job to a queue.
-
-        :param queue_id: identifier of the queue where the job will be added
-        :param repository: input repository for the job
-
-        :returns: the job identifier of the scheduled job
-
-        :raises NotFoundError: when the queue set to run the job does not
-            exist.
-        """
-        if queue_id not in self.queues:
-            raise NotFoundError(element=queue_id)
-
-        cache_fetch = repository.kwargs.get('cache_fetch', False)
-
-        if 'cache_fetch' in repository.kwargs:
-            del repository.kwargs['cache_fetch']
-
-        job_args = copy.deepcopy(repository.kwargs)
-        job_args['job_id'] =  'arthur-' + str(uuid.uuid4())
-        job_args['timeout'] = TIMEOUT
-        job_args['qitems'] = Q_STORAGE_ITEMS
-        job_args['origin'] = repository.origin
-        job_args['backend'] = repository.backend
-        job_args['cache_path'] = repository.cache_path
-        job_args['cache_fetch'] = cache_fetch
-
-        # Schedule the job as soon as possible
-        self._schedule_job(0, Q_CREATION_JOBS, job_args)
-
-        return job_args['job_id']
+        self._queues = {
+            queue_id : rq.Queue(queue_id,
+                                connection=self.conn,
+                                async=self.async_mode) \
+            for queue_id in queues
+        }
+        self._jobs = {}
 
     def run(self):
         """Run thread to schedule jobs."""
 
-        import traceback
-
         try:
-            self._schedule()
-        except Exception:
-            logger.error("Scheduler crashed")
-            logger.error(traceback.format_exc())
+            self.schedule()
+        except Exception as e:
+            logger.critical("JobScheduler instance crashed. Error: %s", str(e))
+            logger.critical(traceback.format_exc())
 
-    def run_sync(self):
-        """Run scheduler in sync mode"""
-
-        self._scheduler.run()
-
-    def _schedule(self):
-        """Main method that runs scheduling threads"""
-
-        # Create a thread to listen and re-schedule
-        # completed jobs
-        t = Thread(target=self._reschedule)
-        t.start()
+    def schedule(self):
+        """Schedule jobs in loop."""""
 
         while True:
             self._scheduler.run(blocking=False)
-            time.sleep(SCHED_POLLING) # Let other threads run
 
-        t.join()
+            if not self.async_mode:
+                break
 
-    def _reschedule(self):
-        """Listen for completed jobs and reschedule successful ones"""
+            # Let other threads run
+            time.sleep(self.polling)
+
+    def schedule_job(self, queue_id, task_id, job_args, delay=0):
+        """Schedule a job in the given queue."""
+
+        job_id = self._generate_job_id(task_id)
+
+        event = self._scheduler.enter(delay, 1, self._enqueue_job,
+                                      argument=(queue_id, job_id, job_args,))
+        self._jobs[job_id] = event
+
+        logging.debug("Job #%s (task: %s) scheduled on %s (wait: %s)",
+                      job_id, task_id, queue_id, delay)
+
+        return job_id
+
+    def _enqueue_job(self, queue_id, job_id, job_args):
+        self._queues[queue_id].enqueue(execute_perceval_job,
+                                       job_id=job_id,
+                                       timeout=TIMEOUT,
+                                       **job_args)
+        del self._jobs[job_id]
+
+        logging.debug("Job #%s (task: %s) (%s) queued in '%s'",
+                      job_id, job_args['task_id'],
+                      job_args['backend'], queue_id)
+
+    @staticmethod
+    def _generate_job_id(task_id):
+        job_id = '-'.join(['arthur', str(task_id), str(uuid.uuid4())])
+        return job_id
+
+
+class _JobListener(threading.Thread):
+    """Listen for finished jobs.
+
+    Private class that listens for the result of a job. To manage
+    the result two callables may be provided: `result_handler` for
+    managing successful jobs and `result_handler_err` for managing
+    failed ones.
+
+    :param conn: connection to the Redis database
+    :param result_handler: callable object to handle successful jobs
+    :param result_handler_err: callabe object to handle failed jobs
+    """
+    def __init__(self, conn, result_handler=None, result_handler_err=None):
+        super().__init__()
+        self.conn = conn
+        self.result_handler = result_handler
+        self.result_handler_err = result_handler_err
+
+    def run(self):
+        """Run thread to listen for jobs and reschedule successful ones."""
+
+        try:
+            self.listen()
+        except Exception as e:
+            logger.critical("JobListener instence crashed. Error: %s", str(e))
+            logger.critical(traceback.format_exc())
+
+    def listen(self):
+        """Listen for completed jobs and reschedule successful ones."""
 
         pubsub = self.conn.pubsub()
         pubsub.subscribe(CH_PUBSUB)
@@ -148,68 +175,152 @@ class Scheduler(Thread):
             logger.debug("New message received of type %s", str(msg['type']))
 
             if msg['type'] != 'message':
+                logger.debug("Ignoring job message")
                 continue
 
             data = pickle.loads(msg['data'])
+            job_id = data['job_id']
+
+            job = rq.job.Job.fetch(job_id, connection=self.conn)
 
             if data['status'] == 'finished':
-                job = Job.fetch(data['job_id'], connection=self.conn)
-                self._reschedule_job(job)
+                logging.debug("Job #%s completed", job_id)
+                handler = self.result_handler
             elif data['status'] == 'failed':
-                logging.debug("Job #%s failed", data['job_id'])
+                logging.debug("Job #%s failed", job_id)
+                handler = self.result_handler_err
+            else:
+                continue
 
-    def _schedule_job(self, delay, queue_id, job_args):
-        self._scheduler.enter(delay, 1, self._enque_job,
-                              argument=(queue_id, job_args,))
+            if handler:
+                logging.debug("Calling handler for job #%s", job_id)
+                handler(job)
 
-    def _reschedule_job(self, job):
+
+class Scheduler:
+    """Scheduler of jobs.
+
+    This class is able to schedule Perceval jobs. Jobs are added to
+    two predefined queues: one for creation of repositories and
+    one for updating those repositories. Successful jobs will be
+    rescheduled once they finished.
+
+    :param conn: connection to the Redis database
+    :param registry: regsitry of tasks
+    :param async_mode: run in async mode (with workers); set to `False`
+        for debugging purposes
+    """
+    def __init__(self, conn, registry, async_mode=True):
+        self.conn = conn
+        self.registry = registry
+        self.async_mode = async_mode
+        self._scheduler = _JobScheduler(self.conn,
+                                        [Q_CREATION_JOBS, Q_UPDATING_JOBS],
+                                        polling=SCHED_POLLING,
+                                        async_mode=self.async_mode)
+        self._listener = _JobListener(self.conn,
+                                      result_handler=self._handle_successful_job,
+                                      result_handler_err=self._handle_failed_job)
+
+    def schedule(self):
+        """Start scheduling jobs."""
+
+        if self.async_mode:
+            self._scheduler.start()
+            self._listener.start()
+        else:
+            self._scheduler.schedule()
+
+    def schedule_task(self, task_id):
+        """Schedule a task.
+
+        :param task_id: identifier of the task to schedule
+
+        :raises NotFoundError: raised when the requested task is not
+            found in the registry
+        """
+        task = self.registry.get(task_id)
+
+        job_args = self._build_job_arguments(task)
+
+        # Schedule the job as soon as possible
+        job_id = self._scheduler.schedule_job(Q_CREATION_JOBS,
+                                              task.task_id, job_args,
+                                              delay=0)
+
+        logger.info("Job #%s (task: %s) scheduled", job_id, task.task_id)
+
+        return job_id
+
+    def cancel_task(self, task_id):
+        """Cancel or 'un-schedule' a task.
+
+        :param task_id: identifier of the task to cancel
+
+        :raises NotFoundError: raised when the requested task is not
+            found in the registry
+        """
+        self.registry.remove(task_id)
+
+        logger.info("Task task: %s canceled", task_id)
+
+    def _handle_successful_job(self, job):
+        """Handle successufl jobs"""
+
         result = job.result
-        job_args = job.kwargs
+        task_id = job.kwargs['task_id']
 
-        job_args['job_id'] = job.get_id()
+        try:
+            task = self.registry.get(task_id)
+        except NotFoundError:
+            logger.warning("Task %s not found; related job #%s will not be rescheduled",
+                           task_id, job.id)
+            return
+
+        job_args = self._build_job_arguments(task)
+
+        job_args['fetch_from_cache'] = False
 
         if result.nitems > 0:
             from_date = unixtime_to_datetime(result.max_date)
-            job_args['from_date'] = from_date
+            job_args['backend_args']['from_date'] = from_date
 
             if result.offset:
-                job_args['offset'] = result.offset
+                job_args['backend_args']['offset'] = result.offset
 
-        job_args['cache_path'] = None
-        job_args['cache_fetch'] = False
+        delay = task.sched_args['delay']
 
-        delay = job_args.get('scheduler_delay', WAIT_FOR_QUEUING)
+        job_id = self._scheduler.schedule_job(Q_UPDATING_JOBS,
+                                              task_id, job_args,
+                                              delay=delay)
 
-        logging.debug("Job #%s finished. Rescheduling to fetch data on %s",
-                      job.get_id(), delay)
+        logger.info("Job #%s (task: %s, old job: %s) re-scheduled",
+                    job_id, task_id, job.id)
 
-        self._schedule_job(delay, Q_UPDATING_JOBS, job_args)
+    def _handle_failed_job(self, job):
+        """Handle failed jobs"""
 
-    def _enque_job(self, queue_id, job_args):
-        job = self.queues[queue_id].enqueue(execute_perceval_job,
-                                            **job_args)
+        task_id = job.kwargs['task_id']
+        logger.error("Job #%s (task: %s) failed; cancelled",
+                     job.id, task_id)
 
-        logging.debug("Job #%s %s (%s) enqueued in '%s' queue",
-                      job.get_id(), job_args['origin'],
-                      job_args['backend'], queue_id)
+    @staticmethod
+    def _build_job_arguments(task):
+        """Build the set of arguments required for running a job"""
 
+        job_args = {}
+        job_args['qitems'] = Q_STORAGE_ITEMS
+        job_args['task_id'] = task.task_id
 
-def unixtime_to_datetime(ut):
-    """Convert a unixtime timestamp to a datetime object.
+        # Backend parameters
+        job_args['backend'] = task.backend
+        job_args['backend_args'] = copy.deepcopy(task.backend_args)
 
-    The function converts a timestamp in Unix format to a
-    datetime object. UTC timezone will also be set.
+        # Cache parameters
+        job_args['cache_path'] = task.cache_args['cache_path']
+        job_args['fetch_from_cache'] = task.cache_args['fetch_from_cache']
 
-    :param ut: Unix timestamp to convert
+        # Other parameters
+        job_args['max_retries'] = task.sched_args['max_retries_job']
 
-    :returns: a datetime object
-
-    :raises InvalidDateError: when the given timestamp cannot be
-        converted into a valid date
-    """
-    try:
-        dt = datetime.datetime.utcfromtimestamp(ut)
-        dt = dt.replace(tzinfo=dateutil.tz.tzutc())
-        return dt
-    except Exception:
-        raise InvalidDateError(date=str(ut))
+        return job_args

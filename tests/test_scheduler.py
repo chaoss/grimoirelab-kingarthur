@@ -27,9 +27,9 @@ import unittest
 if not '..' in sys.path:
     sys.path.insert(0, '..')
 
-from arthur.common import Q_CREATION_JOBS, Q_UPDATING_JOBS
+from arthur.common import Q_CREATION_JOBS
 from arthur.errors import NotFoundError
-from arthur.repositories import Repository
+from arthur.tasks import TaskRegistry
 from arthur.scheduler import Scheduler
 
 from tests import TestBaseRQ
@@ -38,47 +38,47 @@ from tests import TestBaseRQ
 class TestScheduler(TestBaseRQ):
     """Unit tests for Scheduler class"""
 
-    def test_queues_initialization(self):
-        """Queues must be created"""
-
-        schlr = Scheduler(self.conn, async_mode=False)
-
-        self.assertIn(Q_CREATION_JOBS, schlr.queues)
-        self.assertEqual(schlr.queues[Q_CREATION_JOBS]._async, False)
-
-        self.assertIn(Q_UPDATING_JOBS, schlr.queues)
-        self.assertEqual(schlr.queues[Q_UPDATING_JOBS]._async, False)
-
-    def test_add_job(self):
+    def test_schedule_task(self):
         """Jobs should be added and executed"""
 
-        args = {'uri' : 'http://example.com/',
-                'gitpath' : 'data/git_log.txt'}
-        repo = Repository('test', 'git', args,
-                          cache_path=None)
+        args = {
+            'uri' : 'http://example.com/',
+            'gitpath' : 'data/git_log.txt'
+        }
+        cache_args = {
+            'cache_path' : None,
+            'fetch_from_cache' : False
+        }
+        sched_args = {
+            'delay' : 0,
+            'max_retries_job' : 0
+        }
 
-        schlr = Scheduler(self.conn, async_mode=False)
-        job_id = schlr.add_job(Q_CREATION_JOBS, repo)
-        schlr.run_sync()
+        registry = TaskRegistry()
+        task = registry.add('mytask', 'git', args,
+                            cache_args=cache_args,
+                            sched_args=sched_args)
 
-        job = schlr.queues[Q_CREATION_JOBS].fetch_job(job_id)
+        schlr = Scheduler(self.conn, registry, async_mode=False)
+        job_id = schlr.schedule_task(task.task_id)
+
+        schlr.schedule()
+
+        job = schlr._scheduler._queues[Q_CREATION_JOBS].fetch_job(job_id)
         result = job.return_value
 
         self.assertEqual(result.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
         self.assertEqual(result.max_date, 1392185439.0)
         self.assertEqual(result.nitems, 9)
 
-    def test_not_found_queue(self):
-        """Raises an error when a queue does not exist"""
 
-        args = {'uri' : 'http://example.com',
-                'gitpath' : 'data/git_log.txt'}
-        repo = Repository('test', 'git', args,
-                          cache_path=None)
+    def test_not_found_task(self):
+        """Raises an error when the task to schedule does not exist"""
 
-        schlr = Scheduler(self.conn, async_mode=False)
+        registry = TaskRegistry()
 
-        self.assertRaises(NotFoundError, schlr.add_job, 'myqueue', repo)
+        schlr = Scheduler(self.conn, registry, async_mode=False)
+        self.assertRaises(NotFoundError, schlr.schedule_task, 'mytask')
 
 
 if __name__ == "__main__":

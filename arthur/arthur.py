@@ -25,11 +25,12 @@ import logging
 import os
 import pickle
 
-from rq import push_connection
+import rq
 
-from .common import Q_CREATION_JOBS, Q_STORAGE_ITEMS
-from .repositories import RepositoryManager
+from .common import Q_STORAGE_ITEMS, MAX_JOB_RETRIES, WAIT_FOR_QUEUING
+from .errors import AlreadyExistsError, NotFoundError
 from .scheduler import Scheduler
+from .tasks import TaskRegistry
 
 
 logger = logging.getLogger(__name__)
@@ -38,29 +39,61 @@ logger = logging.getLogger(__name__)
 class Arthur:
     """Main class to retrieve data from software repositories."""
 
-    def __init__(self, conn, async_mode=True, base_cache_path=None):
+    def __init__(self, conn, base_cache_path=None, async_mode=True):
         self.conn = conn
         self.conn.flushdb()
-        push_connection(self.conn)
+        rq.push_connection(self.conn)
 
         self.base_cache_path = base_cache_path
-        self.repositories = RepositoryManager()
-        self.scheduler = Scheduler(self.conn, async_mode=async_mode)
+        self._tasks = TaskRegistry()
+        self._scheduler = Scheduler(self.conn, self._tasks,
+                                    async_mode=async_mode)
 
     def start(self):
-        self.scheduler.start()
+        self._scheduler.schedule()
 
-    def add(self, origin, backend, args):
-        """Add and schedule a repository."""
+    def add_task(self, task_id, backend, backend_args,
+                 cache_args=None, sched_args=None):
+        """Add and schedule a task."""
 
-        repo_cache_path = None
+        if not cache_args:
+            cache_args = {}
+        if not sched_args:
+            sched_args = {}
 
-        if self.base_cache_path and args['cache']:
-            repo_cache_path = os.path.join(self.base_cache_path, origin)
+        if self.base_cache_path and cache_args['cache']:
+            cache_args['cache_path'] = os.path.join(self.base_cache_path, task_id)
+        else:
+            cache_args['cache_path'] = None
+        if 'fetch_from_cache' not in cache_args:
+            cache_args['fetch_from_cache'] = False
+        if 'delay' not in sched_args:
+            sched_args['delay'] = WAIT_FOR_QUEUING
+        if 'max_retries_job' not in sched_args:
+            sched_args['max_retries_job'] = MAX_JOB_RETRIES
 
-        self.repositories.add(origin, backend, args, repo_cache_path)
-        repository = self.repositories.get(origin)
-        self.scheduler.add_job(Q_CREATION_JOBS, repository)
+        try:
+            task = self._tasks.add(task_id, backend, backend_args,
+                                   cache_args=cache_args,
+                                   sched_args=sched_args)
+        except AlreadyExistsError as e:
+            raise e
+
+        self._scheduler.schedule_task(task.task_id)
+
+        return task
+
+    def remove_task(self, task_id):
+        """Remove and cancel a task."""
+
+        try:
+            self._scheduler.cancel_task(task_id)
+        except NotFoundError as e:
+            logger.info("Cannot cancel %s task because it does not exist.",
+                        task_id)
+            return False
+        else:
+            return True
 
     def items(self):
         """Get the items fetched by the jobs."""

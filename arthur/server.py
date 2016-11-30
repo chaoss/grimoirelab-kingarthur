@@ -99,6 +99,24 @@ class ArthurServer(Arthur):
         return "Tasks added"
 
     @cherrypy.expose
+    @cherrypy.tools.json_in()
+    @cherrypy.tools.json_out(handler=json_encoder)
+    def remove(self):
+        payload = cherrypy.request.json
+        logger.debug("Reading tasks to remove...")
+
+        task_ids = {}
+
+        for task_data in payload['tasks']:
+            task_id = task_data['task_id']
+            removed = super().remove_task(task_id)
+            task_ids[task_id] = removed
+
+        result = {'tasks': task_ids}
+
+        return result
+
+    @cherrypy.expose
     @cherrypy.tools.json_out(handler=json_encoder)
     def tasks(self):
         logger.debug("API 'tasks' method called")

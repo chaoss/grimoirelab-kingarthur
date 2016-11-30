@@ -106,48 +106,114 @@ To run a worker:
 $ arthurw -d redis://localhost/8
 ```
 
-To add jobs to Arthur, create a JSON object containing the repositories
-to analyze and the Perceval parameters needed for each backend.
+## Adding tasks
+
+To add tasks to Arthur, create a JSON object containing the tasks needed
+to fetch data from a set of repositories. Each task will run a Perceval
+backend, thus, backend parameters will also needed for each task.
 
 ```
-$ cat repositories.json
-
+$ cat tasks.json
 {
- "repositories" : [
-    {
-     "origin" : "https://github.com/grimoirelab/arthur.git",
-     "backend" : "git",
-     "args" : {
-         "gitpath" : "/tmp/git/",
-         "uri" : "https://github.com/grimoirelab/arthur.git",
-         "cache" : true,
-         "cache_fetch" : false
-         }
-    },
-    {
-     "origin" : "bugzilla_redhat",
-     "backend" : "bugzilla",
-     "args" : {
-         "url" : "https://bugzilla.redhat.com/",
-         "from_date" : "2016-09-19",
-         "cache" : true,
-         "cache_fetch" : false,
-         "delay" : 60
-         }
-    }
-  ]
+    "tasks": [
+        {
+            "task_id": "arthur.git",
+            "backend": "git",
+            "backend_args": {
+                "gitpath": "/tmp/git/arthur.git/",
+                "uri": "https://github.com/grimoirelab/arthur.git",
+                "from_date": "2015-03-01"
+            },
+            "cache": {
+                "cache": true,
+                "fetch_from_cache": false
+            },
+            "scheduler": {
+                "delay": 10
+            }
+        },
+        {
+            "task_id": "bugzilla_redhat",
+            "backend": "bugzilla",
+            "backend_args": {
+                "url": "https://bugzilla.redhat.com/",
+                "from_date": "2016-09-19"
+            },
+            "cache": {
+                "cache": true,
+                "fetch_from_cache": false
+            },
+            "scheduler": {
+                "delay": 60
+            }
+        }
+    ]
 }
 ```
 
 Then, send this JSON stream to the server calling `add` method.
 
 ```
-$ curl -H "Content-Type: application/json" --data @repositories.json http://127.0.0.1:8080/add
+$ curl -H "Content-Type: application/json" --data @tasks.json http://127.0.0.1:8080/add
 ```
 
 For this example, items will be stored in the `items` index on the
 Elastic Search server (http://localhost:9200/items).
 
+## Listing tasks
+
+The list of tasks currently scheduled can be obtained using the method `tasks`.
+
+```
+$ curl http://127.0.0.1:8080/tasks
+
+{
+    "tasks": [
+        {
+            "backend_args": {
+                "from_date": "2015-03-01T00:00:00+00:00",
+                "uri": "https://github.com/grimoirelab/arthur.git",
+                "gitpath": "/tmp/santi/"
+            },
+            "backend": "git",
+            "created_on": 1480531707.810326,
+            "task_id": "arthur.git",
+            "cache": {
+                "cache_path": null,
+                "fetch_from_cache": false,
+                "cache": true
+            },
+            "scheduler": {
+                "max_retries_job": 3,
+                "delay": 10
+            }
+        }
+    ]
+}
+```
+
+## Removing tasks
+
+Scheduled tasks can also be removed calling to the server using the `remove`
+method. A JSON stream must be provided setting the identifiers of the
+tasks to be removed.
+
+```
+$ cat tasks_to_remove.json
+
+{
+    "tasks": [
+        {
+            "task_id": "bugzilla_redhat"
+        },
+        {
+            "task_id": "arthur.git"
+        }
+    ]
+}
+
+$ curl -H "Content-Type: application/json" --data @tasks_to_remove.json http://127.0.0.1:8080/remove
+```
 
 ## License
 

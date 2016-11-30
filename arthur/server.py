@@ -78,25 +78,34 @@ class ArthurServer(Arthur):
     def add(self):
         payload = cherrypy.request.json
 
-        logger.debug("Reading repositories...")
-        for repo in payload['repositories']:
-            from_date = repo['args'].get('from_date', None)
-            if from_date:
-                repo['args']['from_date'] = str_to_datetime(from_date)
+        logger.debug("Reading tasks...")
+        for task_data in payload['tasks']:
+            backend_args = task_data['backend_args']
+            cache_args = task_data['cache']
+            sched_args = task_data['scheduler']
 
-            super().add(repo['origin'], repo['backend'], repo['args'])
+            from_date = backend_args.get('from_date', None)
+
+            if from_date:
+                backend_args['from_date'] = str_to_datetime(from_date)
+
+            super().add_task(task_data['task_id'],
+                             task_data['backend'],
+                             backend_args,
+                             cache_args=cache_args,
+                             sched_args=sched_args)
         logger.debug("Done. Ready to work!")
 
-        return "Repositories added"
+        return "Tasks added"
 
     @cherrypy.expose
     @cherrypy.tools.json_out(handler=json_encoder)
-    def repos(self):
-        logger.debug("API 'repos' method called")
+    def tasks(self):
+        logger.debug("API 'tasks' method called")
 
-        result = [repo.to_dict() for repo in self.repositories.repositories]
-        result = {'repositories' : result}
+        result = [task.to_dict() for task in self._tasks.tasks]
+        result = {'tasks' : result}
 
-        logger.debug("Ready to send repositories list")
+        logger.debug("Tasks registry read")
 
         return result

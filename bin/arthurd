@@ -92,7 +92,8 @@ def main():
     # Set cache directory
     base_cache_path = None if args.no_cache else args.cache_path
 
-    app = ArthurServer(conn, args.sync_mode, base_cache_path,
+    app = ArthurServer(conn, base_cache_path,
+                       async_mode=args.sync_mode,
                        writer=writer)
 
     run_daemon = not args.no_daemon

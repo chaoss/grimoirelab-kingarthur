@@ -78,8 +78,8 @@ optional arguments:
 * python3-dateutil >= 2.0
 * python3-redis >= 2.10
 * python3-rq >= 0.6
-* python3-cherrypy >= 5.1.0
-* perceval >= 0.2
+* python3-cherrypy >= 8.1.0
+* perceval >= 0.5
 
 ## Installation
 

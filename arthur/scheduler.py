@@ -40,7 +40,7 @@ from .common import (CH_PUBSUB,
                      TIMEOUT)
 from .errors import NotFoundError
 from .jobs import execute_perceval_job
-from .utils import unixtime_to_datetime
+from .utils import RWLock, unixtime_to_datetime
 
 
 logger = logging.getLogger(__name__)
@@ -77,6 +77,7 @@ class _JobScheduler(threading.Thread):
         self.polling = polling
         self.async_mode = async_mode
 
+        self._rwlock = RWLock()
         self._scheduler = sched.scheduler()
         self._queues = {
             queue_id : rq.Queue(queue_id,
@@ -85,6 +86,7 @@ class _JobScheduler(threading.Thread):
             for queue_id in queues
         }
         self._jobs = {}
+        self._tasks = {}
 
     def run(self):
         """Run thread to schedule jobs."""
@@ -107,30 +109,73 @@ class _JobScheduler(threading.Thread):
             # Let other threads run
             time.sleep(self.polling)
 
-    def schedule_job(self, queue_id, task_id, job_args, delay=0):
+    def schedule_job_task(self, queue_id, task_id, job_args, delay=0):
         """Schedule a job in the given queue."""
+
+        self._rwlock.writer_acquire()
 
         job_id = self._generate_job_id(task_id)
 
         event = self._scheduler.enter(delay, 1, self._enqueue_job,
                                       argument=(queue_id, job_id, job_args,))
         self._jobs[job_id] = event
+        self._tasks[task_id] = job_id
+
+        self._rwlock.writer_release()
 
         logging.debug("Job #%s (task: %s) scheduled on %s (wait: %s)",
                       job_id, task_id, queue_id, delay)
 
         return job_id
 
+    def cancel_job_task(self, task_id):
+        """Cancel the job related to the given task."""
+
+        try:
+            self._rwlock.writer_acquire()
+
+            job_id = self._tasks.get(task_id, None)
+
+            if job_id:
+                self._cancel_job(job_id)
+            else:
+                logger.warning("Task %s set to be removed was not found",
+                               task_id)
+        finally:
+            self._rwlock.writer_release()
+
     def _enqueue_job(self, queue_id, job_id, job_args):
+        self._rwlock.writer_acquire()
+
         self._queues[queue_id].enqueue(execute_perceval_job,
                                        job_id=job_id,
                                        timeout=TIMEOUT,
                                        **job_args)
         del self._jobs[job_id]
 
+        self._rwlock.writer_release()
+
         logging.debug("Job #%s (task: %s) (%s) queued in '%s'",
                       job_id, job_args['task_id'],
                       job_args['backend'], queue_id)
+
+    def _cancel_job(self, job_id):
+        event = self._jobs.get(job_id, None)
+
+        # The job is in the scheduler
+        if event:
+            try:
+                self._scheduler.cancel(event)
+                del self._jobs[job_id]
+                logger.debug("Event found for #%s; canceling it", job_id)
+                return
+            except ValueError:
+                logger.debug("Event not found for #%s; it should be on the queue",
+                             job_id)
+
+        # The job is running on a queue
+        rq.cancel_job(job_id, connection=self.conn)
+        logger.debug("Job #%s canceled", job_id)
 
     @staticmethod
     def _generate_job_id(task_id):
@@ -244,9 +289,9 @@ class Scheduler:
         job_args = self._build_job_arguments(task)
 
         # Schedule the job as soon as possible
-        job_id = self._scheduler.schedule_job(Q_CREATION_JOBS,
-                                              task.task_id, job_args,
-                                              delay=0)
+        job_id = self._scheduler.schedule_job_task(Q_CREATION_JOBS,
+                                                   task.task_id, job_args,
+                                                   delay=0)
 
         logger.info("Job #%s (task: %s) scheduled", job_id, task.task_id)
 
@@ -261,8 +306,9 @@ class Scheduler:
             found in the registry
         """
         self.registry.remove(task_id)
+        self._scheduler.cancel_job_task(task_id)
 
-        logger.info("Task task: %s canceled", task_id)
+        logger.info("Task %s canceled", task_id)
 
     def _handle_successful_job(self, job):
         """Handle successufl jobs"""
@@ -290,9 +336,9 @@ class Scheduler:
 
         delay = task.sched_args['delay']
 
-        job_id = self._scheduler.schedule_job(Q_UPDATING_JOBS,
-                                              task_id, job_args,
-                                              delay=delay)
+        job_id = self._scheduler.schedule_job_task(Q_UPDATING_JOBS,
+                                                   task_id, job_args,
+                                                   delay=delay)
 
         logger.info("Job #%s (task: %s, old job: %s) re-scheduled",
                     job_id, task_id, job.id)

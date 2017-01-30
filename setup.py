@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Copyright (C) 2015-2016 Bitergia
+# Copyright (C) 2015-2017 Bitergia
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,21 +15,36 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA.
 #
 # Authors:
 #     Santiago Dueñas <sduenas@bitergia.com>
+#     Jesus M. Gonzalez-Barahona <jgb@gsyc.es>
 #
 
 import codecs
-import os
+import os.path
 import re
 
-from distutils.core import setup
+from setuptools import setup
 
 
 here = os.path.abspath(os.path.dirname(__file__))
+readme_md = os.path.join(here, 'README.md')
 version_py = os.path.join(here, 'arthur', '_version.py')
+
+# Pypi wants the description to be in reStrcuturedText, but
+# we have it in Markdown. So, let's convert formats.
+# Set up thinkgs so that if pypandoc is not installed, it
+# just issues a warning.
+try:
+    import pypandoc
+    long_description = pypandoc.convert(readme_md, 'rst')
+except (IOError, ImportError):
+    print("Warning: pypandoc module not found, or pandoc not installed. " \
+            + "Using md instead of rst")
+    with codecs.open(readme_md, encoding='utf-8') as f:
+        long_description = f.read()
 
 with codecs.open(version_py, 'r', encoding='utf-8') as fd:
     version = re.search(r'^__version__\s*=\s*[\'"]([^\'"]*)[\'"]',
@@ -37,10 +52,24 @@ with codecs.open(version_py, 'r', encoding='utf-8') as fd:
 
 
 setup(name="arthur",
+      description="Distributed job queue platform for scheduling Perceval jobs",
+      long_description=long_description,
+      url="https://github.com/grimoirelab/arthur",
       version=version,
       author="Bitergia",
       author_email="sduenas@bitergia.com",
-      packages=["arthur"],
+      license="GPLv3",
+      classifiers=[
+        'Development Status :: 4 - Beta',
+        'Intended Audience :: Developers',
+        'Topic :: Software Development',
+        'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',
+        'Programming Language :: Python :: 3'
+      ],
+      keywords="development repositories analytics perceval rq",
+      packages=[
+        'arthur'
+      ],
       install_requires=[
         'python-dateutil>=2.6.0',
         'redis>=2.10.0',
@@ -48,4 +77,9 @@ setup(name="arthur",
         'cherrypy>=8.1',
         'perceval>=0.5.0'
       ],
-      scripts=["bin/arthur", "bin/arthurd", "bin/arthurw"])
+      scripts=[
+        'bin/arthur',
+        'bin/arthurd',
+        'bin/arthurw'
+      ],
+      zip_safe=False)

@@ -41,4 +41,11 @@ setup(name="arthur",
       author="Bitergia",
       author_email="sduenas@bitergia.com",
       packages=["arthur"],
+      install_requires=[
+        'python-dateutil>=2.6.0',
+        'redis>=2.10.0',
+        'rq>=0.6.0',
+        'cherrypy>=8.1',
+        'perceval>=0.5.0'
+      ],
       scripts=["bin/arthur", "bin/arthurd", "bin/arthurw"])

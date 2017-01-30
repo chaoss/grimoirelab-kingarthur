@@ -75,7 +75,7 @@ optional arguments:
 
 * Python >= 3.4
 * Redis >= 2.3
-* python3-dateutil >= 2.0
+* python3-dateutil >= 2.6
 * python3-redis >= 2.10
 * python3-rq >= 0.6
 * python3-cherrypy >= 8.1.0

@@ -20,7 +20,7 @@
 
 import unittest
 
-from redis import StrictRedis
+from fakeredis import FakeStrictRedis
 from rq import pop_connection, push_connection
 
 
@@ -29,17 +29,9 @@ from rq import pop_connection, push_connection
 # to their authors.
 
 def find_empty_redis_database():
-    """Connect to a random Redis database.
-
-    Tries to connect a random Redis database (starting on 8) and
-    will use/connect it when no keys are stored in there.
-    """
-    for db in range(8, 16):
-        conn = StrictRedis(db=db)
-        empty = len(conn.keys('*')) == 0
-        if empty:
-            return conn
-    assert False, "No empty Redis database found to run tests in."
+    """Connect to a fake Redis database"""
+    conn = FakeStrictRedis()
+    return conn
 
 
 class TestBaseRQ(unittest.TestCase):
@@ -54,7 +46,7 @@ class TestBaseRQ(unittest.TestCase):
     def tearDownClass(cls):
         conn = pop_connection()
         assert conn == cls.conn, \
-            "Wow, something really nasty happened to the Redis connection stack. Check your setup."
+            "Wow, something really nasty happened to the FakeRedis connection stack. Check your setup."
 
     def setUp(self):
         self.conn.flushdb()

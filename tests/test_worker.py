@@ -25,7 +25,7 @@ import pickle
 import sys
 import unittest
 
-import rq
+import rq.worker
 
 if not '..' in sys.path:
     sys.path.insert(0, '..')
@@ -34,6 +34,11 @@ from arthur.common import CH_PUBSUB
 from arthur.worker import ArthurWorker
 
 from tests import TestBaseRQ, mock_sum, mock_failure
+
+
+class MockArthurWorker(rq.worker.SimpleWorker, ArthurWorker):
+    """Unit tests for ArthurWorker class, avoids rq inheritance problems"""
+    pass
 
 
 class TestArthurWorker(TestBaseRQ):
@@ -46,7 +51,7 @@ class TestArthurWorker(TestBaseRQ):
         pubsub.subscribe(CH_PUBSUB)
 
         q = rq.Queue('foo')
-        w = ArthurWorker([q])
+        w = MockArthurWorker([q])
 
         job_a = q.enqueue(mock_sum, a=2, b=3)
         job_b = q.enqueue(mock_failure)

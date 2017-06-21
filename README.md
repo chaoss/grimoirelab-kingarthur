@@ -1,4 +1,5 @@
-# Arthur
+# Arthur [![Build Status](https://travis-ci.org/grimoirelab/arthur.svg?branch=master)](https://travis-ci.org/grimoirelab/arthur)
+[![Coverage Status](https://img.shields.io/coveralls/grimoirelab/arthur.svg)](https://coveralls.io/r/grimoirelab/arthur?branch=master)
 
 King Arthur commands his loyal knight Perceval on the quest to fetch
 data from software repositories.

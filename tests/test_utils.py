@@ -29,7 +29,7 @@ import threading
 import time
 import unittest
 
-if not '..' in sys.path:
+if '..' not in sys.path:
     sys.path.insert(0, '..')
 
 from arthur.utils import RWLock, JSONEncoder

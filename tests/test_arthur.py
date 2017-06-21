@@ -28,7 +28,7 @@ import sys
 import tempfile
 import unittest
 
-if not '..' in sys.path:
+if '..' not in sys.path:
     sys.path.insert(0, '..')
 
 from arthur.arthur import Arthur

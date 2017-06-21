@@ -34,7 +34,7 @@ import rq
 
 from perceval.cache import Cache
 
-if not '..' in sys.path:
+if '..' not in sys.path:
     sys.path.insert(0, '..')
 
 from arthur import __version__

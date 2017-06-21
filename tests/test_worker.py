@@ -27,7 +27,7 @@ import unittest
 
 import rq.worker
 
-if not '..' in sys.path:
+if '..' not in sys.path:
     sys.path.insert(0, '..')
 
 from arthur.common import CH_PUBSUB

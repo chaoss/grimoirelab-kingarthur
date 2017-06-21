@@ -24,7 +24,7 @@
 import sys
 import unittest
 
-if not '..' in sys.path:
+if '..' not in sys.path:
     sys.path.insert(0, '..')
 
 from arthur.common import Q_CREATION_JOBS

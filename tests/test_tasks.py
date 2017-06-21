@@ -26,7 +26,7 @@ import unittest
 
 from datetime import datetime
 
-if not '..' in sys.path:
+if '..' not in sys.path:
     sys.path.insert(0, '..')
 
 from arthur.errors import AlreadyExistsError, NotFoundError

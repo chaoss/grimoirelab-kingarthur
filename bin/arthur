@@ -31,9 +31,9 @@ import time
 
 import redis
 
+from grimoirelab.toolkit.datetime import str_to_datetime
+
 from arthur.arthur import Arthur
-from arthur.errors import InvalidDateError
-from arthur.utils import str_to_datetime
 
 
 ARTHUR_USAGE_MSG = \

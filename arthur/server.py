@@ -27,9 +27,10 @@ import time
 
 import cherrypy
 
+from grimoirelab.toolkit.datetime import str_to_datetime
 
 from .arthur import Arthur
-from .utils import JSONEncoder, str_to_datetime
+from .utils import JSONEncoder
 
 
 logger = logging.getLogger(__name__)

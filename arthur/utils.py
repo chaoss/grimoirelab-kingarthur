@@ -25,11 +25,6 @@ import datetime
 import json
 import threading
 
-import dateutil.parser
-import dateutil.tz
-
-from .errors import InvalidDateError
-
 
 class RWLock:
     """Read Write lock to avoid starvation.
@@ -95,57 +90,3 @@ class JSONEncoder(json.JSONEncoder):
     def iterencode(self, o, _one_shot=False):
         for chunk in super().iterencode(o, _one_shot=_one_shot):
             yield chunk
-
-
-def str_to_datetime(ts):
-    """Format a string to a datetime object.
-
-    This functions supports several date formats like YYYY-MM-DD,
-    MM-DD-YYYY, YY-MM-DD, YYYY-MM-DD HH:mm:SS +HH:MM, among others.
-    When the timezone is not provided, UTC+0 will be set as default
-    (using `dateutil.tz.tzutc` object).
-
-    :param ts: string to convert
-
-    :returns: a datetime object
-
-    :raises IvalidDateError: when the given string cannot be converted into
-        a valid date
-    """
-    if not ts:
-        raise InvalidDateError(date=str(ts))
-
-    try:
-        # Try to remove parentheses section from dates
-        # because they cannot be parsed, like in
-        # 'Wed, 26 Oct 2005 15:20:32 -0100 (GMT+1)'.
-        ts = ts.split('(')[0]
-
-        dt = dateutil.parser.parse(ts)
-
-        if not dt.tzinfo:
-            dt = dt.replace(tzinfo=dateutil.tz.tzutc())
-        return dt
-    except Exception:
-        raise InvalidDateError(date=str(ts))
-
-
-def unixtime_to_datetime(ut):
-    """Convert a unixtime timestamp to a datetime object.
-
-    The function converts a timestamp in Unix format to a
-    datetime object. UTC timezone will also be set.
-
-    :param ut: Unix timestamp to convert
-
-    :returns: a datetime object
-
-    :raises InvalidDateError: when the given timestamp cannot be
-        converted into a valid date
-    """
-    try:
-        dt = datetime.datetime.utcfromtimestamp(ut)
-        dt = dt.replace(tzinfo=dateutil.tz.tzutc())
-        return dt
-    except Exception:
-        raise InvalidDateError(date=str(ut))

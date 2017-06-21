@@ -75,7 +75,8 @@ setup(name="arthur",
         'redis>=2.10.0',
         'rq>=0.6.0',
         'cherrypy>=8.1',
-        'perceval>=0.5.0'
+        'perceval>=0.8.0',
+        'grimoirelab-toolkit>=0.1.0'
       ],
       scripts=[
         'bin/arthur',

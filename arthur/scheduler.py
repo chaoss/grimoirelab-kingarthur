@@ -33,6 +33,8 @@ import uuid
 import rq
 import rq.job
 
+from grimoirelab.toolkit.datetime import unixtime_to_datetime
+
 from .common import (CH_PUBSUB,
                      Q_CREATION_JOBS,
                      Q_UPDATING_JOBS,
@@ -40,7 +42,7 @@ from .common import (CH_PUBSUB,
                      TIMEOUT)
 from .errors import NotFoundError
 from .jobs import execute_perceval_job
-from .utils import RWLock, unixtime_to_datetime
+from .utils import RWLock
 
 
 logger = logging.getLogger(__name__)

@@ -22,7 +22,6 @@
 #
 
 import functools
-import inspect
 import logging
 
 import rq
@@ -32,10 +31,12 @@ import perceval
 import perceval.backends
 import perceval.cache
 
+from grimoirelab.toolkit.datetime import unixtime_to_datetime
+from grimoirelab.toolkit.introspect import find_signature_parameters
+
 from ._version import __version__
 from .common import MAX_JOB_RETRIES
 from .errors import NotFoundError
-from .utils import unixtime_to_datetime
 
 
 logger = logging.getLogger(__name__)
@@ -250,7 +251,7 @@ class PercevalJob:
         :raises AttributeError: raised when any of the required
             parameters is not found
         """
-        kinit = find_signature_parameters(backend_args, self._bklass.__init__)
+        kinit = find_signature_parameters(self._bklass.__init__, backend_args)
         obj = self._bklass(**kinit)
 
         if not fetch_from_cache:
@@ -258,7 +259,7 @@ class PercevalJob:
         else:
             fnc_fetch = obj.fetch_from_cache
 
-        kfetch = find_signature_parameters(backend_args, fnc_fetch)
+        kfetch = find_signature_parameters(fnc_fetch, backend_args)
 
         for item in fnc_fetch(**kfetch):
             yield item
@@ -344,37 +345,3 @@ def execute_perceval_job(backend, backend_args, qitems, task_id,
                  result.job_id, task_id, result.backend, str(result.nitems))
 
     return result
-
-
-def find_signature_parameters(params, callable):
-    """Find on a dict the parameters of a callable.
-
-    Returns a dict with the parameters found on a callable. When
-    any of the required parameters of a callable is not found,
-    it raises a `AttributeError` exception.
-    """
-    to_match = inspect_signature_parameters(callable)
-
-    result = {}
-
-    for p in to_match:
-        name = p.name
-        if name in params:
-            result[name] =  params[name]
-        elif p.default == inspect.Parameter.empty:
-            # Parameters which its default value is empty are
-            # considered as required
-            raise AttributeError("required argument %s not found" % name,
-                                 name)
-    return result
-
-
-def inspect_signature_parameters(callable):
-    """Get the parameter of a callable.
-
-    Parameters 'self' and 'cls' are filtered from the result.
-    """
-    signature = inspect.signature(callable)
-    params = [v for p, v in signature.parameters.items() \
-              if p not in ('self', 'cls')]
-    return params

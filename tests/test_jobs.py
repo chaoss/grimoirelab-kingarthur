@@ -22,7 +22,6 @@
 #
 
 import datetime
-import os
 import pickle
 import shutil
 import sys
@@ -43,8 +42,6 @@ from arthur.errors import NotFoundError
 from arthur.jobs import (JobResult,
                          PercevalJob,
                          execute_perceval_job,
-                         find_signature_parameters,
-                         inspect_signature_parameters,
                          metadata)
 
 from tests import TestBaseRQ
@@ -792,69 +789,6 @@ class TestExecuteJob(TestBaseRQ):
                             backend='git', backend_args=args,
                             qitems='items', task_id='mytask',
                             fetch_from_cache=True)
-
-
-class MockCallable:
-    """Mock class for testing purposes"""
-
-    def __init__(self, *args, **kwargs):
-        pass
-
-    def test(self, a, b, c=None):
-        pass
-
-    @classmethod
-    def class_test(cls, a, b):
-        pass
-
-
-class TestFindSignature(unittest.TestCase):
-    """Unit tests for find_signature_parameters"""
-
-    def test_find_parameters(self):
-        """Find a list of parameters"""
-
-        expected = {'a' : 1, 'b' : 2, 'c' : 3}
-        params = {'a' : 1, 'b' : 2, 'c' : 3}
-        found = find_signature_parameters(params, MockCallable.test)
-        self.assertDictEqual(found, expected)
-
-        expected = {'a' : 1, 'b' : 2}
-        params = {'a' : 1, 'b' : 2, 'd' : 3}
-        found = find_signature_parameters(params, MockCallable.test)
-        self.assertDictEqual(found, expected)
-
-        with self.assertRaises(AttributeError) as e:
-            params = {'a' : 1, 'd' : 3}
-            found = find_signature_parameters(params, MockCallable.test)
-            self.assertEqual(e.exception.args[1], 'b')
-
-
-class TestInspectSignature(unittest.TestCase):
-    """Unit tests for inspect_signature_parameters"""
-
-    def test_inspect(self):
-        """Check the parameters from a callable"""
-
-        expected = ['args', 'kwargs']
-        params = inspect_signature_parameters(MockCallable)
-        params = [p.name for p in params]
-        self.assertListEqual(params, expected)
-
-        expected = ['args', 'kwargs']
-        params = inspect_signature_parameters(MockCallable.__init__)
-        params = [p.name for p in params]
-        self.assertListEqual(params, expected)
-
-        expected = ['a', 'b', 'c']
-        params = inspect_signature_parameters(MockCallable.test)
-        params = [p.name for p in params]
-        self.assertListEqual(params, expected)
-
-        expected = ['a', 'b']
-        params = inspect_signature_parameters(MockCallable.class_test)
-        params = [p.name for p in params]
-        self.assertListEqual(params, expected)
 
 
 if __name__ == "__main__":

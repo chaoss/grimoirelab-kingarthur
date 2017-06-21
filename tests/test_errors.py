@@ -98,15 +98,5 @@ class TestNotFoundError(unittest.TestCase):
         self.assertEqual(e.element, 'repository')
 
 
-class TestInvalidDateError(unittest.TestCase):
-
-    def test_message(self):
-        """Make sure that prints the correct error"""
-
-        e = errors.InvalidDateError(date='1900-13-01')
-        self.assertEqual('1900-13-01 is not a valid date',
-                         str(e))
-
-
 if __name__ == "__main__":
     unittest.main()

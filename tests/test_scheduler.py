@@ -42,16 +42,16 @@ class TestScheduler(TestBaseRQ):
         """Jobs should be added and executed"""
 
         args = {
-            'uri' : 'http://example.com/',
-            'gitpath' : 'data/git_log.txt'
+            'uri': 'http://example.com/',
+            'gitpath': 'data/git_log.txt'
         }
         cache_args = {
-            'cache_path' : None,
-            'fetch_from_cache' : False
+            'cache_path': None,
+            'fetch_from_cache': False
         }
         sched_args = {
-            'delay' : 0,
-            'max_retries_job' : 0
+            'delay': 0,
+            'max_retries_job': 0
         }
 
         registry = TaskRegistry()
@@ -70,7 +70,6 @@ class TestScheduler(TestBaseRQ):
         self.assertEqual(result.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
         self.assertEqual(result.max_date, 1392185439.0)
         self.assertEqual(result.nitems, 9)
-
 
     def test_not_found_task(self):
         """Raises an error when the task to schedule does not exist"""

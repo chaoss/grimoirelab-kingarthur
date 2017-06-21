@@ -165,10 +165,10 @@ class TestJSONEncoder(unittest.TestCase):
         encoder = JSONEncoder()
 
         obj = {
-            'l' : [None],
-            'dt' : datetime.datetime(2016, 1, 1, 8, 8, 8),
-            's' : "a string",
-            'i' : 8
+            'l': [None],
+            'dt': datetime.datetime(2016, 1, 1, 8, 8, 8),
+            's': "a string",
+            'i': 8
         }
 
         expected = obj

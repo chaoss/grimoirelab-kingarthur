@@ -58,5 +58,6 @@ class TestBaseRQ(unittest.TestCase):
 def mock_sum(a, b):
     return a + b
 
+
 def mock_failure():
     raise Exception

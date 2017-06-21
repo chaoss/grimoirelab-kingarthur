@@ -40,8 +40,8 @@ class TestTask(unittest.TestCase):
         """Check arguments initialization"""
 
         args = {
-            'from_date' : '1970-01-01',
-            'component' : 'test'
+            'from_date': '1970-01-01',
+            'component': 'test'
         }
         before = datetime.now().timestamp()
 
@@ -56,11 +56,11 @@ class TestTask(unittest.TestCase):
 
         # Test when cache and scheduler arguments are given
         cache = {
-            'cache_path' : '/tmp/cache',
-            'fetch' : True
+            'cache_path': '/tmp/cache',
+            'fetch': True
         }
         sched = {
-            'stime' : 10
+            'stime': 10
         }
         before = datetime.now().timestamp()
 
@@ -78,15 +78,15 @@ class TestTask(unittest.TestCase):
         """Check whether the object is converted into a dict"""
 
         args = {
-            'from_date' : '1970-01-01',
-            'component' : 'test'
+            'from_date': '1970-01-01',
+            'component': 'test'
         }
         cache = {
-            'cache_path' : '/tmp/cache',
-            'fetch' : True
+            'cache_path': '/tmp/cache',
+            'fetch': True
         }
         sched = {
-            'stime' : 10
+            'stime': 10
         }
         before = datetime.now().timestamp()
 
@@ -95,11 +95,11 @@ class TestTask(unittest.TestCase):
         d = task.to_dict()
 
         expected = {
-            'task_id' : 'mytask',
-            'backend' : 'mock_backend',
-            'backend_args' : args,
-            'cache' : cache,
-            'scheduler' : sched
+            'task_id': 'mytask',
+            'backend': 'mock_backend',
+            'backend_args': args,
+            'cache': cache,
+            'scheduler': sched
         }
 
         created_on = d.pop('created_on')
@@ -122,15 +122,15 @@ class TestTaskRegistry(unittest.TestCase):
         """Test to add tasks to the registry"""
 
         args = {
-            'from_date' : '1970-01-01',
-            'component' : 'test'
+            'from_date': '1970-01-01',
+            'component': 'test'
         }
         cache = {
-            'cache_path' : '/tmp/cache',
-            'fetch' : True
+            'cache_path': '/tmp/cache',
+            'fetch': True
         }
         sched = {
-            'stime' : 10
+            'stime': 10
         }
 
         registry = TaskRegistry()
@@ -192,8 +192,8 @@ class TestTaskRegistry(unittest.TestCase):
         """Test to remove a task from the registry"""
 
         args = {
-            'from_date' : '1970-01-01',
-            'component' : 'test'
+            'from_date': '1970-01-01',
+            'component': 'test'
         }
 
         registry = TaskRegistry()
@@ -230,8 +230,8 @@ class TestTaskRegistry(unittest.TestCase):
         """Test to get a task from the registry"""
 
         args = {
-            'from_date' : '1970-01-01',
-            'component' : 'test'
+            'from_date': '1970-01-01',
+            'component': 'test'
         }
 
         registry = TaskRegistry()

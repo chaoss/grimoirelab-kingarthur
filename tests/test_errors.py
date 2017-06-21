@@ -63,7 +63,7 @@ class TestBaseError(unittest.TestCase):
 
         When this happens, it raises a KeyError exception.
         """
-        kwargs = {'code' : 1, 'error' : 'Fatal error'}
+        kwargs = {'code': 1, 'error': 'Fatal error'}
         self.assertRaises(KeyError, MockErrorArgs, **kwargs)
 
 

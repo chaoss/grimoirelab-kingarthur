@@ -63,7 +63,7 @@ class TestArthur(unittest.TestCase):
 
         app = Arthur(self.conn, async_mode=False)
         app.add_task('test', 'git', {'uri': self.git_path,
-                                     'gitpath' : new_path})
+                                     'gitpath': new_path})
         app.start()
 
         commits = [item['data']['commit'] for item in app.items()]

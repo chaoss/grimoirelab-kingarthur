@@ -89,7 +89,6 @@ def setup_mock_bugzilla_server():
     bodies_html = [read_file('data/bugzilla_bug_activity.html', mode='rb'),
                    read_file('data/bugzilla_bug_activity_empty.html', mode='rb')]
 
-
     def request_callback(method, uri, headers):
         if uri.startswith(BUGZILLA_BUGLIST_URL):
             body = bodies_csv.pop(0)
@@ -105,20 +104,20 @@ def setup_mock_bugzilla_server():
     httpretty.register_uri(httpretty.GET,
                            BUGZILLA_BUGLIST_URL,
                            responses=[
-                                httpretty.Response(body=request_callback) \
-                                for _ in range(3)
+                               httpretty.Response(body=request_callback)
+                               for _ in range(3)
                            ])
     httpretty.register_uri(httpretty.GET,
                            BUGZILLA_BUG_URL,
                            responses=[
-                                httpretty.Response(body=request_callback) \
-                                for _ in range(3)
+                               httpretty.Response(body=request_callback)
+                               for _ in range(3)
                            ])
     httpretty.register_uri(httpretty.GET,
                            BUGZILLA_BUG_ACTIVITY_URL,
                            responses=[
-                                httpretty.Response(body=request_callback) \
-                                for _ in range(7)
+                               httpretty.Response(body=request_callback)
+                               for _ in range(7)
                            ])
 
     return http_requests
@@ -150,18 +149,18 @@ def setup_mock_redmine_server(max_failures=0):
         params = last_request.querystring
 
         if uri.startswith(REDMINE_ISSUES_URL):
-            if params['updated_on'][0] == '>=1970-01-01T00:00:00Z' and \
-                params['offset'][0] == '0':
-                body = issues_body
-            elif params['updated_on'][0] == '>=1970-01-01T00:00:00Z' and \
-                params['offset'][0] == '3':
-                body = issues_next_body
-            elif params['updated_on'][0] == '>=2016-07-27T00:00:00Z' and \
-                params['offset'][0] == '0':
-                body = issues_next_body
-            elif params['updated_on'][0] == '>=2011-12-08T17:58:37Z' and \
-                params['offset'][0] == '0':
-                body = issues_next_body
+            if (params['updated_on'][0] == '>=1970-01-01T00:00:00Z' and
+                params['offset'][0] == '0'):
+                    body = issues_body
+            elif (params['updated_on'][0] == '>=1970-01-01T00:00:00Z' and
+                  params['offset'][0] == '3'):
+                    body = issues_next_body
+            elif (params['updated_on'][0] == '>=2016-07-27T00:00:00Z' and
+                  params['offset'][0] == '0'):
+                    body = issues_next_body
+            elif (params['updated_on'][0] == '>=2011-12-08T17:58:37Z' and
+                  params['offset'][0] == '0'):
+                    body = issues_next_body
             else:
                 body = issues_empty_body
         elif uri.startswith(REDMINE_ISSUE_2_URL):
@@ -196,7 +195,7 @@ def setup_mock_redmine_server(max_failures=0):
         httpretty.register_uri(httpretty.GET,
                                url,
                                responses=[
-                                    httpretty.Response(body=request_callback)
+                                   httpretty.Response(body=request_callback)
                                ])
 
     return http_requests
@@ -211,7 +210,7 @@ class MockJob:
     @metadata
     def execute(self):
         for x in range(5):
-            item = {'item' : x}
+            item = {'item': x}
             yield item
 
 
@@ -306,8 +305,8 @@ class TestPercevalJob(TestBaseRQ):
         job = PercevalJob('arthur-job-1234567890', 'mytask', 'git',
                           self.conn, 'items')
         args = {
-            'uri' : 'http://example.com/',
-            'gitpath' : 'data/git_log.txt'
+            'uri': 'http://example.com/',
+            'gitpath': 'data/git_log.txt'
         }
 
         job.run(args, fetch_from_cache=False)
@@ -345,7 +344,7 @@ class TestPercevalJob(TestBaseRQ):
         job = PercevalJob('arthur-job-1234567890', 'mytask', 'git',
                           self.conn, 'items')
         args = {
-            'uri' : 'http://example.com/'
+            'uri': 'http://example.com/'
         }
 
         with self.assertRaises(AttributeError) as e:
@@ -369,8 +368,8 @@ class TestPercevalJob(TestBaseRQ):
         # First, we fetch the bugs from the server, storing them
         # in a cache
         args = {
-            'url' : BUGZILLA_SERVER_URL,
-            'max_bugs' : 5
+            'url': BUGZILLA_SERVER_URL,
+            'max_bugs': 5
         }
 
         job = PercevalJob('arthur-job-1234567890', 'mytask', 'bugzilla',
@@ -432,9 +431,9 @@ class TestPercevalJob(TestBaseRQ):
         http_requests = setup_mock_redmine_server(max_failures=1)
 
         args = {
-            'url' : REDMINE_URL,
-            'api_token' : 'AAAA',
-            'max_issues' : 3
+            'url': REDMINE_URL,
+            'api_token': 'AAAA',
+            'max_issues': 3
         }
 
         job = PercevalJob('arthur-job-1234567890', 'mytask', 'redmine',
@@ -563,8 +562,8 @@ class TestExecuteJob(TestBaseRQ):
         """Execute Git backend job"""
 
         args = {
-            'uri' : 'http://example.com/',
-            'gitpath' : 'data/git_log.txt'
+            'uri': 'http://example.com/',
+            'gitpath': 'data/git_log.txt'
         }
 
         q = rq.Queue('queue', async=False)
@@ -609,9 +608,9 @@ class TestExecuteJob(TestBaseRQ):
         http_requests = setup_mock_redmine_server(max_failures=2)
 
         args = {
-            'url' : REDMINE_URL,
-            'api_token' : 'AAAA',
-            'max_issues' : 3
+            'url': REDMINE_URL,
+            'api_token': 'AAAA',
+            'max_issues': 3
         }
 
         q = rq.Queue('queue', async=False)
@@ -654,9 +653,9 @@ class TestExecuteJob(TestBaseRQ):
         http_requests = setup_mock_redmine_server(max_failures=2)
 
         args = {
-            'url' : REDMINE_URL,
-            'api_token' : 'AAAA',
-            'max_issues' : 3
+            'url': REDMINE_URL,
+            'api_token': 'AAAA',
+            'max_issues': 3
         }
 
         q = rq.Queue('queue', async=False)
@@ -672,9 +671,9 @@ class TestExecuteJob(TestBaseRQ):
         """Execute a Git backend job that will not produce any results"""
 
         args = {
-            'uri' : 'http://example.com/',
-            'gitpath' : 'data/git_log_empty.txt',
-            'from_date' : datetime.datetime(2020, 1, 1, 1, 1, 1)
+            'uri': 'http://example.com/',
+            'gitpath': 'data/git_log_empty.txt',
+            'from_date': datetime.datetime(2020, 1, 1, 1, 1, 1)
         }
 
         q = rq.Queue('queue', async=False)
@@ -715,8 +714,8 @@ class TestExecuteJob(TestBaseRQ):
         # First, we fetch the bugs from the server, storing them
         # in a cache
         args = {
-            'url' : BUGZILLA_SERVER_URL,
-            'max_bugs' : 5
+            'url': BUGZILLA_SERVER_URL,
+            'max_bugs': 5
         }
 
         job = q.enqueue(execute_perceval_job,
@@ -772,8 +771,8 @@ class TestExecuteJob(TestBaseRQ):
         """Check if it fails when caching is not supported"""
 
         args = {
-            'uri' : 'http://example.com/',
-            'gitpath' : 'data/git_log.txt'
+            'uri': 'http://example.com/',
+            'gitpath': 'data/git_log.txt'
         }
 
         q = rq.Queue('queue', async=False)

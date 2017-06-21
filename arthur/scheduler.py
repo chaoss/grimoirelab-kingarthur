@@ -82,9 +82,9 @@ class _JobScheduler(threading.Thread):
         self._rwlock = RWLock()
         self._scheduler = sched.scheduler()
         self._queues = {
-            queue_id : rq.Queue(queue_id,
-                                connection=self.conn,
-                                async=self.async_mode) \
+            queue_id: rq.Queue(queue_id,
+                               connection=self.conn,
+                               async=self.async_mode)
             for queue_id in queues
         }
         self._jobs = {}

@@ -64,12 +64,12 @@ class Task:
 
     def to_dict(self):
         return {
-            'task_id' : self.task_id,
-            'created_on' : self.created_on,
-            'backend' : self.backend,
-            'backend_args' : self.backend_args,
-            'cache' : self.cache_args,
-            'scheduler' : self.sched_args
+            'task_id': self.task_id,
+            'created_on': self.created_on,
+            'backend': self.backend,
+            'backend_args': self.backend_args,
+            'cache': self.cache_args,
+            'scheduler': self.sched_args
         }
 
 

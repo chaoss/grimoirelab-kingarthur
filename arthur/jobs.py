@@ -169,8 +169,7 @@ class PercevalJob:
             self._result.nitems += 1
             self._result.last_uuid = item['uuid']
 
-            if not self.result.max_date or \
-                self.result.max_date < item['updated_on']:
+            if not self.result.max_date or self.result.max_date < item['updated_on']:
                 self._result.max_date = item['updated_on']
             if 'offset' in item:
                 self._result.offset = item['offset']

@@ -41,8 +41,8 @@ try:
     import pypandoc
     long_description = pypandoc.convert(readme_md, 'rst')
 except (IOError, ImportError):
-    print("Warning: pypandoc module not found, or pandoc not installed. " \
-            + "Using md instead of rst")
+    print("Warning: pypandoc module not found, or pandoc not installed. "
+          "Using md instead of rst")
     with codecs.open(readme_md, encoding='utf-8') as f:
         long_description = f.read()
 
@@ -60,27 +60,27 @@ setup(name="arthur",
       author_email="sduenas@bitergia.com",
       license="GPLv3",
       classifiers=[
-        'Development Status :: 4 - Beta',
-        'Intended Audience :: Developers',
-        'Topic :: Software Development',
-        'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',
-        'Programming Language :: Python :: 3'
+          'Development Status :: 4 - Beta',
+          'Intended Audience :: Developers',
+          'Topic :: Software Development',
+          'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',
+          'Programming Language :: Python :: 3'
       ],
       keywords="development repositories analytics perceval rq",
       packages=[
-        'arthur'
+          'arthur'
       ],
       install_requires=[
-        'python-dateutil>=2.6.0',
-        'redis>=2.10.0',
-        'rq>=0.6.0',
-        'cherrypy>=8.1',
-        'perceval>=0.8.0',
-        'grimoirelab-toolkit>=0.1.0'
+          'python-dateutil>=2.6.0',
+          'redis>=2.10.0',
+          'rq>=0.6.0',
+          'cherrypy>=8.1',
+          'perceval>=0.8.0',
+          'grimoirelab-toolkit>=0.1.0'
       ],
       scripts=[
-        'bin/arthur',
-        'bin/arthurd',
-        'bin/arthurw'
+          'bin/arthur',
+          'bin/arthurd',
+          'bin/arthurw'
       ],
       zip_safe=False)

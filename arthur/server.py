@@ -123,7 +123,7 @@ class ArthurServer(Arthur):
         logger.debug("API 'tasks' method called")
 
         result = [task.to_dict() for task in self._tasks.tasks]
-        result = {'tasks' : result}
+        result = {'tasks': result}
 
         logger.debug("Tasks registry read")
 

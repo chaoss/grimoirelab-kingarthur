@@ -34,24 +34,26 @@ logger = logging.getLogger(__name__)
 
 
 NOT_ANALIZE_STRINGS_MAPPING = {
-    'dynamic_templates' : [{
-        'notanalyzed' : {
-            'match' : '*',
-            'match_mapping_type' : 'string',
-            'mapping' : {
-                'type' : 'string',
-                'index' : 'not_analyzed'
+    'dynamic_templates': [
+        {
+            'notanalyzed': {
+                'match': '*',
+                'match_mapping_type': 'string',
+                'mapping': {
+                    'type': 'string',
+                    'index': 'not_analyzed'
+                }
             }
         }
-    }]
+    ]
 }
 
 DISABLE_DYNAMIC_MAPPING = {
-    'dynamic' : True,
-    'properties' : {
-        'data' : {
-            'dynamic' : False,
-            'properties' : {}
+    'dynamic': True,
+    'properties': {
+        'data': {
+            'dynamic': False,
+            'properties': {}
         }
     }
 }
@@ -64,7 +66,7 @@ class ElasticSearchError(BaseError):
 
 class ElasticItemsWriter:
 
-    def __init__(self,  idx_url, clean=False):
+    def __init__(self, idx_url, clean=False):
         self.idx_url = idx_url
         was_created = self.create_index(self.idx_url, clean=clean)
 
@@ -110,7 +112,7 @@ class ElasticItemsWriter:
             except UnicodeEncodeError:
                 # Related to body.encode('iso-8859-1'). mbox data
                 logger.error("Encondig error ... converting bulk to iso-8859-1")
-                bulk = bulk.encode('iso-8859-1','ignore')
+                bulk = bulk.encode('iso-8859-1', 'ignore')
                 requests.put(url, data=bulk)
 
             logger.debug("Bulk package sent (%.2f sec prev, %i total)",

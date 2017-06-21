@@ -29,6 +29,6 @@ Q_STORAGE_ITEMS = 'items'
 
 TIMEOUT = 3600 * 24
 
-WAIT_FOR_QUEUING = 10 # In seconds
+WAIT_FOR_QUEUING = 10  # In seconds
 
 MAX_JOB_RETRIES = 3

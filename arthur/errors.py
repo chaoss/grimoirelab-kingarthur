@@ -21,6 +21,7 @@
 #     Alvaro del Castillo San Felix <acs@bitergia.com>
 #
 
+
 class BaseError(Exception):
     """Base class for Arthur exceptions.
 

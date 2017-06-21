@@ -50,10 +50,10 @@ class ArthurWorker(rq.Worker):
         job_result = job.return_value if job_status == 'finished' else None
 
         data = {
-                "job_id" : job.id,
-                "status" : job_status,
-                "result" : job_result
-               }
+            'job_id': job.id,
+            'status': job_status,
+            'result': job_result
+        }
 
         msg = pickle.dumps(data)
         self.connection.publish(CH_PUBSUB, msg)

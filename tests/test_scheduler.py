@@ -21,6 +21,7 @@
 #     Santiago Dueñas <sduenas@bitergia.com>
 #
 
+import os.path
 import sys
 import unittest
 
@@ -43,7 +44,7 @@ class TestScheduler(TestBaseRQ):
 
         args = {
             'uri': 'http://example.com/',
-            'gitpath': 'data/git_log.txt'
+            'gitpath': os.path.join(self.dir, 'data/git_log.txt')
         }
         cache_args = {
             'cache_path': None,

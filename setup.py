@@ -25,6 +25,7 @@
 import codecs
 import os.path
 import re
+import sys
 
 from setuptools import setup
 
@@ -42,7 +43,7 @@ try:
     long_description = pypandoc.convert(readme_md, 'rst')
 except (IOError, ImportError):
     print("Warning: pypandoc module not found, or pandoc not installed. "
-          "Using md instead of rst")
+          "Using md instead of rst", file=sys.stderr)
     with codecs.open(readme_md, encoding='utf-8') as f:
         long_description = f.read()
 
@@ -51,7 +52,7 @@ with codecs.open(version_py, 'r', encoding='utf-8') as fd:
                         fd.read(), re.MULTILINE).group(1)
 
 
-setup(name="arthur",
+setup(name="kingarthur",
       description="Distributed job queue platform for scheduling Perceval jobs",
       long_description=long_description,
       url="https://github.com/grimoirelab/arthur",
@@ -70,6 +71,8 @@ setup(name="arthur",
       packages=[
           'arthur'
       ],
+      python_requires='>=3.4',
+      setup_requires=['wheel'],
       install_requires=[
           'python-dateutil>=2.6.0',
           'redis>=2.10.0',
@@ -78,6 +81,8 @@ setup(name="arthur",
           'perceval>=0.8.0',
           'grimoirelab-toolkit>=0.1.0'
       ],
+      tests_require=['httpretty==0.8.6', 'fakeredis'],
+      test_suite='tests',
       scripts=[
           'bin/arthur',
           'bin/arthurd',

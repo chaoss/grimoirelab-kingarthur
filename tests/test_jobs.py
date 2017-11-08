@@ -22,6 +22,7 @@
 #
 
 import datetime
+import os.path
 import pickle
 import shutil
 import sys
@@ -69,12 +70,11 @@ REDMINE_URL_LIST = [
     REDMINE_USER_4_URL, REDMINE_USER_24_URL, REDMINE_USER_25_URL
 ]
 
-
 def read_file(filename, mode='r'):
-    with open(filename, mode) as f:
+    dir = os.path.dirname(os.path.realpath(__file__))
+    with open(os.path.join(dir, filename), mode) as f:
         content = f.read()
     return content
-
 
 def setup_mock_bugzilla_server():
     """Setup a mock Bugzilla server for testing"""
@@ -306,7 +306,7 @@ class TestPercevalJob(TestBaseRQ):
                           self.conn, 'items')
         args = {
             'uri': 'http://example.com/',
-            'gitpath': 'data/git_log.txt'
+            'gitpath': os.path.join(self.dir, 'data/git_log.txt')
         }
 
         job.run(args, fetch_from_cache=False)
@@ -563,7 +563,7 @@ class TestExecuteJob(TestBaseRQ):
 
         args = {
             'uri': 'http://example.com/',
-            'gitpath': 'data/git_log.txt'
+            'gitpath': os.path.join(self.dir, 'data/git_log.txt')
         }
 
         q = rq.Queue('queue', async=False)
@@ -672,7 +672,7 @@ class TestExecuteJob(TestBaseRQ):
 
         args = {
             'uri': 'http://example.com/',
-            'gitpath': 'data/git_log_empty.txt',
+            'gitpath': os.path.join(self.dir, 'data/git_log_empty.txt'),
             'from_date': datetime.datetime(2020, 1, 1, 1, 1, 1)
         }
 
@@ -772,7 +772,7 @@ class TestExecuteJob(TestBaseRQ):
 
         args = {
             'uri': 'http://example.com/',
-            'gitpath': 'data/git_log.txt'
+            'gitpath': os.path.join(self.dir, 'data/git_log.txt')
         }
 
         q = rq.Queue('queue', async=False)

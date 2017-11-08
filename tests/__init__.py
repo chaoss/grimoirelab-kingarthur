@@ -18,6 +18,7 @@
 #
 #
 
+import os.path
 import unittest
 
 from fakeredis import FakeStrictRedis
@@ -41,6 +42,7 @@ class TestBaseRQ(unittest.TestCase):
     def setUpClass(cls):
         cls.conn = find_empty_redis_database()
         push_connection(cls.conn)
+        cls.dir = os.path.dirname(os.path.realpath(__file__))
 
     @classmethod
     def tearDownClass(cls):

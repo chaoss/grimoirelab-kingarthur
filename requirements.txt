@@ -1,6 +1,6 @@
 python-dateutil>=2.6.0
 redis>=2.10.0
 rq>=0.6.0
-cherrypy>=8.1
+cherrypy>=8.1, <=11.0.0
 -e git+https://github.com/grimoirelab/grimoirelab-toolkit/#egg=grimoirelab-toolkit
 -e git+https://github.com/grimoirelab/perceval.git/#egg=perceval

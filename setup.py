@@ -77,7 +77,7 @@ setup(name="kingarthur",
           'python-dateutil>=2.6.0',
           'redis>=2.10.0',
           'rq>=0.6.0',
-          'cherrypy>=8.1',
+          'cherrypy>=8.1, <=11.0.0',
           'perceval>=0.8.0',
           'grimoirelab-toolkit>=0.1.0'
       ],

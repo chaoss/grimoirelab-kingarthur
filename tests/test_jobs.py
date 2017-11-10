@@ -70,11 +70,13 @@ REDMINE_URL_LIST = [
     REDMINE_USER_4_URL, REDMINE_USER_24_URL, REDMINE_USER_25_URL
 ]
 
+
 def read_file(filename, mode='r'):
     dir = os.path.dirname(os.path.realpath(__file__))
     with open(os.path.join(dir, filename), mode) as f:
         content = f.read()
     return content
+
 
 def setup_mock_bugzilla_server():
     """Setup a mock Bugzilla server for testing"""

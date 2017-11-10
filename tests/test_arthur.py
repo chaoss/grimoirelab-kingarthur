@@ -47,8 +47,8 @@ class TestArthur(unittest.TestCase):
 
         dir = os.path.dirname(os.path.realpath(__file__))
         subprocess.check_call(['tar', '-xzf',
-                                os.path.join(dir, 'data/gittest.tar.gz'),
-                                            '-C', cls.tmp_path])
+                               os.path.join(dir, 'data/gittest.tar.gz'),
+                               '-C', cls.tmp_path])
 
     @classmethod
     def tearDownClass(cls):

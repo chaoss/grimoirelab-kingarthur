@@ -108,12 +108,14 @@ class ElasticItemsWriter:
             task_init = time.time()
 
             try:
-                requests.put(url, data=bulk)
+                requests.put(url, data=bulk,
+                             headers={'Content-Type': 'application/json'})
             except UnicodeEncodeError:
                 # Related to body.encode('iso-8859-1'). mbox data
                 logger.error("Encondig error ... converting bulk to iso-8859-1")
                 bulk = bulk.encode('iso-8859-1', 'ignore')
-                requests.put(url, data=bulk)
+                requests.put(url, data=bulk,
+                             headers={'Content-Type': 'application/json'})
 
             logger.debug("Bulk package sent (%.2f sec prev, %i total)",
                          time.time() - task_init, nitems)
@@ -130,7 +132,7 @@ class ElasticItemsWriter:
 
         if r.status_code != 200:
             # The index does not exist
-            r = requests.post(idx_url)
+            r = requests.put(idx_url)
 
             if r.status_code != 200:
                 logger.info("Can't create index %s (%s)", idx_url, r.status_code)
@@ -141,7 +143,7 @@ class ElasticItemsWriter:
             return True
         elif r.status_code == 200 and clean:
             requests.delete(idx_url)
-            requests.post(idx_url)
+            requests.put(idx_url)
             logger.info("Index deleted and created (index: %s)", idx_url)
             return True
 
@@ -155,14 +157,15 @@ class ElasticItemsWriter:
         mapping = json.dumps(mapping)
 
         try:
-            r = requests.put(mapping_url, data=mapping)
+            r = requests.put(mapping_url, data=mapping,
+                             headers={'Content-Type': 'application/json'})
         except requests.exceptions.ConnectionError:
             cause = "Error connecting to Elastic Search (index: %s, url: %s)" \
                 % (idx_url, mapping_url)
             raise ElasticSearchError(cause=cause)
 
         if r.status_code != 200:
-            reason = r.json()['error']['reason']
+            reason = r.json()['error']
             logger.info("Can't create mapping in %s. %s",
                         mapping_url, reason)
             cause = "Error creating Elastic Search mapping %s. %s" % \

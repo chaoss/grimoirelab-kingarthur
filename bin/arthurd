@@ -19,6 +19,7 @@
 #
 # Authors:
 #     Santiago Dueñas <sduenas@bitergia.com>
+#     Miguel Ángel Fernández <mafesan@bitergia.com>
 #
 
 import argparse
@@ -70,13 +71,8 @@ ARTHURD_DEBUG_LOG_FORMAT = "[%(asctime)s - %(name)s - %(levelname)s] - %(message
 
 
 def main():
-    args = parse_args()
 
-    # Read default parameters from a configuration file
-    if args.config_file:
-        defaults = read_config_file(args.config_file)
-    else:
-        defaults = {}
+    args = parse_args()
 
     configure_logging(args.log_path, args.debug)
 
@@ -103,8 +99,8 @@ def main():
         cherrypy.process.plugins.Daemonizer(cherrypy.engine).subscribe()
 
     cfg = {
-        'server.socket_host' : args.host,
-        'server.socket_port' : args.port
+        'server.socket_host': args.host,
+        'server.socket_port': args.port
     }
     cherrypy.config.update(cfg)
 
@@ -114,15 +110,75 @@ def main():
 def parse_args():
     """Parse command line arguments"""
 
+    # Parse first configuration file parameter
+    config_parser = create_config_arguments_parser()
+    config_args, args = config_parser.parse_known_args()
+
+    # And then, read default parameters from a configuration file
+    if config_args.config_file:
+        defaults = read_config_file(config_args.config_file)
+    else:
+        defaults = {}
+
+    # Parse common arguments using the command parser
+    parser = create_common_arguments_parser(defaults)
+
+    # Parse arguments
+    return parser.parse_args(args)
+
+
+def read_config_file(filepath):
+    """Read a Arthur configuration file.
+
+    This function reads common configuration parameters
+    from the given file.
+
+    :param filepath: path to the configuration file
+
+    :returns: a configuration parameters dictionary
+    """
+    config = configparser.SafeConfigParser()
+    config.read(filepath)
+
+    args = {}
+    sections = ['arthur', 'connection', 'elasticsearch', 'redis']
+
+    for section in sections:
+        if section in config.sections():
+            args.update(dict(config.items(section)))
+
+    args = cast_boolean_args(args)
+    return args
+
+
+def cast_boolean_args(args):
+    """Check args dictionary setting boolean values properly
+
+    :param args: Dictionary of arguments
+
+    :return: The same dictionary but with proper boolean values
+    """
+    for key in args.keys():
+        value = args[key]
+        if (type(value) == str) and (value in ["True", "False"]):
+            if value == "True":
+                args[key] = True
+            elif value == "False":
+                args[key] = False
+
+    return args
+
+
+def create_common_arguments_parser(defaults):
+    """Set parser for common arguments"""
+
     parser = argparse.ArgumentParser(usage=ARTHURD_USAGE_MSG,
                                      description=ARTHURD_DESC_MSG,
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
                                      add_help=False)
 
+    # Options
     parser.add_argument('-?', '--help', action='help',
-                       help=argparse.SUPPRESS)
-    parser.add_argument('-c', '--config', dest='config_file',
-                        default=os.path.expanduser('~/.arthur/arthur.cfg'),
                         help=argparse.SUPPRESS)
     parser.add_argument('-g', '--debug', dest='debug',
                         action='store_true',
@@ -154,31 +210,27 @@ def parse_args():
                         action='store_true',
                         help=argparse.SUPPRESS)
 
-    return parser.parse_args()
+    # Set default values
+    parser.set_defaults(**defaults)
+
+    return parser
 
 
-def read_config_file(filepath):
-    """Read a Arthur configuration file.
+def create_config_arguments_parser():
+    """Set parser for configuration file"""
 
-    This function reads common configuration parameters
-    from the given file.
+    parser = argparse.ArgumentParser(usage=ARTHURD_USAGE_MSG,
+                                     add_help=False)
 
-    :param filepath: path to the configuration file
+    parser.add_argument('-c', '--config', dest='config_file',
+                        help=argparse.SUPPRESS)
 
-    :returns: a configuration parameters dictionary
-    """
-    config = configparser.SafeConfigParser()
-    config.read(filepath)
+    # Set default values
+    defaults = {'config_file': os.path.expanduser('~/.arthur/config.ini')}
 
-    args = {}
-    sections = ['arthur']
+    parser.set_defaults(**defaults)
 
-    for section in sections:
-        if section in config.sections():
-            d = dict(config.items(section))
-            args.update(d)
-
-    return args
+    return parser
 
 
 def configure_logging(log_path, debug=False):

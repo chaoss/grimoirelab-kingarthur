@@ -32,6 +32,7 @@ import unittest
 if '..' not in sys.path:
     sys.path.insert(0, '..')
 
+from arthur.errors import AlreadyExistsError
 from arthur.arthur import Arthur
 
 from tests import find_empty_redis_database
@@ -61,7 +62,68 @@ class TestArthur(unittest.TestCase):
     def tearDown(self):
         self.conn.flushdb()
 
+    def test_add_task(self):
+        """Check whether tasks are added"""
+
+        task_id = "arthur.task"
+        backend = "backend"
+        backend_params = {"a": "a", "b": "b"}
+
+        app = Arthur(self.conn, async_mode=False)
+
+        initial_tasks = len(app._tasks.tasks)
+        app.add_task(task_id, backend, backend_params)
+        after_tasks = len(app._tasks.tasks)
+
+        t = app._tasks.tasks[0]
+
+        self.assertEqual(t.task_id, task_id)
+        self.assertEqual(t.backend, backend)
+        self.assertDictEqual(t.backend_args, backend_params)
+
+        self.assertGreater(after_tasks, initial_tasks)
+
+    def test_add_duplicated_task(self):
+        """Check whether an exception is thrown when a duplicated task is added"""
+
+        app = Arthur(self.conn, async_mode=False)
+
+        app.add_task("arthur.task", "backend", {"a": "a", "b": "b"})
+
+        with self.assertRaises(AlreadyExistsError):
+            app.add_task("arthur.task", "backend", {"a": "a", "b": "b"})
+
+    def test_remove_task(self):
+        """Check whether the removal of tasks is properly handled"""
+
+        task_1 = "arthur.task-1"
+        task_2 = "arthur.task-2"
+
+        task_params = {"backend": "backend", "backend_params": {"a": "a", "b": "b"}}
+
+        app = Arthur(self.conn, async_mode=False)
+
+        app.add_task(task_1, task_params['backend'], task_params['backend_params'])
+        app.add_task(task_2, task_params['backend'], task_params['backend_params'])
+        tasks = len(app._tasks.tasks)
+
+        self.assertEqual(tasks, 2)
+
+        self.assertTrue(app.remove_task(task_1))
+        self.assertTrue(app.remove_task(task_2))
+
+        tasks = len(app._tasks.tasks)
+        self.assertEqual(tasks, 0)
+
+    def test_remove_non_existing_task(self):
+        """Check whether the removal of non existing tasks is properly handled"""
+
+        app = Arthur(self.conn, async_mode=False)
+        self.assertFalse(app.remove_task("task-x"))
+
     def test_items(self):
+        """Check whether items are properly retrieved"""
+
         new_path = os.path.join(self.tmp_path, 'newgit')
 
         app = Arthur(self.conn, async_mode=False)

@@ -33,7 +33,6 @@ import redis
 
 from arthur.common import ARCHIVES_DEFAULT_PATH
 from arthur.server import ArthurServer
-from arthur.writers import ElasticItemsWriter
 
 
 ARTHURD_USAGE_MSG = \
@@ -59,7 +58,6 @@ optional arguments:
   -p, --port            set listening TCP port (default: 8080)
   -d, --database        URL database connection (default: 'redis://localhost/8')
   -s, --sync            work in synchronous mode (without workers)
-  --es-index            output ElasticSearch server index
   --log-path            path where logs are stored
   --archive-path        path to archive manager directory
   --no-archive          do not archive fetched raw data
@@ -81,17 +79,11 @@ def main():
 
     conn = connect_to_redis(args.database)
 
-    if args.es_index:
-        writer = ElasticItemsWriter(args.es_index)
-    else:
-        writer = None
-
     # Set archive manager directory
     base_archive_path = None if args.no_archive else args.archive_path
 
     app = ArthurServer(conn, base_archive_path,
-                       async_mode=args.sync_mode,
-                       writer=writer)
+                       async_mode=args.sync_mode)
 
     run_daemon = not args.no_daemon
 
@@ -195,8 +187,6 @@ def create_common_arguments_parser(defaults):
                         help=argparse.SUPPRESS)
     parser.add_argument('-s', '--sync', dest='sync_mode',
                         action='store_false',
-                        help=argparse.SUPPRESS)
-    parser.add_argument('--es-index', dest='es_index',
                         help=argparse.SUPPRESS)
     parser.add_argument('--log-path', dest='log_path',
                         default=os.path.expanduser('~/.arthur/logs/'),

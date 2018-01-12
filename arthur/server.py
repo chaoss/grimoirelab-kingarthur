@@ -22,8 +22,6 @@
 #
 
 import logging
-import threading
-import time
 
 import cherrypy
 
@@ -49,37 +47,13 @@ class ArthurServer(Arthur):
     """Arthur REST server"""
 
     def __init__(self, *args, **kwargs):
-        if 'writer' in kwargs:
-            writer = kwargs.pop('writer')
-
         super().__init__(*args, **kwargs)
-
-        if writer:
-            self.writer_th = threading.Thread(target=self.write_items,
-                                              args=(writer, self.items))
-        else:
-            self.writer_th = None
-
         cherrypy.engine.subscribe('start', self.start, 100)
 
     def start(self):
         """Start the server and the writer"""
 
         super().start()
-        if self.writer_th:
-            self.writer_th.start()
-
-    @classmethod
-    def write_items(cls, writer, items_generator):
-        """Write items to the queue
-
-        :param writer: the writer object
-        :param items_generator: items to be written in the queue
-        """
-        while True:
-            items = items_generator()
-            writer.write(items)
-            time.sleep(1)
 
     @cherrypy.expose
     @cherrypy.tools.json_in()

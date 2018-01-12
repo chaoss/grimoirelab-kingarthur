@@ -36,7 +36,7 @@ from base import find_empty_redis_database
 def run_server(conn):
     """Start CherryPy server for the tests in the background and shut it down once a test is finished"""
 
-    server = ArthurServer(conn, None, async_mode=False, writer=None)
+    server = ArthurServer(conn, None, async_mode=False)
     cherrypy.tree.mount(server, '/')
     cherrypy.engine.start()
     cherrypy.engine.wait(cherrypy.engine.states.STARTED)

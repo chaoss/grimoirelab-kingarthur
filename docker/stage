@@ -1,0 +1,16 @@
+#!/bin/bash
+
+echo "Running arthur"
+
+REDIS="redis"
+LOGS="logs"
+
+mkdir -p $LOGS
+# Two workers
+echo "Starting two workers (one only for update) ..."
+# The workers must be started after arthur for the queues
+# but arthur must be the last service to start, so start workers with 5s delay
+(sleep 5 && arthurw -g -d redis://$REDIS/8 > $LOGS/worker-collect.log 2>&1) &
+(sleep 5 && arthurw -g -d redis://$REDIS/8 update > $LOGS/worker-update.log 2>&1) &
+# Arthur
+arthurd -g --no-daemon --host 0.0.0.0 -d redis://$REDIS/8 --log-path $LOGS --no-cache

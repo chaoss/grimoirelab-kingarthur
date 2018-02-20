@@ -21,6 +21,8 @@
 #     Alvaro del Castillo San Felix <acs@bitergia.com>
 #
 
+ARCHIVES_DEFAULT_PATH = '~/.arthur/archives/'
+
 CH_PUBSUB = 'ch_arthur'
 
 Q_CREATION_JOBS = 'create'

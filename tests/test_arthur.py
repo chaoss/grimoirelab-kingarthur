@@ -32,8 +32,9 @@ import unittest
 if '..' not in sys.path:
     sys.path.insert(0, '..')
 
-from arthur.errors import AlreadyExistsError
 from arthur.arthur import Arthur
+from arthur.common import ARCHIVES_DEFAULT_PATH
+from arthur.errors import AlreadyExistsError
 
 from tests import find_empty_redis_database
 
@@ -62,17 +63,18 @@ class TestArthur(unittest.TestCase):
     def tearDown(self):
         self.conn.flushdb()
 
-    def test_add_task(self):
-        """Check whether tasks are added"""
+    def test_add_task_no_archive(self):
+        """Check when a task a no archive params"""
 
         task_id = "arthur.task"
         backend = "backend"
+        category = None
         backend_params = {"a": "a", "b": "b"}
 
         app = Arthur(self.conn, async_mode=False)
 
         initial_tasks = len(app._tasks.tasks)
-        app.add_task(task_id, backend, backend_params)
+        app.add_task(task_id, backend, category, backend_params)
         after_tasks = len(app._tasks.tasks)
 
         t = app._tasks.tasks[0]
@@ -80,18 +82,218 @@ class TestArthur(unittest.TestCase):
         self.assertEqual(t.task_id, task_id)
         self.assertEqual(t.backend, backend)
         self.assertDictEqual(t.backend_args, backend_params)
+        self.assertDictEqual(t.archive_args, {})
+        self.assertDictEqual(t.sched_args, {})
 
-        self.assertGreater(after_tasks, initial_tasks)
+        self.assertEqual(initial_tasks, 0)
+        self.assertEqual(after_tasks, 1)
+
+    def test_add_task_empty_archive(self):
+        """Check when a task has an empty archive"""
+
+        task_id = "arthur.task"
+        backend = "backend"
+        category = None
+        backend_params = {"a": "a", "b": "b"}
+        archive_params = {}
+
+        app = Arthur(self.conn, async_mode=False)
+
+        initial_tasks = len(app._tasks.tasks)
+        app.add_task(task_id, backend, category, backend_params, archive_params)
+        after_tasks = len(app._tasks.tasks)
+
+        t = app._tasks.tasks[0]
+
+        self.assertEqual(t.task_id, task_id)
+        self.assertEqual(t.backend, backend)
+        self.assertDictEqual(t.backend_args, backend_params)
+        self.assertDictEqual(t.archive_args, archive_params)
+        self.assertDictEqual(t.sched_args, {})
+
+        self.assertEqual(initial_tasks, 0)
+        self.assertEqual(after_tasks, 1)
+
+    def test_task_unknown_archive_parameter(self):
+        """Check whether an exception is thrown when an unknown parameter is in the archive params"""
+
+        task_id = "arthur.task"
+        backend = "backend"
+        category = None
+        backend_params = {"a": "a", "b": "b"}
+        archive_params = {"unknown": 1, "fetch_from_archive": True, "archived_after": "2010-10-10"}
+
+        app = Arthur(self.conn, async_mode=False)
+
+        with self.assertRaises(ValueError) as ex:
+            app.add_task(task_id, backend, category, backend_params, archive_params)
+
+        self.assertEqual(ex.exception.args[0], "unknown not accepted in archive_args")
+
+    def test_task_default_archive_path(self):
+        """Check whether a default archive path is added when not defined in the archive params"""
+
+        task_id = "arthur.task"
+        backend = "backend"
+        category = None
+        backend_params = {"a": "a", "b": "b"}
+        archive_params = {"fetch_from_archive": True, "archived_after": "2010-10-10"}
+
+        app = Arthur(self.conn, async_mode=False)
+        app.add_task(task_id, backend, category, backend_params, archive_params)
+
+        t = app._tasks.tasks[0]
+        self.assertEqual(t.archive_args['fetch_from_archive'], archive_params["fetch_from_archive"])
+        self.assertEqual(t.archive_args['archived_after'], archive_params["archived_after"])
+        self.assertEqual(t.archive_args['archive_path'], os.path.expanduser(ARCHIVES_DEFAULT_PATH))
+
+    def test_task_wrong_fetch_from_archive(self):
+        """Check whether an exception is thrown when fetch_from_archive parameter is not properly set"""
+
+        task_id = "arthur.task"
+        backend = "backend"
+        category = None
+        backend_params = {"a": "a", "b": "b"}
+        archive_params = {"fetch_from_archive": 100, "archived_after": "2010-10-10"}
+
+        app = Arthur(self.conn, async_mode=False)
+
+        with self.assertRaises(ValueError) as ex:
+            app.add_task(task_id, backend, category, backend_params, archive_params)
+
+        self.assertEqual(ex.exception.args[0], "archive_args.fetch_from_archive not boolean")
+
+        archive_params = {"archived_after": "2010-10-10"}
+        with self.assertRaises(ValueError) as ex:
+            app.add_task(task_id, backend, category, backend_params, archive_params)
+
+        self.assertEqual(ex.exception.args[0], "archive_args.fetch_from_archive not defined")
+
+    def test_task_ignore_archive_after(self):
+        """Check whether the archived_after parameter is not set when fetch_from_archive is false"""
+
+        task_id = "arthur.task"
+        backend = "backend"
+        category = None
+        backend_params = {"a": "a", "b": "b"}
+        archive_params = {"fetch_from_archive": False, "archived_after": "X"}
+
+        app = Arthur(self.conn, async_mode=False)
+        app.add_task(task_id, backend, category, backend_params, archive_params)
+
+        t = app._tasks.tasks[0]
+        self.assertEqual(t.archive_args['fetch_from_archive'], False)
+        self.assertIsNone(t.archive_args['archived_after'])
+
+    def test_task_wrong_archive_after(self):
+        """Check whether an exception is thrown when archived_after parameter is not properly set"""
+
+        task_id = "arthur.task"
+        backend = "backend"
+        category = None
+        backend_params = {"a": "a", "b": "b"}
+        archive_params = {"fetch_from_archive": True, "archived_after": "X"}
+
+        app = Arthur(self.conn, async_mode=False)
+
+        with self.assertRaises(ValueError) as ex:
+            app.add_task(task_id, backend, category, backend_params, archive_params)
+
+        self.assertEqual(ex.exception.args[0], "archive_args.archived_after datetime format not valid")
+
+        archive_params = {"fetch_from_archive": True}
+        with self.assertRaises(ValueError) as ex:
+            app.add_task(task_id, backend, category, backend_params, archive_params)
+
+        self.assertEqual(ex.exception.args[0], "archive_args.archived_after not defined")
+
+    def test_add_task_archive(self):
+        """Check whether tasks are added"""
+
+        task_id = "arthur.task"
+        backend = "backend"
+        category = 'acme-product'
+        backend_params = {"a": "a", "b": "b"}
+        archive_params = {'fetch_from_archive': True,
+                          'archived_after': '2100-01-01',
+                          'archive_path': './acme-plan'}
+        sched_params = {"delay": 10, "max_retries_job": 10}
+
+        app = Arthur(self.conn, base_archive_path=self.tmp_path, async_mode=False)
+
+        initial_tasks = len(app._tasks.tasks)
+        app.add_task(task_id, backend, category, backend_params, archive_params, sched_params)
+        after_tasks = len(app._tasks.tasks)
+
+        t = app._tasks.tasks[0]
+
+        self.assertEqual(t.task_id, task_id)
+        self.assertEqual(t.backend, backend)
+        self.assertEqual(t.category, category)
+        self.assertDictEqual(t.backend_args, backend_params)
+        self.assertDictEqual(t.archive_args, archive_params)
+        self.assertDictEqual(t.sched_args, sched_params)
+
+        self.assertEqual(initial_tasks, 0)
+        self.assertEqual(after_tasks, 1)
+
+    def test_task_unknown_scheduler_parameter(self):
+        """Check whether an exception is thrown when an unknown parameter is in the sched params"""
+
+        task_id = "arthur.task"
+        backend = "backend"
+        category = None
+        backend_params = {"a": "a", "b": "b"}
+        sched_params = {"unknown": 1, "delay": 10, "max_retries_job": 10}
+
+        app = Arthur(self.conn, async_mode=False)
+
+        with self.assertRaises(ValueError) as ex:
+            app.add_task(task_id, backend, category, backend_params, sched_args=sched_params)
+
+        self.assertEqual(ex.exception.args[0], "unknown not accepted in schedule_args")
+
+    def test_task_wrong_delay(self):
+        """Check whether an exception is thrown when delay parameter is not properly set"""
+
+        task_id = "arthur.task"
+        backend = "backend"
+        category = None
+        backend_params = {"a": "a", "b": "b"}
+        sched_params = {"delay": "1", "max_retries_job": 10}
+
+        app = Arthur(self.conn, async_mode=False)
+
+        with self.assertRaises(ValueError) as ex:
+            app.add_task(task_id, backend, category, backend_params, sched_args=sched_params)
+
+        self.assertEqual(ex.exception.args[0], "sched_args.delay not int")
+
+    def test_task_wrong_max_retries_job(self):
+        """Check whether an exception is thrown when max_retries_job parameter is not properly set"""
+
+        task_id = "arthur.task"
+        backend = "backend"
+        category = None
+        backend_params = {"a": "a", "b": "b"}
+        sched_params = {"delay": 1, "max_retries_job": "c"}
+
+        app = Arthur(self.conn, async_mode=False)
+
+        with self.assertRaises(ValueError) as ex:
+            app.add_task(task_id, backend, category, backend_params, sched_args=sched_params)
+
+        self.assertEqual(ex.exception.args[0], "sched_args.max_retries_job not int")
 
     def test_add_duplicated_task(self):
         """Check whether an exception is thrown when a duplicated task is added"""
 
         app = Arthur(self.conn, async_mode=False)
 
-        app.add_task("arthur.task", "backend", {"a": "a", "b": "b"})
+        app.add_task("arthur.task", "backend", "category", {"a": "a", "b": "b"})
 
         with self.assertRaises(AlreadyExistsError):
-            app.add_task("arthur.task", "backend", {"a": "a", "b": "b"})
+            app.add_task("arthur.task", "backend", "category", {"a": "a", "b": "b"})
 
     def test_remove_task(self):
         """Check whether the removal of tasks is properly handled"""
@@ -99,12 +301,14 @@ class TestArthur(unittest.TestCase):
         task_1 = "arthur.task-1"
         task_2 = "arthur.task-2"
 
-        task_params = {"backend": "backend", "backend_params": {"a": "a", "b": "b"}}
+        task_params = {"backend": "backend",
+                       "category": "category",
+                       "backend_params": {"a": "a", "b": "b"}}
 
         app = Arthur(self.conn, async_mode=False)
 
-        app.add_task(task_1, task_params['backend'], task_params['backend_params'])
-        app.add_task(task_2, task_params['backend'], task_params['backend_params'])
+        app.add_task(task_1, task_params['backend'], task_params['category'], task_params['backend_params'])
+        app.add_task(task_2, task_params['backend'], task_params['category'], task_params['backend_params'])
         tasks = len(app._tasks.tasks)
 
         self.assertEqual(tasks, 2)
@@ -127,8 +331,9 @@ class TestArthur(unittest.TestCase):
         new_path = os.path.join(self.tmp_path, 'newgit')
 
         app = Arthur(self.conn, async_mode=False)
-        app.add_task('test', 'git', {'uri': self.git_path,
-                                     'gitpath': new_path})
+        app.add_task('test', 'git', 'commit',
+                     {'uri': self.git_path,
+                      'gitpath': new_path})
         app.start()
 
         commits = [item['data']['commit'] for item in app.items()]

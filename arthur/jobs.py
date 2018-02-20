@@ -29,13 +29,11 @@ import pickle
 
 import perceval
 import perceval.backends
-import perceval.cache
+import perceval.archive
 
 from grimoirelab.toolkit.datetime import unixtime_to_datetime
-from grimoirelab.toolkit.introspect import find_signature_parameters
 
 from ._version import __version__
-from .common import MAX_JOB_RETRIES
 from .errors import NotFoundError
 
 
@@ -72,17 +70,19 @@ class JobResult:
     :param job_id: job identifier
     :param task_id: identitifer of the task linked to this job
     :param backend: backend used to fetch the items
+    :param category: category of the fetched items
     :param last_uuid: UUID of the last item
     :param max_date: maximum date fetched among items
     :param nitems: number of items fetched by the backend
     :param offset: maximum offset fetched among items
     :param nresumed: number of time the job was resumed
     """
-    def __init__(self, job_id, task_id, backend, last_uuid,
+    def __init__(self, job_id, task_id, backend, category, last_uuid,
                  max_date, nitems, offset=None, nresumed=0):
         self.job_id = job_id
         self.task_id = task_id
         self.backend = backend
+        self.category = category
         self.last_uuid = last_uuid
         self.max_date = max_date
         self.nitems = nitems
@@ -107,7 +107,7 @@ class PercevalJob:
     :rasises NotFoundError: raised when the backend is not avaliable
         in Perceval
     """
-    def __init__(self, job_id, task_id, backend, conn, qitems):
+    def __init__(self, job_id, task_id, backend, category, conn, qitems):
         try:
             self._bklass = perceval.find_backends(perceval.backends)[0][backend]
         except KeyError:
@@ -119,8 +119,9 @@ class PercevalJob:
         self.conn = conn
         self.qitems = qitems
         self.retries = 0
-        self.cache = None
-        self._result = JobResult(self.job_id, self.task_id, self.backend,
+        self.archive_manager = None
+        self.category = category
+        self._result = JobResult(self.job_id, self.task_id, self.backend, self.category,
                                  None, None, 0, offset=None,
                                  nresumed=0)
 
@@ -128,32 +129,45 @@ class PercevalJob:
     def result(self):
         return self._result
 
-    def run(self, backend_args, resume=False, fetch_from_cache=False):
+    def initialize_archive_manager(self, archive_path):
+        """Initialize the archive manager.
+
+        :param archive_path: path where the archive manager is located
+        """
+        if archive_path == "":
+            raise ValueError("Archive manager path cannot be empty")
+
+        if archive_path:
+            self.archive_manager = perceval.archive.ArchiveManager(archive_path)
+
+    def run(self, backend_args, archive_args=None, resume=False):
         """Run the backend with the given parameters.
 
         The method will run the backend assigned to this job,
         storing the fetched items in a Redis queue. The ongoing
         status of the job, can be accessed through the property
         `result`. When `resume` is set, the job will start from
-        the last execution, overewritting 'from_date' and 'offset'
+        the last execution, overwriting 'from_date' and 'offset'
         parameters, if needed.
 
-        Setting to `True` the parameter `fetch_from_cache`, items can
-        be fetched from the cache assigned to this job.
+        Setting to `True` the parameter `fetch_from_archive`, items can
+        be fetched from the archive assigned to this job.
 
         Any exception during the execution of the process will
         be raised.
 
         :param backend_args: parameters used to un the backend
-        :param fetch_from_cache: fetch items from the cache
+        :param archive_args: archive arguments
         :param resume: fetch items starting where the last
             execution stopped
         """
         args = backend_args.copy()
-        args['cache'] = self.cache
+
+        if archive_args:
+            self.initialize_archive_manager(archive_args['archive_path'])
 
         if not resume:
-            self._result = JobResult(self.job_id, self.task_id, self.backend,
+            self._result = JobResult(self.job_id, self.task_id, self.backend, self.category,
                                      None, None, 0, offset=None,
                                      nresumed=0)
         else:
@@ -163,7 +177,7 @@ class PercevalJob:
                 args['offset'] = self.result.offset
             self._result.nresumed += 1
 
-        for item in self._execute(args, fetch_from_cache):
+        for item in self._execute(args, archive_args):
             self.conn.rpush(self.qitems, pickle.dumps(item))
 
             self._result.nitems += 1
@@ -174,51 +188,10 @@ class PercevalJob:
             if 'offset' in item:
                 self._result.offset = item['offset']
 
-    def initialize_cache(self, dirpath, backup=False):
-        """Initializes the cache of this job.
+    def has_archiving(self):
+        """Returns if the job supports items archiving"""
 
-        The method initializes the cache object related to this job
-        storing its data under `dirpath`. When `backup` is set, the
-        cache will keep a copy of the data for restoring.
-
-        :param dirpath: path to the cache data
-        :param backup: keep a copy of the cache data
-
-        :raises ValueError: when dirpath is empty
-        """
-        if not dirpath:
-            raise ValueError("dirpath requieres a value")
-
-        logger.debug("Initializing cache of job %s on path '%s' completed",
-                     self.job_id, dirpath)
-
-        self.cache = perceval.cache.Cache(dirpath)
-
-        if backup:
-            self.cache.backup()
-            logger.debug("Cache backup of job %s on path '%s' completed",
-                         self.job_id, dirpath)
-
-        logger.debug("Cache on '%s' initialized", dirpath)
-
-    def recover_cache(self):
-        """Restore the backup from the job's cache.
-
-        When the cache assigned to this job has a backup, this method
-        will restore it. Otherwise, it will do nothing.
-        """
-        if not self.cache:
-            return
-
-        self.cache.recover()
-
-        logger.debug("Cache of job %s on path '%s' recovered",
-                     self.job_id, self.cache.cache_path)
-
-    def has_caching(self):
-        """Returns if the job supports items caching"""
-
-        return self._bklass.has_caching()
+        return self._bklass.has_archiving()
 
     def has_resuming(self):
         """Returns if the job can be resumed when it fails"""
@@ -226,7 +199,7 @@ class PercevalJob:
         return self._bklass.has_resuming()
 
     @metadata
-    def _execute(self, backend_args, fetch_from_cache):
+    def _execute(self, backend_args, archive_args):
         """Execute a backend of Perceval.
 
         Run the backend of Perceval assigned to this job using the
@@ -240,72 +213,62 @@ class PercevalJob:
         related to this job.
 
         It will also be possible to retrieve the items from the
-        cache setting to `True` the parameter `fetch_from_cache`.
+        archive setting to `True` the parameter `fetch_from_archive`.
 
         :param bakend_args: arguments to execute the backend
-        :param fetch_from_cache: retieve items from the cache
+        :param archive_args: archive arguments
 
         :returns: iterator of items fetched by the backend
 
         :raises AttributeError: raised when any of the required
             parameters is not found
         """
-        kinit = find_signature_parameters(self._bklass.__init__, backend_args)
-        obj = self._bklass(**kinit)
 
-        if not fetch_from_cache:
-            fnc_fetch = obj.fetch
+        if not archive_args or not archive_args['fetch_from_archive']:
+            return perceval.fetch(self._bklass, backend_args, manager=self.archive_manager)
         else:
-            fnc_fetch = obj.fetch_from_cache
-
-        kfetch = find_signature_parameters(fnc_fetch, backend_args)
-
-        for item in fnc_fetch(**kfetch):
-            yield item
+            return perceval.fetch_from_archive(self._bklass, backend_args, self.archive_manager,
+                                               self.category, archive_args['archived_after'])
 
 
-def execute_perceval_job(backend, backend_args, qitems, task_id,
-                         cache_path=None, fetch_from_cache=False,
-                         max_retries=MAX_JOB_RETRIES):
+def execute_perceval_job(backend, backend_args, qitems, task_id, category,
+                         archive_args=None, sched_args=None):
     """Execute a Perceval job on RQ.
 
     The items fetched during the process will be stored in a
     Redis queue named `queue`.
 
-    Setting the parameter `cache_path`, raw data will be stored
-    in the cache. The contents from the cache can be retrieved
-    setting the pameter `fetch_from_cache` to `True`, too. Take into
-    account this behaviour will be only available when the backend
-    supports the use of the cache. If caching is not supported, an
-    `AttributeErrror` exception will be raised.
+    Setting the parameter `archive_path`, raw data will be stored
+    with the archive manager. The contents from the archive can
+    be retrieved setting the pameter `fetch_from_archive` to `True`,
+    too. Take into account this behaviour will be only available
+    when the backend supports the use of the archive. If archiving
+    is not supported, an `AttributeErrror` exception will be raised.
 
     :param backend: backend to execute
     :param bakend_args: dict of arguments for running the backend
     :param qitems: name of the RQ queue used to store the items
     :param task_id: identifier of the task linked to this job
-    :param cache_path: path to the cache
-    :param fetch_from_cache: retrieve items from the cache
-    :param max_retries: maximum number of retries if a job fails
+    :param category: category of the items to retrieve
+    :param archive_args: archive arguments
+    :param sched_args: scheduler arguments
 
     :returns: a `JobResult` instance
 
     :raises NotFoundError: raised when the backend is not found
-    :raises AttributeError: raised when caching is not supported but
-        any of the cache parameters were set
+    :raises AttributeError: raised when archiving is not supported but
+        any of the archive parameters were set
     """
     rq_job = rq.get_current_job()
 
-    job = PercevalJob(rq_job.id, task_id, backend,
+    job = PercevalJob(rq_job.id, task_id, backend, category,
                       rq_job.connection, qitems)
 
-    logger.debug("Running job #%s (task: %s) (%s)",
-                 job.job_id, task_id, backend)
+    logger.debug("Running job #%s (task: %s) (%s) (cat:%s)",
+                 job.job_id, task_id, backend, category)
 
-    if not job.has_caching() and (cache_path or fetch_from_cache):
-        raise AttributeError("cache attributes set but cache is not supported")
-
-    if cache_path:
-        job.initialize_cache(cache_path, not fetch_from_cache)
+    if not job.has_archiving() and archive_args:
+        raise AttributeError("archive attributes set but archive is not supported")
 
     run_job = True
     resume = False
@@ -313,8 +276,7 @@ def execute_perceval_job(backend, backend_args, qitems, task_id,
 
     while run_job:
         try:
-            job.run(backend_args, resume=resume,
-                    fetch_from_cache=fetch_from_cache)
+            job.run(backend_args, archive_args=archive_args, resume=resume)
         except AttributeError as e:
             raise e
         except Exception as e:
@@ -322,17 +284,13 @@ def execute_perceval_job(backend, backend_args, qitems, task_id,
                          job.job_id, backend, str(e))
             failures += 1
 
-            if cache_path and not fetch_from_cache:
-                job.recover_cache()
-                job.cache = None
-
-            if not job.has_resuming() or failures >= max_retries:
+            if not job.has_resuming() or failures >= sched_args['max_retries']:
                 logger.error("Cancelling job #%s (task: %s) (%s)",
                              job.job_id, task_id, backend)
                 raise e
 
             logger.warning("Resuming job #%s (task: %s) (%s) due to a failure (n %s, max %s)",
-                           job.job_id, task_id, backend, failures, max_retries)
+                           job.job_id, task_id, backend, failures, sched_args['max_retries'])
             resume = True
         else:
             # No failure, do not retry
@@ -340,7 +298,7 @@ def execute_perceval_job(backend, backend_args, qitems, task_id,
 
     result = job.result
 
-    logger.debug("Job #%s (task: %s) completed (%s) - %s items fetched",
-                 result.job_id, task_id, result.backend, str(result.nitems))
+    logger.debug("Job #%s (task: %s) completed (%s) - %s items (%s) fetched",
+                 result.job_id, task_id, result.backend, str(result.nitems), result.category)
 
     return result

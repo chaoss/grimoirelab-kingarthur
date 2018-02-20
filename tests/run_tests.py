@@ -26,6 +26,6 @@ import unittest
 
 
 if __name__ == '__main__':
-    test_suite = unittest.TestLoader().discover('.', pattern='test*.py')
+    test_suite = unittest.TestLoader().discover('.', pattern='test_*.py')
     result = unittest.TextTestRunner(buffer=True).run(test_suite)
     sys.exit(not result.wasSuccessful())

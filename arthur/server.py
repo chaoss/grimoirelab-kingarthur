@@ -63,12 +63,19 @@ class ArthurServer(Arthur):
         cherrypy.engine.subscribe('start', self.start, 100)
 
     def start(self):
+        """Start the server and the writer"""
+
         super().start()
         if self.writer_th:
             self.writer_th.start()
 
     @classmethod
     def write_items(cls, writer, items_generator):
+        """Write items to the queue
+
+        :param writer: the writer object
+        :param items_generator: items to be written in the queue
+        """
         while True:
             items = items_generator()
             writer.write(items)
@@ -77,13 +84,20 @@ class ArthurServer(Arthur):
     @cherrypy.expose
     @cherrypy.tools.json_in()
     def add(self):
+        """Add tasks"""
+
         payload = cherrypy.request.json
 
         logger.debug("Reading tasks...")
         for task_data in payload['tasks']:
-            backend_args = task_data['backend_args']
-            cache_args = task_data['cache']
-            sched_args = task_data['scheduler']
+            try:
+                category = task_data['category']
+                backend_args = task_data['backend_args']
+                archive_args = task_data['archive']
+                sched_args = task_data['scheduler']
+            except KeyError as ex:
+                logger.error("Task badly formed")
+                raise ex
 
             from_date = backend_args.get('from_date', None)
 
@@ -92,8 +106,9 @@ class ArthurServer(Arthur):
 
             super().add_task(task_data['task_id'],
                              task_data['backend'],
+                             category,
                              backend_args,
-                             cache_args=cache_args,
+                             archive_args=archive_args,
                              sched_args=sched_args)
         logger.debug("Done. Ready to work!")
 
@@ -103,6 +118,8 @@ class ArthurServer(Arthur):
     @cherrypy.tools.json_in()
     @cherrypy.tools.json_out(handler=json_encoder)
     def remove(self):
+        """Remove tasks"""
+
         payload = cherrypy.request.json
         logger.debug("Reading tasks to remove...")
 
@@ -120,6 +137,8 @@ class ArthurServer(Arthur):
     @cherrypy.expose
     @cherrypy.tools.json_out(handler=json_encoder)
     def tasks(self):
+        """List tasks"""
+
         logger.debug("API 'tasks' method called")
 
         result = [task.to_dict() for task in self._tasks.tasks]

@@ -46,18 +46,16 @@ class TestScheduler(TestBaseRQ):
             'uri': 'http://example.com/',
             'gitpath': os.path.join(self.dir, 'data/git_log.txt')
         }
-        cache_args = {
-            'cache_path': None,
-            'fetch_from_cache': False
-        }
+        category = 'commit'
+        archive_args = {}
         sched_args = {
             'delay': 0,
             'max_retries_job': 0
         }
 
         registry = TaskRegistry()
-        task = registry.add('mytask', 'git', args,
-                            cache_args=cache_args,
+        task = registry.add('mytask', 'git', category, args,
+                            archive_args=archive_args,
                             sched_args=sched_args)
 
         schlr = Scheduler(self.conn, registry, async_mode=False)

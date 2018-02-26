@@ -45,32 +45,35 @@ class TestTask(unittest.TestCase):
         }
         before = datetime.now().timestamp()
 
-        task = Task('mytask', 'mock_backend', args)
+        task = Task('mytask', 'mock_backend', 'category', args)
 
         self.assertEqual(task.task_id, 'mytask')
         self.assertEqual(task.backend, 'mock_backend')
+        self.assertEqual(task.category, 'category')
         self.assertDictEqual(task.backend_args, args)
-        self.assertDictEqual(task.cache_args, {})
+        self.assertDictEqual(task.archive_args, {})
         self.assertDictEqual(task.sched_args, {})
         self.assertGreater(task.created_on, before)
 
-        # Test when cache and scheduler arguments are given
-        cache = {
-            'cache_path': '/tmp/cache',
-            'fetch': True
+        # Test when archive and scheduler arguments are given
+        archive = {
+            'archive_path': '/tmp/archive',
+            'fetch_from_archive': False,
+            'archived_after': None
         }
         sched = {
             'stime': 10
         }
         before = datetime.now().timestamp()
 
-        task = Task('mytask', 'mock_backend', args,
-                    cache_args=cache, sched_args=sched)
+        task = Task('mytask', 'mock_backend', 'category', args,
+                    archive_args=archive, sched_args=sched)
 
         self.assertEqual(task.task_id, 'mytask')
         self.assertEqual(task.backend, 'mock_backend')
+        self.assertEqual(task.category, 'category')
         self.assertDictEqual(task.backend_args, args)
-        self.assertDictEqual(task.cache_args, cache)
+        self.assertDictEqual(task.archive_args, archive)
         self.assertDictEqual(task.sched_args, sched)
         self.assertGreater(task.created_on, before)
 
@@ -81,25 +84,28 @@ class TestTask(unittest.TestCase):
             'from_date': '1970-01-01',
             'component': 'test'
         }
-        cache = {
-            'cache_path': '/tmp/cache',
-            'fetch': True
+        category = 'mocked_category'
+        archive = {
+            'archive_path': '/tmp/archive',
+            'fetch_from_archive': False,
+            'archived_after': None,
         }
         sched = {
             'stime': 10
         }
         before = datetime.now().timestamp()
 
-        task = Task('mytask', 'mock_backend', args,
-                    cache_args=cache, sched_args=sched)
+        task = Task('mytask', 'mock_backend', category, args,
+                    archive_args=archive, sched_args=sched)
         d = task.to_dict()
 
         expected = {
             'task_id': 'mytask',
             'backend': 'mock_backend',
             'backend_args': args,
-            'cache': cache,
-            'scheduler': sched
+            'category': category,
+            'archive_args': archive,
+            'scheduler_args': sched
         }
 
         created_on = d.pop('created_on')
@@ -125,9 +131,10 @@ class TestTaskRegistry(unittest.TestCase):
             'from_date': '1970-01-01',
             'component': 'test'
         }
-        cache = {
-            'cache_path': '/tmp/cache',
-            'fetch': True
+        archive = {
+            'archive_path': '/tmp/archive',
+            'fetch_from_archive': False,
+            'archived_after': None,
         }
         sched = {
             'stime': 10
@@ -135,7 +142,7 @@ class TestTaskRegistry(unittest.TestCase):
 
         registry = TaskRegistry()
         before = datetime.now().timestamp()
-        new_task = registry.add('mytask', 'mock_backend', args)
+        new_task = registry.add('mytask', 'mock_backend', 'category', args)
 
         tasks = registry.tasks
         self.assertEqual(len(tasks), 1)
@@ -144,15 +151,16 @@ class TestTaskRegistry(unittest.TestCase):
         self.assertIsInstance(task, Task)
         self.assertEqual(task, new_task)
         self.assertEqual(task.task_id, 'mytask')
+        self.assertEqual(task.category, 'category')
         self.assertEqual(task.backend, 'mock_backend')
         self.assertDictEqual(task.backend_args, args)
-        self.assertDictEqual(task.cache_args, {})
+        self.assertDictEqual(task.archive_args, {})
         self.assertDictEqual(task.sched_args, {})
         self.assertGreater(task.created_on, before)
 
         before = datetime.now().timestamp()
-        _ = registry.add('atask', 'mock_backend', args,
-                         cache_args=cache, sched_args=sched)
+        _ = registry.add('atask', 'mock_backend', 'category', args,
+                         archive_args=archive, sched_args=sched)
 
         tasks = registry.tasks
         self.assertEqual(len(tasks), 2)
@@ -161,8 +169,9 @@ class TestTaskRegistry(unittest.TestCase):
         self.assertIsInstance(task0, Task)
         self.assertEqual(task0.task_id, 'atask')
         self.assertEqual(task0.backend, 'mock_backend')
+        self.assertEqual(task0.category, 'category')
         self.assertDictEqual(task0.backend_args, args)
-        self.assertDictEqual(task0.cache_args, cache)
+        self.assertDictEqual(task0.archive_args, archive)
         self.assertDictEqual(task0.sched_args, sched)
         self.assertGreater(task0.created_on, before)
 
@@ -174,10 +183,10 @@ class TestTaskRegistry(unittest.TestCase):
         """Check if it raises an exception when an exisiting task is added again"""
 
         registry = TaskRegistry()
-        registry.add('mytask', 'mock_backend', {})
+        registry.add('mytask', 'mock_backend', 'category', {})
 
         with self.assertRaises(AlreadyExistsError):
-            registry.add('mytask', 'new_backend', {})
+            registry.add('mytask', 'new_backend', 'category', {})
 
         # Only one tasks is on the registry
         tasks = registry.tasks
@@ -186,6 +195,7 @@ class TestTaskRegistry(unittest.TestCase):
         task = tasks[0]
         self.assertEqual(task.task_id, 'mytask')
         self.assertEqual(task.backend, 'mock_backend')
+        self.assertEqual(task.category, 'category')
         self.assertDictEqual(task.backend_args, {})
 
     def test_remove_task(self):
@@ -197,9 +207,9 @@ class TestTaskRegistry(unittest.TestCase):
         }
 
         registry = TaskRegistry()
-        registry.add('mytask', 'mock_backend', args)
-        registry.add('newtask', 'to_remove', None)
-        registry.add('atask', 'test_backend', None)
+        registry.add('mytask', 'mock_backend', 'mocked_category', args)
+        registry.add('newtask', 'to_remove', 'mocked_category', None)
+        registry.add('atask', 'test_backend', 'mocked_category', None)
 
         tasks = registry.tasks
         self.assertEqual(len(tasks), 3)
@@ -235,13 +245,14 @@ class TestTaskRegistry(unittest.TestCase):
         }
 
         registry = TaskRegistry()
-        registry.add('mytask', 'mock_backend', args)
-        registry.add('newtask', 'to_remove', None)
-        registry.add('atask', 'test_backend', None)
+        registry.add('mytask', 'mock_backend', 'category', args)
+        registry.add('newtask', 'to_remove', 'category', None)
+        registry.add('atask', 'test_backend', 'category', None)
 
         task = registry.get('atask')
         self.assertIsInstance(task, Task)
         self.assertEqual(task.task_id, 'atask')
+        self.assertEqual(task.category, 'category')
         self.assertEqual(task.backend, 'test_backend')
         self.assertEqual(task.backend_args, None)
 
@@ -253,7 +264,7 @@ class TestTaskRegistry(unittest.TestCase):
         with self.assertRaises(NotFoundError):
             registry.get('mytask')
 
-        registry.add('newtask', 'mock_backend', {})
+        registry.add('newtask', 'mock_backend', 'mocked_category', {})
 
         with self.assertRaises(NotFoundError):
             registry.get('mytask')

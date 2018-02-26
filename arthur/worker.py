@@ -42,7 +42,11 @@ class ArthurWorker(rq.Worker):
         super().prepare_job_execution(job)
 
     def perform_job(self, job, queue):
-        """Custom method to execute a job and notify of its result"""
+        """Custom method to execute a job and notify of its result
+
+        :param job: Job object
+        :param queue: the queue containing the object
+        """
 
         result = super().perform_job(job, queue)
 

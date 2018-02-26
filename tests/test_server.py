@@ -64,7 +64,7 @@ class TestArthurServer(unittest.TestCase):
 
         with run_server(self.conn) as server:
             self.assertTrue(server.conn, self.conn)
-            self.assertIsNone(server.base_cache_path, None)
+            self.assertIsNone(server.archive_path, None)
             self.assertIsNotNone(server._tasks)
             self.assertIsNotNone(server._scheduler)
 
@@ -84,10 +84,8 @@ class TestArthurServer(unittest.TestCase):
                             "uri": "https://github.com/grimoirelab/arthur.git",
                             "from_date": "2015-03-01"
                         },
-                        "cache": {
-                            "cache": True,
-                            "fetch_from_cache": False
-                        },
+                        "category": "acme",
+                        "archive": {},
                         "scheduler": {
                             "delay": 10
                         }
@@ -120,10 +118,8 @@ class TestArthurServer(unittest.TestCase):
                             "uri": "https://github.com/grimoirelab/arthur.git",
                             "from_date": "2015-03-01"
                         },
-                        "cache": {
-                            "cache": True,
-                            "fetch_from_cache": False
-                        },
+                        "category": "acme",
+                        "archive": {},
                         "scheduler": {
                             "delay": 10
                         }
@@ -135,9 +131,10 @@ class TestArthurServer(unittest.TestCase):
                             "url": "https://bugzilla.redhat.com/",
                             "from_date": "2016-09-19"
                         },
-                        "cache": {
-                            "cache": True,
-                            "fetch_from_cache": True
+                        "category": "acme",
+                        "archive": {
+                            'archive_path': '/tmp/archive',
+                            'fetch_from_archive': False
                         },
                         "scheduler": {
                             "delay": 60
@@ -172,10 +169,8 @@ class TestArthurServer(unittest.TestCase):
                             "uri": "https://github.com/grimoirelab/arthur.git",
                             "from_date": "2015-03-01"
                         },
-                        "cache": {
-                            "cache": True,
-                            "fetch_from_cache": False
-                        },
+                        "category": "acme",
+                        "archive": {},
                         "scheduler": {
                             "delay": 10
                         }
@@ -187,9 +182,11 @@ class TestArthurServer(unittest.TestCase):
                             "url": "https://bugzilla.redhat.com/",
                             "from_date": "2016-09-19"
                         },
-                        "cache": {
-                            "cache": True,
-                            "fetch_from_cache": True
+                        "category": "acme",
+                        "archive": {
+                            'archive_path': '/tmp/archive',
+                            'fetch_from_archive': True,
+                            'archived_after': "2010-10-10",
                         },
                         "scheduler": {
                             "delay": 60

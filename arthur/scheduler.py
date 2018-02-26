@@ -36,6 +36,7 @@ import rq.job
 from grimoirelab.toolkit.datetime import unixtime_to_datetime
 
 from .common import (CH_PUBSUB,
+                     Q_ARCHIVE_JOBS,
                      Q_CREATION_JOBS,
                      Q_UPDATING_JOBS,
                      Q_STORAGE_ITEMS,
@@ -262,7 +263,7 @@ class Scheduler:
         self.registry = registry
         self.async_mode = async_mode
         self._scheduler = _JobScheduler(self.conn,
-                                        [Q_CREATION_JOBS, Q_UPDATING_JOBS],
+                                        [Q_ARCHIVE_JOBS, Q_CREATION_JOBS, Q_UPDATING_JOBS],
                                         polling=SCHED_POLLING,
                                         async_mode=self.async_mode)
         self._listener = _JobListener(self.conn,
@@ -290,8 +291,10 @@ class Scheduler:
 
         job_args = self._build_job_arguments(task)
 
+        fetch_from_archive = False if not task.archive_args else task.archive_args['fetch_from_archive']
         # Schedule the job as soon as possible
-        job_id = self._scheduler.schedule_job_task(Q_CREATION_JOBS,
+        queue = Q_ARCHIVE_JOBS if fetch_from_archive else Q_CREATION_JOBS
+        job_id = self._scheduler.schedule_job_task(queue,
                                                    task.task_id, job_args,
                                                    delay=0)
 
@@ -325,9 +328,13 @@ class Scheduler:
                            task_id, job.id)
             return
 
-        job_args = self._build_job_arguments(task)
+        archive_task = task.archive_args.get('fetch_from_archive', False)
 
-        job_args['fetch_from_cache'] = False
+        if archive_task:
+            logger.info("Job #%s (task: %s) successfully finished", job.id, task_id)
+            return
+
+        job_args = self._build_job_arguments(task)
 
         if result.nitems > 0:
             from_date = unixtime_to_datetime(result.max_date)
@@ -364,11 +371,13 @@ class Scheduler:
         job_args['backend'] = task.backend
         job_args['backend_args'] = copy.deepcopy(task.backend_args)
 
-        # Cache parameters
-        job_args['cache_path'] = task.cache_args['cache_path']
-        job_args['fetch_from_cache'] = task.cache_args['fetch_from_cache']
+        # Category
+        job_args['category'] = task.category
 
-        # Other parameters
-        job_args['max_retries'] = task.sched_args['max_retries_job']
+        # Archive parameters
+        job_args['archive_args'] = copy.deepcopy(task.archive_args)
+
+        # Scheduler parameters
+        job_args['sched_args'] = copy.deepcopy(task.sched_args)
 
         return job_args

@@ -38,24 +38,26 @@ class Task:
     This class stores the basic information needed to retrieve data
     from a repository. The parameters needed to run the backend
     are given in the dictionary `backend_args`. Other parameters
-    can also given to configure the cache (with `cache_args`) or to
+    can also given to configure the archive (with `archive_args`) or to
     define how this task will be scheduled (with `sched_args`).
 
     The task will be identified by the `task_id` attribute.
 
     :param task_id: identifier of this task
     :param backend: backend used to fetch data from the repository
+    :param category: category of the items to fecth
     :param backend_args: dict of arguments required to run the backend
-    :param cache_args: dict of arguments to configure the cache, if needed
+    :param archive_args: dict of arguments to configure the archive, if needed
     :param sched_args: dict of arguments to configure the scheduler, if needed
     """
-    def __init__(self, task_id, backend, backend_args,
-                 cache_args=None, sched_args=None):
+    def __init__(self, task_id, backend, category, backend_args,
+                 archive_args=None, sched_args=None):
         self._task_id = task_id
         self.created_on = datetime.now().timestamp()
         self.backend = backend
+        self.category = category
         self.backend_args = backend_args
-        self.cache_args = cache_args if cache_args else {}
+        self.archive_args = archive_args if archive_args else {}
         self.sched_args = sched_args if sched_args else {}
 
     @property
@@ -68,8 +70,9 @@ class Task:
             'created_on': self.created_on,
             'backend': self.backend,
             'backend_args': self.backend_args,
-            'cache': self.cache_args,
-            'scheduler': self.sched_args
+            'category': self.category,
+            'archive_args': self.archive_args,
+            'scheduler_args': self.sched_args
         }
 
 
@@ -88,8 +91,8 @@ class TaskRegistry:
         self._rwlock = RWLock()
         self._tasks = {}
 
-    def add(self, task_id, backend, backend_args,
-            cache_args=None, sched_args=None):
+    def add(self, task_id, backend, category, backend_args,
+            archive_args=None, sched_args=None):
         """Add a task to the registry.
 
         This method adds task using `task_id` as identifier. If a task
@@ -98,8 +101,9 @@ class TaskRegistry:
 
         :param task_id: identifier of the task to add
         :param backend: backend used to fetch data from the repository
+        :param category: category of the items to fetch
         :param backend_args: dictionary of arguments required to run the backend
-        :param cache_args: dict of arguments to configure the cache, if needed
+        :param archive_args: dict of arguments to configure the archive, if needed
         :param sched_args: dict of arguments to configure the scheduler, if needed
 
         :returns: the new task added to the registry
@@ -113,8 +117,8 @@ class TaskRegistry:
             self._rwlock.writer_release()
             raise AlreadyExistsError(element=str(task_id))
 
-        task = Task(task_id, backend, backend_args,
-                    cache_args=cache_args,
+        task = Task(task_id, backend, category, backend_args,
+                    archive_args=archive_args,
                     sched_args=sched_args)
         self._tasks[task_id] = task
 

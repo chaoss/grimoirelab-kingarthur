@@ -26,8 +26,8 @@ Additionally, they can be written to an Elastic Search index.
 ### arthurd
 ```
 usage: arthurd [-c <file>] [-g] [-h <host>] [-p <port>] [-d <database>]
-               [--es-index <index>] [--log-path <path>] [--cache-path <cpath>]
-               [--no-cache] [--no-daemon] | --help
+               [--es-index <index>] [--log-path <path>] [--archive-path <cpath>]
+               [--no-archive] [--no-daemon] | --help
 
 King Arthur commands his loyal knight Perceval on the quest
 to retrieve data from software repositories.
@@ -48,8 +48,8 @@ optional arguments:
   -s, --sync            work in synchronous mode (without workers)
   --es-index            output ElasticSearch server index
   --log-path            path where logs are stored
-  --cache-path          path to cache directory
-  --no-cache            do not cache fetched raw data
+  --archive-path        path to archive manager directory
+  --no-archive          do not archive fetched raw data
   --no-daemon           do not run arthur in daemon mode
 ```
 
@@ -98,7 +98,7 @@ install and run them both.
 
 To run Arthur server:
 ```
-$ arthurd -g -d redis://localhost/8 --es-index http://localhost:9200/items --log-path /tmp/logs/arthud --no-cache
+$ arthurd -g -d redis://localhost/8 --es-index http://localhost:9200/items --log-path /tmp/logs/arthud --no-archive
 ```
 
 To run a worker:
@@ -125,27 +125,26 @@ $ cat tasks.json
                 "uri": "https://github.com/grimoirelab/arthur.git",
                 "from_date": "2015-03-01"
             },
-            "cache": {
-                "cache": true,
-                "fetch_from_cache": false
-            },
+            "category": "commit",
             "scheduler": {
                 "delay": 10
             }
         },
         {
-            "task_id": "bugzilla_redhat",
-            "backend": "bugzilla",
+            "task_id": "bugzilla_mozilla",
+            "backend": "bugzillarest",
             "backend_args": {
-                "url": "https://bugzilla.redhat.com/",
+                "url": "https://bugzilla.mozilla.org/",
                 "from_date": "2016-09-19"
             },
-            "cache": {
-                "cache": true,
-                "fetch_from_cache": false
+            "category": "bug",
+            "archive": {
+                "fetch_from_archive": true,
+                "archived_after": "2018-02-26 09:00"
             },
             "scheduler": {
-                "delay": 60
+                "delay": 60,
+                "max_retries_job": 5
             }
         }
     ]
@@ -177,13 +176,9 @@ $ curl http://127.0.0.1:8080/tasks
                 "gitpath": "/tmp/santi/"
             },
             "backend": "git",
+            "category": "commit",
             "created_on": 1480531707.810326,
             "task_id": "arthur.git",
-            "cache": {
-                "cache_path": null,
-                "fetch_from_cache": false,
-                "cache": true
-            },
             "scheduler": {
                 "max_retries_job": 3,
                 "delay": 10
@@ -205,7 +200,7 @@ $ cat tasks_to_remove.json
 {
     "tasks": [
         {
-            "task_id": "bugzilla_redhat"
+            "task_id": "bugzilla_mozilla"
         },
         {
             "task_id": "arthur.git"

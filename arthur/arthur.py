@@ -27,24 +27,31 @@ import pickle
 
 import rq
 
-from .common import Q_STORAGE_ITEMS, MAX_JOB_RETRIES, WAIT_FOR_QUEUING
+from grimoirelab.toolkit.datetime import str_to_datetime, InvalidDateError
+
+from .common import ARCHIVES_DEFAULT_PATH, Q_STORAGE_ITEMS, MAX_JOB_RETRIES, WAIT_FOR_QUEUING
 from .errors import AlreadyExistsError, NotFoundError
 from .scheduler import Scheduler
 from .tasks import TaskRegistry
-
 
 logger = logging.getLogger(__name__)
 
 
 class Arthur:
-    """Main class to retrieve data from software repositories."""
+    """Main class to retrieve data from software repositories.
 
-    def __init__(self, conn, base_cache_path=None, async_mode=True):
+    :param conn: connection Object to Redis
+    :param base_archive_path: path where the archive manager is located
+    :param async_mode: run in async mode (with workers); set to `False`
+        for debugging purposes
+    """
+
+    def __init__(self, conn, base_archive_path=None, async_mode=True):
         self.conn = conn
         self.conn.flushdb()
         rq.push_connection(self.conn)
 
-        self.base_cache_path = base_cache_path
+        self.archive_path = base_archive_path
         self._tasks = TaskRegistry()
         self._scheduler = Scheduler(self.conn, self._tasks,
                                     async_mode=async_mode)
@@ -52,29 +59,29 @@ class Arthur:
     def start(self):
         self._scheduler.schedule()
 
-    def add_task(self, task_id, backend, backend_args,
-                 cache_args=None, sched_args=None):
-        """Add and schedule a task."""
+    def add_task(self, task_id, backend, category, backend_args,
+                 archive_args=None, sched_args=None):
+        """Add and schedule a task.
 
-        if not cache_args:
-            cache_args = {}
-        if not sched_args:
-            sched_args = {}
+        :param task_id: id of the task
+        :param backend: name of the backend
+        :param category: category of the items to fecth
+        :param backend_args: args needed to initialize the backend
+        :param archive_args: args needed to initialize the archive
+        :param sched_args: args needed to initialize the sceduler
 
-        if self.base_cache_path and cache_args['cache']:
-            cache_args['cache_path'] = os.path.join(self.base_cache_path, task_id)
-        else:
-            cache_args['cache_path'] = None
-        if 'fetch_from_cache' not in cache_args:
-            cache_args['fetch_from_cache'] = False
-        if 'delay' not in sched_args:
-            sched_args['delay'] = WAIT_FOR_QUEUING
-        if 'max_retries_job' not in sched_args:
-            sched_args['max_retries_job'] = MAX_JOB_RETRIES
+        :returns: the task created
+        """
 
         try:
-            task = self._tasks.add(task_id, backend, backend_args,
-                                   cache_args=cache_args,
+            archive_args = self.__parse_archive_args(archive_args)
+            sched_args = self.__parse_schedule_args(sched_args)
+        except ValueError as e:
+            raise e
+
+        try:
+            task = self._tasks.add(task_id, backend, category, backend_args,
+                                   archive_args=archive_args,
                                    sched_args=sched_args)
         except AlreadyExistsError as e:
             raise e
@@ -84,7 +91,10 @@ class Arthur:
         return task
 
     def remove_task(self, task_id):
-        """Remove and cancel a task."""
+        """Remove and cancel a task.
+
+        :param task_id: id of the task to be removed
+        """
 
         try:
             self._scheduler.cancel_task(task_id)
@@ -107,3 +117,63 @@ class Arthur:
         for item in items:
             item = pickle.loads(item)
             yield item
+
+    def __parse_archive_args(self, archive_args):
+        """Parse the archive arguments of a task"""
+
+        if not archive_args:
+            return {}
+
+        if self.archive_path:
+            archive_args['archive_path'] = self.archive_path
+        else:
+            archive_args['archive_path'] = os.path.expanduser(ARCHIVES_DEFAULT_PATH)
+
+        if 'fetch_from_archive' not in archive_args:
+            raise ValueError("archive_args.fetch_from_archive not defined")
+
+        if archive_args['fetch_from_archive'] and 'archived_after' not in archive_args:
+            raise ValueError("archive_args.archived_after not defined")
+
+        for arg in archive_args.keys():
+            if arg == 'archive_path':
+                continue
+            elif arg == 'fetch_from_archive':
+                if type(archive_args['fetch_from_archive']) is not bool:
+                    raise ValueError("archive_args.fetch_from_archive not boolean")
+            elif arg == 'archived_after':
+                if archive_args['fetch_from_archive']:
+                    try:
+                        archive_args['archived_after'] = str_to_datetime(archive_args['archived_after'])
+                    except InvalidDateError:
+                        raise ValueError("archive_args.archived_after datetime format not valid")
+                else:
+                    archive_args['archived_after'] = None
+            else:
+                raise ValueError("%s not accepted in archive_args" % arg)
+
+        return archive_args
+
+    def __parse_schedule_args(self, sched_args):
+        """Parse the schedule arguments of a task"""
+
+        if not sched_args:
+            return {}
+
+        if 'delay' not in sched_args:
+            sched_args['delay'] = WAIT_FOR_QUEUING
+
+        if 'max_retries_job' not in sched_args:
+            sched_args['max_retries_job'] = MAX_JOB_RETRIES
+
+        for arg in sched_args.keys():
+            if arg == 'delay':
+                if type(sched_args['delay']) is not int:
+                    raise ValueError("sched_args.delay not int")
+            elif arg == 'max_retries_job':
+                if type(sched_args['max_retries_job']) is not int:
+                    raise ValueError("sched_args.max_retries_job not int")
+            else:
+                raise ValueError("%s not accepted in schedule_args" % arg)
+
+        return sched_args

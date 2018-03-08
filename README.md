@@ -53,6 +53,35 @@ optional arguments:
   --no-daemon           do not run arthur in daemon mode
 ```
 
+#### arthurd configuration file
+
+To run `arthurd` using a configuration file:
+
+```
+$ arthurd [-c <file>]
+```
+
+Where `<file>` is the path to an `ini` file which uses the same parameters as in command line, but replacing underscores by hyphens. This configuration file has the following structure:
+
+```
+[arthur]
+cache_path=/tmp/.arthur/cache
+debug=True
+log_path=/tmp/logs/arthurd
+no_cache=True
+sync_mode=True
+
+[connection]
+host=127.0.0.1
+port=8080
+
+[elasticsearch]
+es_index=http://localhost:9200/items
+
+[redis]
+database=redis://localhost/8
+```
+
 ### arthurw
 ```
 usage: arthurw [-g] [-d <database>] [--burst] [<queue1>...<queueN>] | --help

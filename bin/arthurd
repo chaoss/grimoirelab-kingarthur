@@ -31,14 +31,15 @@ import sys
 import cherrypy
 import redis
 
+from arthur.common import ARCHIVES_DEFAULT_PATH
 from arthur.server import ArthurServer
 from arthur.writers import ElasticItemsWriter
 
 
 ARTHURD_USAGE_MSG = \
 """%(prog)s [-c <file>] [-g] [-h <host>] [-p <port>] [-d <database>]
-               [--es-index <index>] [--log-path <path>] [--cache-path <cpath>]
-               [--no-cache] [--no-daemon] | --help """
+               [--es-index <index>] [--log-path <path>] [--archive-path <cpath>]
+               [--no-archive] [--no-daemon] | --help """
 
 ARTHURD_DESC_MSG = \
 """King Arthur commands his loyal knight Perceval on the quest
@@ -60,8 +61,8 @@ optional arguments:
   -s, --sync            work in synchronous mode (without workers)
   --es-index            output ElasticSearch server index
   --log-path            path where logs are stored
-  --cache-path          path to cache directory
-  --no-cache            do not cache fetched raw data
+  --archive-path        path to archive manager directory
+  --no-archive          do not archive fetched raw data
   --no-daemon           do not run arthur in daemon mode
 """
 
@@ -85,10 +86,10 @@ def main():
     else:
         writer = None
 
-    # Set cache directory
-    base_cache_path = None if args.no_cache else args.cache_path
+    # Set archive manager directory
+    base_archive_path = None if args.no_archive else args.archive_path
 
-    app = ArthurServer(conn, base_cache_path,
+    app = ArthurServer(conn, base_archive_path,
                        async_mode=args.sync_mode,
                        writer=writer)
 
@@ -200,10 +201,10 @@ def create_common_arguments_parser(defaults):
     parser.add_argument('--log-path', dest='log_path',
                         default=os.path.expanduser('~/.arthur/logs/'),
                         help=argparse.SUPPRESS)
-    parser.add_argument('--cache-path', dest='cache_path',
-                        default=os.path.expanduser('~/.arthur/cache/'),
+    parser.add_argument('--archive-path', dest='archive_path',
+                        default=os.path.expanduser(ARCHIVES_DEFAULT_PATH),
                         help=argparse.SUPPRESS)
-    parser.add_argument('--no-cache', dest='no_cache',
+    parser.add_argument('--no-archive', dest='no_archive',
                         action='store_true',
                         help=argparse.SUPPRESS)
     parser.add_argument('--no-daemon', dest='no_daemon',

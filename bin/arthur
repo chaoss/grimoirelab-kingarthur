@@ -34,6 +34,7 @@ import redis
 from grimoirelab.toolkit.datetime import str_to_datetime
 
 from arthur.arthur import Arthur
+from arthur.common import ARCHIVES_DEFAULT_PATH
 
 
 ARTHUR_USAGE_MSG = \
@@ -59,8 +60,8 @@ optional arguments:
   -d, --database        URL database connection (default: 'redis://localhost/8')
   -s, --sync            work in synchronous mode (without workers)
   -o, --outfile         output filename
-  --cache-path          path to cache directory
-  --no-cache            do not cache fetched raw data
+  --archive-path        path to archive manager directory
+  --no-archive          do not archive fetched raw data
 """
 
 # Logging formats
@@ -77,8 +78,8 @@ def main():
     else:
         defaults = {}
 
-    # Set cache directory
-    base_cache_path = None if args.no_cache else args.cache_path
+    # Set archive manager directory
+    base_archive_path = None if args.no_archive else args.archive_path
 
     outfile = args.outfile
 
@@ -88,7 +89,7 @@ def main():
 
     conn = connect_to_redis(args.database)
 
-    arthur = Arthur(conn, args.sync_mode, base_cache_path)
+    arthur = Arthur(conn, args.sync_mode, base_archive_path)
 
     repositories = json.load(args.repositories)
 
@@ -138,10 +139,10 @@ def parse_args():
     parser.add_argument('-o', '--output', type=argparse.FileType('w'),
                         dest='outfile', default=sys.stdout,
                         help=argparse.SUPPRESS)
-    parser.add_argument('--cache-path', dest='cache_path',
-                        default=os.path.expanduser('~/.arthur/cache/'),
+    parser.add_argument('--archive-path', dest='archive_path',
+                        default=os.path.expanduser(ARCHIVES_DEFAULT_PATH),
                         help=argparse.SUPPRESS)
-    parser.add_argument('--no-cache', dest='no_cache',
+    parser.add_argument('--no-archive', dest='no_archive',
                         action='store_true',
                         help=argparse.SUPPRESS)
     parser.add_argument('repositories', nargs='?', type=argparse.FileType('r'),

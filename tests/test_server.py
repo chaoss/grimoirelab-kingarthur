@@ -24,16 +24,12 @@
 from contextlib import contextmanager
 import json
 import requests
-import sys
 import unittest
 
 import cherrypy
 
-if '..' not in sys.path:
-    sys.path.insert(0, '..')
-
 from arthur.server import ArthurServer
-from tests import find_empty_redis_database
+from base import find_empty_redis_database
 
 
 @contextmanager

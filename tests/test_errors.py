@@ -21,11 +21,6 @@
 #     Santiago Dueñas <sduenas@bitergia.com>
 #
 
-import sys
-
-if '..' not in sys.path:
-    sys.path.insert(0, '..')
-
 import unittest
 
 import arthur.errors as errors

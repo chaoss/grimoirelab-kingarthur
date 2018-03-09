@@ -21,13 +21,9 @@
 #     Santiago Dueñas <sduenas@bitergia.com>
 #
 
-import sys
 import unittest
 
 from datetime import datetime
-
-if '..' not in sys.path:
-    sys.path.insert(0, '..')
 
 from arthur.errors import AlreadyExistsError, NotFoundError
 from arthur.tasks import Task, TaskRegistry

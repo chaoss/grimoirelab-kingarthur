@@ -26,16 +26,12 @@ import os
 import os.path
 import pickle
 import shutil
-import sys
 import tempfile
 import unittest
 
 import httpretty
 import requests
 import rq
-
-if '..' not in sys.path:
-    sys.path.insert(0, '..')
 
 from arthur import __version__
 from arthur.errors import NotFoundError
@@ -46,7 +42,7 @@ from arthur.jobs import (JobResult,
 from grimoirelab.toolkit.datetime import datetime_utcnow
 from perceval.archive import ArchiveManager
 
-from tests import TestBaseRQ
+from base import TestBaseRQ
 
 
 BUGZILLA_SERVER_URL = 'http://example.com'

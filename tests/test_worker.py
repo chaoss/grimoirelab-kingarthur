@@ -22,18 +22,14 @@
 #
 
 import pickle
-import sys
 import unittest
 
 import rq.worker
 
-if '..' not in sys.path:
-    sys.path.insert(0, '..')
-
 from arthur.common import CH_PUBSUB
 from arthur.worker import ArthurWorker
 
-from tests import TestBaseRQ, mock_sum, mock_failure
+from base import TestBaseRQ, mock_sum, mock_failure
 
 
 class MockArthurWorker(rq.worker.SimpleWorker, ArthurWorker):

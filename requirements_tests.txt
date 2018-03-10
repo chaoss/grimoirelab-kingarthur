@@ -1,5 +1,2 @@
--r requirements.txt
 httpretty==0.8.6
 fakeredis
-flake8
-coveralls

@@ -25,18 +25,14 @@ import os
 import os.path
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
-
-if '..' not in sys.path:
-    sys.path.insert(0, '..')
 
 from arthur.arthur import Arthur
 from arthur.common import ARCHIVES_DEFAULT_PATH
 from arthur.errors import AlreadyExistsError
 
-from tests import find_empty_redis_database
+from base import find_empty_redis_database
 
 
 class TestArthur(unittest.TestCase):

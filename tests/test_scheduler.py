@@ -22,18 +22,14 @@
 #
 
 import os.path
-import sys
 import unittest
-
-if '..' not in sys.path:
-    sys.path.insert(0, '..')
 
 from arthur.common import Q_CREATION_JOBS
 from arthur.errors import NotFoundError
 from arthur.tasks import TaskRegistry
 from arthur.scheduler import Scheduler
 
-from tests import TestBaseRQ
+from base import TestBaseRQ
 
 
 class TestScheduler(TestBaseRQ):

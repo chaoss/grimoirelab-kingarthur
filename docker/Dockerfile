@@ -39,6 +39,14 @@ ENV LANG C.UTF-8
 
 # Install pip packages needed
 RUN pip3 install setuptools
+# Installing perceval extra packages break arthur for a reason not understood yet
+RUN pip3 install perceval-mozilla
+RUN pip3 install perceval-opnfv
+# Not yet available
+# RUN pip3 install perceval-puppet
+# The above packages modify the perceval/__init.py__ breaking perceval in some cases
+# Reinstall perceval so the file is restored
+RUN pip3 install perceval --upgrade --force-reinstall
 RUN pip3 install kingarthur
 
 ADD stage ${DEPLOY_USER_DIR}/stage

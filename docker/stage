@@ -13,4 +13,4 @@ echo "Starting two workers (one only for update) ..."
 (sleep 5 && arthurw -g -d redis://$REDIS/8 > $LOGS/worker-collect.log 2>&1) &
 (sleep 5 && arthurw -g -d redis://$REDIS/8 update > $LOGS/worker-update.log 2>&1) &
 # Arthur
-arthurd -g --no-daemon --host 0.0.0.0 -d redis://$REDIS/8 --log-path $LOGS --no-cache
+arthurd -g --no-daemon --host 0.0.0.0 -d redis://$REDIS/8 --log-path $LOGS

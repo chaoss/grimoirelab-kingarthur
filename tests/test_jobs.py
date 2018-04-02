@@ -673,7 +673,7 @@ class TestExecuteJob(TestBaseRQ):
         self.assertEqual(result.backend, 'git')
         self.assertEqual(result.category, 'commit')
         self.assertEqual(result.last_uuid, None)
-        self.assertEqual(result.max_date, None)
+        self.assertEqual(result.max_date, 1577840461.0)
         self.assertEqual(result.nitems, 0)
         self.assertEqual(result.offset, None)
         self.assertEqual(result.nresumed, 0)

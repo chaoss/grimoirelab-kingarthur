@@ -1,4 +1,4 @@
-# Arthur [![Build Status](https://travis-ci.org/grimoirelab/arthur.svg?branch=master)](https://travis-ci.org/grimoirelab/arthur)[![Coverage Status](https://img.shields.io/coveralls/grimoirelab/arthur.svg)](https://coveralls.io/r/grimoirelab/arthur?branch=master)
+# Arthur [![Build Status](https://travis-ci.org/grimoirelab/arthur.svg?branch=master)](https://travis-ci.org/chaoss/grimoirelab-kingarthur)[![Coverage Status](https://img.shields.io/coveralls/chaoss/grimoirelab-kingarthur.svg)](https://coveralls.io/r/chaoss/grimoirelab-kingarthur?branch=master)
 
 King Arthur commands his loyal knight Perceval on the quest to fetch
 data from software repositories.
@@ -151,7 +151,7 @@ $ cat tasks.json
             "backend": "git",
             "backend_args": {
                 "gitpath": "/tmp/git/arthur.git/",
-                "uri": "https://github.com/grimoirelab/arthur.git",
+                "uri": "https://github.com/chaoss/grimoirelab-kingarthur.git",
                 "from_date": "2015-03-01"
             },
             "category": "commit",
@@ -201,7 +201,7 @@ $ curl http://127.0.0.1:8080/tasks
         {
             "backend_args": {
                 "from_date": "2015-03-01T00:00:00+00:00",
-                "uri": "https://github.com/grimoirelab/arthur.git",
+                "uri": "https://github.com/chaoss/grimoirelab-kingarthur.git",
                 "gitpath": "/tmp/santi/"
             },
             "backend": "git",

@@ -109,7 +109,7 @@ optional arguments:
 * python3-rq >= 0.6
 * python3-cherrypy >= 8.1.0
 * grimoirelab-toolkit >= 0.1.0
-* perceval >= 0.8
+* perceval >= 0.9.13
 
 ## Installation
 

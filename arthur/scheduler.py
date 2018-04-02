@@ -336,12 +336,11 @@ class Scheduler:
 
         job_args = self._build_job_arguments(task)
 
-        if result.nitems > 0:
-            from_date = unixtime_to_datetime(result.max_date)
-            job_args['backend_args']['from_date'] = from_date
+        from_date = unixtime_to_datetime(result.max_date)
+        job_args['backend_args']['from_date'] = from_date
 
-            if result.offset:
-                job_args['backend_args']['offset'] = result.offset
+        if result.offset:
+            job_args['backend_args']['offset'] = result.offset
 
         delay = task.sched_args['delay']
 

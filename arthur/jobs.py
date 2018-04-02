@@ -24,14 +24,15 @@
 import functools
 import logging
 
-import rq
 import pickle
+import rq
 
 import perceval
 import perceval.backends
 import perceval.archive
 
-from grimoirelab.toolkit.datetime import unixtime_to_datetime
+from grimoirelab.toolkit.datetime import (datetime_to_utc,
+                                          unixtime_to_datetime)
 
 from ._version import __version__
 from .errors import NotFoundError
@@ -167,8 +168,14 @@ class PercevalJob:
             self.initialize_archive_manager(archive_args['archive_path'])
 
         if not resume:
+            max_date = backend_args.get('from_date', None)
+            offset = backend_args.get('offset', None)
+
+            if max_date:
+                max_date = datetime_to_utc(max_date).timestamp()
+
             self._result = JobResult(self.job_id, self.task_id, self.backend, self.category,
-                                     None, None, 0, offset=None,
+                                     None, max_date, 0, offset=offset,
                                      nresumed=0)
         else:
             if self.result.max_date:

@@ -158,21 +158,21 @@ class Arthur:
         """Parse the schedule arguments of a task"""
 
         if not sched_args:
-            return {}
+            sched_args = {}
 
         if 'delay' not in sched_args:
             sched_args['delay'] = WAIT_FOR_QUEUING
 
-        if 'max_retries_job' not in sched_args:
-            sched_args['max_retries_job'] = MAX_JOB_RETRIES
+        if 'max_retries' not in sched_args:
+            sched_args['max_retries'] = MAX_JOB_RETRIES
 
         for arg in sched_args.keys():
             if arg == 'delay':
                 if type(sched_args['delay']) is not int:
                     raise ValueError("sched_args.delay not int")
-            elif arg == 'max_retries_job':
-                if type(sched_args['max_retries_job']) is not int:
-                    raise ValueError("sched_args.max_retries_job not int")
+            elif arg == 'max_retries':
+                if type(sched_args['max_retries']) is not int:
+                    raise ValueError("sched_args.max_retries not int")
             else:
                 raise ValueError("%s not accepted in schedule_args" % arg)
 

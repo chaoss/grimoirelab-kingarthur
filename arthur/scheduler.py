@@ -377,6 +377,6 @@ class Scheduler:
         job_args['archive_args'] = copy.deepcopy(task.archive_args)
 
         # Scheduler parameters
-        job_args['sched_args'] = copy.deepcopy(task.sched_args)
+        job_args['max_retries'] = task.sched_args['max_retries']
 
         return job_args

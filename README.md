@@ -173,7 +173,7 @@ $ cat tasks.json
             },
             "scheduler": {
                 "delay": 60,
-                "max_retries_job": 5
+                "max_retries": 5
             }
         }
     ]
@@ -209,7 +209,7 @@ $ curl http://127.0.0.1:8080/tasks
             "created_on": 1480531707.810326,
             "task_id": "arthur.git",
             "scheduler": {
-                "max_retries_job": 3,
+                "max_retries": 3,
                 "delay": 10
             }
         }

@@ -46,7 +46,7 @@ class TestScheduler(TestBaseRQ):
         archive_args = {}
         sched_args = {
             'delay': 0,
-            'max_retries_job': 0
+            'max_retries': 0
         }
 
         registry = TaskRegistry()

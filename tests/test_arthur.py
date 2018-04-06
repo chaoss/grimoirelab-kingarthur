@@ -79,7 +79,7 @@ class TestArthur(unittest.TestCase):
         self.assertEqual(t.backend, backend)
         self.assertDictEqual(t.backend_args, backend_params)
         self.assertDictEqual(t.archive_args, {})
-        self.assertDictEqual(t.sched_args, {})
+        self.assertDictEqual(t.sched_args, {'max_retries': 3, 'delay': 10})
 
         self.assertEqual(initial_tasks, 0)
         self.assertEqual(after_tasks, 1)
@@ -105,7 +105,7 @@ class TestArthur(unittest.TestCase):
         self.assertEqual(t.backend, backend)
         self.assertDictEqual(t.backend_args, backend_params)
         self.assertDictEqual(t.archive_args, archive_params)
-        self.assertDictEqual(t.sched_args, {})
+        self.assertDictEqual(t.sched_args, {'max_retries': 3, 'delay': 10})
 
         self.assertEqual(initial_tasks, 0)
         self.assertEqual(after_tasks, 1)
@@ -213,7 +213,7 @@ class TestArthur(unittest.TestCase):
         archive_params = {'fetch_from_archive': True,
                           'archived_after': '2100-01-01',
                           'archive_path': './acme-plan'}
-        sched_params = {"delay": 10, "max_retries_job": 10}
+        sched_params = {"delay": 10, "max_retries": 10}
 
         app = Arthur(self.conn, base_archive_path=self.tmp_path, async_mode=False)
 
@@ -240,7 +240,7 @@ class TestArthur(unittest.TestCase):
         backend = "backend"
         category = None
         backend_params = {"a": "a", "b": "b"}
-        sched_params = {"unknown": 1, "delay": 10, "max_retries_job": 10}
+        sched_params = {"unknown": 1, "delay": 10, "max_retries": 10}
 
         app = Arthur(self.conn, async_mode=False)
 
@@ -256,7 +256,7 @@ class TestArthur(unittest.TestCase):
         backend = "backend"
         category = None
         backend_params = {"a": "a", "b": "b"}
-        sched_params = {"delay": "1", "max_retries_job": 10}
+        sched_params = {"delay": "1", "max_retries": 10}
 
         app = Arthur(self.conn, async_mode=False)
 
@@ -265,21 +265,21 @@ class TestArthur(unittest.TestCase):
 
         self.assertEqual(ex.exception.args[0], "sched_args.delay not int")
 
-    def test_task_wrong_max_retries_job(self):
-        """Check whether an exception is thrown when max_retries_job parameter is not properly set"""
+    def test_task_wrong_max_retries(self):
+        """Check whether an exception is thrown when max_retries parameter is not properly set"""
 
         task_id = "arthur.task"
         backend = "backend"
         category = None
         backend_params = {"a": "a", "b": "b"}
-        sched_params = {"delay": 1, "max_retries_job": "c"}
+        sched_params = {"delay": 1, "max_retries": "c"}
 
         app = Arthur(self.conn, async_mode=False)
 
         with self.assertRaises(ValueError) as ex:
             app.add_task(task_id, backend, category, backend_params, sched_args=sched_params)
 
-        self.assertEqual(ex.exception.args[0], "sched_args.max_retries_job not int")
+        self.assertEqual(ex.exception.args[0], "sched_args.max_retries not int")
 
     def test_add_duplicated_task(self):
         """Check whether an exception is thrown when a duplicated task is added"""

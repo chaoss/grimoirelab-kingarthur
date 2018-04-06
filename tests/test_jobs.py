@@ -541,13 +541,12 @@ class TestExecuteJob(TestBaseRQ):
             'gitpath': os.path.join(self.dir, 'data/git_log.txt')
         }
         archive_args = {}
-        sched_args = {'max_retries': 10}
 
         q = rq.Queue('queue', async=False)
 
         job = q.enqueue(execute_perceval_job,
                         backend='git', backend_args=backend_args, category='commit',
-                        archive_args=archive_args, sched_args=sched_args,
+                        archive_args=archive_args, max_retries=0,
                         qitems='items', task_id='mytask')
 
         result = job.return_value
@@ -591,14 +590,13 @@ class TestExecuteJob(TestBaseRQ):
             'api_token': 'AAAA',
             'max_issues': 3
         }
-        sched_args = {'max_retries': 3}
 
         q = rq.Queue('queue', async=False)
         job = q.enqueue(execute_perceval_job,
                         backend='redmine', backend_args=backend_args,
                         category='issue',
                         qitems='items', task_id='mytask',
-                        sched_args=sched_args)
+                        max_retries=3)
 
         result = job.return_value
         self.assertEqual(result.job_id, job.get_id())
@@ -628,7 +626,7 @@ class TestExecuteJob(TestBaseRQ):
             self.assertEqual(item[1], expected[x])
 
     @httpretty.activate
-    def test_max_retries_job(self):
+    def test_max_retries_job_failure(self):
         """Test if the job will fail after max_retries limit is reached"""
 
         http_requests = setup_mock_redmine_server(max_failures=2)
@@ -638,9 +636,6 @@ class TestExecuteJob(TestBaseRQ):
             'api_token': 'AAAA',
             'max_issues': 3
         }
-        sched_args = {
-            'max_retries': 1
-        }
 
         q = rq.Queue('queue', async=False)
 
@@ -649,7 +644,7 @@ class TestExecuteJob(TestBaseRQ):
                             backend='redmine', backend_args=args,
                             category='issue',
                             qitems='items', task_id='mytask',
-                            sched_args=sched_args)
+                            max_retries=1)
             self.assertEqual(job.is_failed, True)
 
     def test_job_no_result(self):

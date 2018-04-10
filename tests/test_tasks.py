@@ -26,7 +26,7 @@ import unittest
 from datetime import datetime
 
 from arthur.errors import AlreadyExistsError, NotFoundError
-from arthur.tasks import Task, TaskRegistry
+from arthur.tasks import SchedulingTaskConfig, Task, TaskRegistry
 
 
 class TestTask(unittest.TestCase):
@@ -48,7 +48,7 @@ class TestTask(unittest.TestCase):
         self.assertEqual(task.category, 'category')
         self.assertDictEqual(task.backend_args, args)
         self.assertDictEqual(task.archive_args, {})
-        self.assertDictEqual(task.sched_args, {})
+        self.assertEqual(task.scheduling_cfg, None)
         self.assertGreater(task.created_on, before)
 
         # Test when archive and scheduler arguments are given
@@ -57,20 +57,19 @@ class TestTask(unittest.TestCase):
             'fetch_from_archive': False,
             'archived_after': None
         }
-        sched = {
-            'stime': 10
-        }
+        sched = SchedulingTaskConfig(delay=10, max_retries=2)
+
         before = datetime.now().timestamp()
 
         task = Task('mytask', 'mock_backend', 'category', args,
-                    archive_args=archive, sched_args=sched)
+                    archive_args=archive, scheduling_cfg=sched)
 
         self.assertEqual(task.task_id, 'mytask')
         self.assertEqual(task.backend, 'mock_backend')
         self.assertEqual(task.category, 'category')
         self.assertDictEqual(task.backend_args, args)
         self.assertDictEqual(task.archive_args, archive)
-        self.assertDictEqual(task.sched_args, sched)
+        self.assertEqual(task.scheduling_cfg, sched)
         self.assertGreater(task.created_on, before)
 
     def test_to_dict(self):
@@ -86,13 +85,11 @@ class TestTask(unittest.TestCase):
             'fetch_from_archive': False,
             'archived_after': None,
         }
-        sched = {
-            'stime': 10
-        }
+        sched = SchedulingTaskConfig(delay=10, max_retries=2)
         before = datetime.now().timestamp()
 
         task = Task('mytask', 'mock_backend', category, args,
-                    archive_args=archive, sched_args=sched)
+                    archive_args=archive, scheduling_cfg=sched)
         d = task.to_dict()
 
         expected = {
@@ -101,7 +98,10 @@ class TestTask(unittest.TestCase):
             'backend_args': args,
             'category': category,
             'archive_args': archive,
-            'scheduler_args': sched
+            'scheduling_cfg': {
+                'delay': 10,
+                'max_retries': 2
+            }
         }
 
         created_on = d.pop('created_on')
@@ -132,9 +132,7 @@ class TestTaskRegistry(unittest.TestCase):
             'fetch_from_archive': False,
             'archived_after': None,
         }
-        sched = {
-            'stime': 10
-        }
+        sched = SchedulingTaskConfig(delay=10, max_retries=2)
 
         registry = TaskRegistry()
         before = datetime.now().timestamp()
@@ -151,12 +149,12 @@ class TestTaskRegistry(unittest.TestCase):
         self.assertEqual(task.backend, 'mock_backend')
         self.assertDictEqual(task.backend_args, args)
         self.assertDictEqual(task.archive_args, {})
-        self.assertDictEqual(task.sched_args, {})
+        self.assertEqual(task.scheduling_cfg, None)
         self.assertGreater(task.created_on, before)
 
         before = datetime.now().timestamp()
         _ = registry.add('atask', 'mock_backend', 'category', args,
-                         archive_args=archive, sched_args=sched)
+                         archive_args=archive, scheduling_cfg=sched)
 
         tasks = registry.tasks
         self.assertEqual(len(tasks), 2)
@@ -168,7 +166,7 @@ class TestTaskRegistry(unittest.TestCase):
         self.assertEqual(task0.category, 'category')
         self.assertDictEqual(task0.backend_args, args)
         self.assertDictEqual(task0.archive_args, archive)
-        self.assertDictEqual(task0.sched_args, sched)
+        self.assertEqual(task0.scheduling_cfg, sched)
         self.assertGreater(task0.created_on, before)
 
         task1 = tasks[1]
@@ -264,6 +262,106 @@ class TestTaskRegistry(unittest.TestCase):
 
         with self.assertRaises(NotFoundError):
             registry.get('mytask')
+
+
+class TestSchedulingTaskConfig(unittest.TestCase):
+    """Unit tests for TaskRegistry"""
+
+    def test_init(self):
+        """Test whether object properties are initialized"""
+
+        scheduling_cfg = SchedulingTaskConfig(delay=5, max_retries=1)
+        self.assertEqual(scheduling_cfg.delay, 5)
+        self.assertEqual(scheduling_cfg.max_retries, 1)
+
+    def test_set_delay(self):
+        """Test if delay property can be set"""
+
+        scheduling_cfg = SchedulingTaskConfig(delay=5)
+        self.assertEqual(scheduling_cfg.delay, 5)
+
+        scheduling_cfg.delay = 1
+        self.assertEqual(scheduling_cfg.delay, 1)
+
+    def test_set_invalid_delay(self):
+        """Check if an exception is raised for invalid delay values"""
+
+        with self.assertRaises(ValueError):
+            scheduling_cfg = SchedulingTaskConfig(delay=5.0)
+
+        scheduling_cfg = SchedulingTaskConfig(delay=5)
+
+        with self.assertRaises(ValueError):
+            scheduling_cfg.delay = 1.0
+
+        with self.assertRaises(ValueError):
+            scheduling_cfg.delay = '1'
+
+        self.assertEqual(scheduling_cfg.delay, 5)
+
+    def test_set_max_retries(self):
+        """Test if max_retries property can be set"""
+
+        scheduling_cfg = SchedulingTaskConfig(max_retries=3)
+        self.assertEqual(scheduling_cfg.max_retries, 3)
+
+        scheduling_cfg.max_retries = 1
+        self.assertEqual(scheduling_cfg.max_retries, 1)
+
+    def test_set_invalid_max_retries(self):
+        """Check if an exception is raised for invalid max_retries values"""
+
+        with self.assertRaises(ValueError):
+            scheduling_cfg = SchedulingTaskConfig(max_retries=2.0)
+
+        scheduling_cfg = SchedulingTaskConfig(max_retries=3)
+
+        with self.assertRaises(ValueError):
+            scheduling_cfg.max_retries = 5.0
+
+        with self.assertRaises(ValueError):
+            scheduling_cfg.max_retries = '5'
+
+        self.assertEqual(scheduling_cfg.max_retries, 3)
+
+    def test_from_dict(self):
+        """Check if an object is created when its properties are given from a dict"""
+
+        opts = {
+            'delay': 1,
+            'max_retries': 3
+        }
+
+        scheduling_cfg = SchedulingTaskConfig.from_dict(opts)
+        self.assertIsInstance(scheduling_cfg, SchedulingTaskConfig)
+        self.assertEqual(scheduling_cfg.delay, 1)
+        self.assertEqual(scheduling_cfg.max_retries, 3)
+
+    def test_from_dict_invalid_option(self):
+        """Check if an exception is raised when an invalid option is given"""
+
+        opts = {
+            'delay': 1,
+            'max_retries': 3,
+            'custom_param': 'myparam'
+        }
+
+        with self.assertRaisesRegex(ValueError,
+                                    "unknown 'custom_param' task config parameter"):
+            _ = SchedulingTaskConfig.from_dict(opts)
+
+    def test_to_dict(self):
+        """Check whether the object is converted into a dictionary"""
+
+        scheduling_cfg = SchedulingTaskConfig(delay=5, max_retries=1)
+        d = scheduling_cfg.to_dict()
+
+        expected = {
+            'delay': 5,
+            'max_retries': 1
+        }
+
+        self.assertDictEqual(d, expected)
 
 
 if __name__ == "__main__":

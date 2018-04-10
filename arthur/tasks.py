@@ -22,9 +22,13 @@
 #
 
 import logging
+import re
 
 from datetime import datetime
 
+from grimoirelab.toolkit.introspect import find_class_properties
+
+from .common import MAX_JOB_RETRIES, WAIT_FOR_QUEUING
 from .errors import AlreadyExistsError, NotFoundError
 from .utils import RWLock
 
@@ -39,7 +43,8 @@ class Task:
     from a repository. The parameters needed to run the backend
     are given in the dictionary `backend_args`. Other parameters
     can also given to configure the archive (with `archive_args`) or to
-    define how this task will be scheduled (with `sched_args`).
+    define how this task will be scheduled (using an instance of
+    `SchedulingTaskConfig`).
 
     The task will be identified by the `task_id` attribute.
 
@@ -48,17 +53,17 @@ class Task:
     :param category: category of the items to fecth
     :param backend_args: dict of arguments required to run the backend
     :param archive_args: dict of arguments to configure the archive, if needed
-    :param sched_args: dict of arguments to configure the scheduler, if needed
+    :param scheduling_cfg: scheduling config for this task, if needed
     """
     def __init__(self, task_id, backend, category, backend_args,
-                 archive_args=None, sched_args=None):
+                 archive_args=None, scheduling_cfg=None):
         self._task_id = task_id
         self.created_on = datetime.now().timestamp()
         self.backend = backend
         self.category = category
         self.backend_args = backend_args
         self.archive_args = archive_args if archive_args else {}
-        self.sched_args = sched_args if sched_args else {}
+        self.scheduling_cfg = scheduling_cfg if scheduling_cfg else None
 
     @property
     def task_id(self):
@@ -72,7 +77,7 @@ class Task:
             'backend_args': self.backend_args,
             'category': self.category,
             'archive_args': self.archive_args,
-            'scheduler_args': self.sched_args
+            'scheduling_cfg': self.scheduling_cfg.to_dict()
         }
 
 
@@ -92,7 +97,7 @@ class TaskRegistry:
         self._tasks = {}
 
     def add(self, task_id, backend, category, backend_args,
-            archive_args=None, sched_args=None):
+            archive_args=None, scheduling_cfg=None):
         """Add a task to the registry.
 
         This method adds task using `task_id` as identifier. If a task
@@ -104,7 +109,7 @@ class TaskRegistry:
         :param category: category of the items to fetch
         :param backend_args: dictionary of arguments required to run the backend
         :param archive_args: dict of arguments to configure the archive, if needed
-        :param sched_args: dict of arguments to configure the scheduler, if needed
+        :param scheduling_cfg: scheduling config for the task, if needed
 
         :returns: the new task added to the registry
 
@@ -119,7 +124,7 @@ class TaskRegistry:
 
         task = Task(task_id, backend, category, backend_args,
                     archive_args=archive_args,
-                    sched_args=sched_args)
+                    scheduling_cfg=scheduling_cfg)
         self._tasks[task_id] = task
 
         self._rwlock.writer_release()
@@ -184,3 +189,98 @@ class TaskRegistry:
         self._rwlock.reader_release()
 
         return tl
+
+
+class _TaskConfig:
+    """Abstract class to store task configuration options.
+
+    This class defines how to store specific task configuration
+    arguments such as scheduling or archiving options. It is not
+    meant to be instantiated on its own.
+
+    Configuration options must be defined using `property` and `setter`
+    decorators. Setters must check whether the given value is valid
+    or not. When it is invalid, a `ValueError` exception should be
+    raised. The rationale behind this is to use these methods as
+    parsers when `from_dict` class method is called. It will create
+    a new instance of the subclass passing its properties from a
+    dictionary.
+    """
+    KW_ARGS_ERROR_REGEX = re.compile(r"^.+ got an unexpected keyword argument '(.+)'$")
+
+    def to_dict(self):
+        """Returns a dict with the representation of this task configuration object."""
+
+        properties = find_class_properties(self.__class__)
+        config = {
+            name: self.__getattribute__(name) for name, _ in properties
+        }
+        return config
+
+    @classmethod
+    def from_dict(cls, config):
+        """Create an configuration object from a dictionary.
+
+        Key,value pairs will be used to initialize a task configuration
+        object. If 'config' contains invalid configuration parameters
+        a `ValueError` exception will be raised.
+
+        :param config: dictionary used to create an instance of this object
+
+        :returns: a task config instance
+
+        :raises ValueError: when an invalid configuration parameter is found
+        """
+        try:
+            obj = cls(**config)
+        except TypeError as e:
+            m = cls.KW_ARGS_ERROR_REGEX.match(str(e))
+            if m:
+                raise ValueError("unknown '%s' task config parameter" % m.group(1))
+            else:
+                raise e
+        else:
+            return obj
+
+
+class SchedulingTaskConfig(_TaskConfig):
+    """Manages the scheduling configuration of a task.
+
+    A limited number of parameters can be configured to schedule a task.
+
+    The `delay` option stores the number of seconds a recurring
+    task will be waiting before being scheduled again.
+
+    The `max_retries` option configures the maximum number of attempts
+    a job can execute before failing.
+
+    :param delay: seconds of delay
+    :param max_retries: maximum number of job retries before failing
+    """
+    def __init__(self, delay=WAIT_FOR_QUEUING, max_retries=MAX_JOB_RETRIES):
+        self.delay = delay
+        self.max_retries = max_retries
+
+    @property
+    def delay(self):
+        """Number of seconds a recurring task will be waiting before being scheduled again"""
+
+        return self._delay
+
+    @delay.setter
+    def delay(self, value):
+        if not isinstance(value, int):
+            raise ValueError("'delay' must be an int; %s given" % str(type(value)))
+        self._delay = value
+
+    @property
+    def max_retries(self):
+        """Maximum  number of attempts this job can execute before failing."""
+
+        return self._max_retries
+
+    @max_retries.setter
+    def max_retries(self, value):
+        if not isinstance(value, int):
+            raise ValueError("'max_retries' must be an int; %s given" % str(type(value)))
+        self._max_retries = value

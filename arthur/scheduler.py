@@ -40,6 +40,8 @@ from .common import (CH_PUBSUB,
                      Q_CREATION_JOBS,
                      Q_UPDATING_JOBS,
                      Q_STORAGE_ITEMS,
+                     MAX_JOB_RETRIES,
+                     WAIT_FOR_QUEUING,
                      TIMEOUT)
 from .errors import NotFoundError
 from .jobs import execute_perceval_job
@@ -342,7 +344,7 @@ class Scheduler:
         if result.offset:
             job_args['backend_args']['offset'] = result.offset
 
-        delay = task.sched_args['delay']
+        delay = task.scheduling_cfg.delay if task.scheduling_cfg else WAIT_FOR_QUEUING
 
         job_id = self._scheduler.schedule_job_task(Q_UPDATING_JOBS,
                                                    task_id, job_args,
@@ -377,6 +379,7 @@ class Scheduler:
         job_args['archive_args'] = copy.deepcopy(task.archive_args)
 
         # Scheduler parameters
-        job_args['max_retries'] = task.sched_args['max_retries']
+        sched_cfg = task.scheduling_cfg
+        job_args['max_retries'] = sched_cfg.max_retries if sched_cfg else MAX_JOB_RETRIES
 
         return job_args

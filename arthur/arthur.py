@@ -29,10 +29,10 @@ import rq
 
 from grimoirelab.toolkit.datetime import str_to_datetime, InvalidDateError
 
-from .common import ARCHIVES_DEFAULT_PATH, Q_STORAGE_ITEMS, MAX_JOB_RETRIES, WAIT_FOR_QUEUING
+from .common import ARCHIVES_DEFAULT_PATH, Q_STORAGE_ITEMS
 from .errors import AlreadyExistsError, NotFoundError
 from .scheduler import Scheduler
-from .tasks import TaskRegistry
+from .tasks import SchedulingTaskConfig, TaskRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -68,21 +68,20 @@ class Arthur:
         :param category: category of the items to fecth
         :param backend_args: args needed to initialize the backend
         :param archive_args: args needed to initialize the archive
-        :param sched_args: args needed to initialize the sceduler
+        :param sched_args: scheduling args for this task
 
         :returns: the task created
         """
-
         try:
             archive_args = self.__parse_archive_args(archive_args)
-            sched_args = self.__parse_schedule_args(sched_args)
+            scheduling_cfg = self.__parse_schedule_args(sched_args)
         except ValueError as e:
             raise e
 
         try:
             task = self._tasks.add(task_id, backend, category, backend_args,
                                    archive_args=archive_args,
-                                   sched_args=sched_args)
+                                   scheduling_cfg=scheduling_cfg)
         except AlreadyExistsError as e:
             raise e
 
@@ -158,22 +157,6 @@ class Arthur:
         """Parse the schedule arguments of a task"""
 
         if not sched_args:
-            sched_args = {}
+            return None
 
-        if 'delay' not in sched_args:
-            sched_args['delay'] = WAIT_FOR_QUEUING
-
-        if 'max_retries' not in sched_args:
-            sched_args['max_retries'] = MAX_JOB_RETRIES
-
-        for arg in sched_args.keys():
-            if arg == 'delay':
-                if type(sched_args['delay']) is not int:
-                    raise ValueError("sched_args.delay not int")
-            elif arg == 'max_retries':
-                if type(sched_args['max_retries']) is not int:
-                    raise ValueError("sched_args.max_retries not int")
-            else:
-                raise ValueError("%s not accepted in schedule_args" % arg)
-
-        return sched_args
+        return SchedulingTaskConfig.from_dict(sched_args)

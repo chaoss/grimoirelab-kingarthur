@@ -3,7 +3,6 @@ ARG ARTHUR_VERSION
 FROM grimoirelab/arthur:$ARTHUR_VERSION
 
 ENTRYPOINT [\
-  "/sbin/tini","--",\
   "/bin/sh", "-c", \
-  "exec /usr/local/bin/python3 bin/arthurw -d ${ARTHUR_DATABASE} ${ARTHUR_WORKER_QUEUE}"\
+  "exec python3 bin/arthurw -d ${ARTHUR_DATABASE} ${ARTHUR_WORKER_QUEUE}"\
   ]

@@ -293,7 +293,9 @@ class Scheduler:
 
         job_args = self._build_job_arguments(task)
 
-        fetch_from_archive = False if not task.archive_args else task.archive_args['fetch_from_archive']
+        archiving_cfg = task.archiving_cfg
+
+        fetch_from_archive = False if not archiving_cfg else archiving_cfg.fetch_from_archive
         # Schedule the job as soon as possible
         queue = Q_ARCHIVE_JOBS if fetch_from_archive else Q_CREATION_JOBS
         job_id = self._scheduler.schedule_job_task(queue,
@@ -330,9 +332,7 @@ class Scheduler:
                            task_id, job.id)
             return
 
-        archive_task = task.archive_args.get('fetch_from_archive', False)
-
-        if archive_task:
+        if task.archiving_cfg and task.archiving_cfg.fetch_from_archive:
             logger.info("Job #%s (task: %s) successfully finished", job.id, task_id)
             return
 
@@ -375,8 +375,9 @@ class Scheduler:
         # Category
         job_args['category'] = task.category
 
-        # Archive parameters
-        job_args['archive_args'] = copy.deepcopy(task.archive_args)
+        # Archiving parameters
+        archiving_cfg = task.archiving_cfg
+        job_args['archive_args'] = archiving_cfg.to_dict() if archiving_cfg else None
 
         # Scheduler parameters
         sched_cfg = task.scheduling_cfg

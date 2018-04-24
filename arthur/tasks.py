@@ -21,12 +21,15 @@
 #     Alvaro del Castillo San Felix <acs@bitergia.com>
 #
 
+import datetime
 import logging
 import re
 
-from datetime import datetime
-
+from grimoirelab.toolkit.datetime import (InvalidDateError,
+                                          datetime_to_utc,
+                                          str_to_datetime)
 from grimoirelab.toolkit.introspect import find_class_properties
+
 
 from .common import MAX_JOB_RETRIES, WAIT_FOR_QUEUING
 from .errors import AlreadyExistsError, NotFoundError
@@ -52,17 +55,17 @@ class Task:
     :param backend: backend used to fetch data from the repository
     :param category: category of the items to fecth
     :param backend_args: dict of arguments required to run the backend
-    :param archive_args: dict of arguments to configure the archive, if needed
+    :param archiving_cfg: archiving config for this task, if needed
     :param scheduling_cfg: scheduling config for this task, if needed
     """
     def __init__(self, task_id, backend, category, backend_args,
-                 archive_args=None, scheduling_cfg=None):
+                 archiving_cfg=None, scheduling_cfg=None):
         self._task_id = task_id
-        self.created_on = datetime.now().timestamp()
+        self.created_on = datetime.datetime.now().timestamp()
         self.backend = backend
         self.category = category
         self.backend_args = backend_args
-        self.archive_args = archive_args if archive_args else {}
+        self.archiving_cfg = archiving_cfg if archiving_cfg else None
         self.scheduling_cfg = scheduling_cfg if scheduling_cfg else None
 
     @property
@@ -76,8 +79,8 @@ class Task:
             'backend': self.backend,
             'backend_args': self.backend_args,
             'category': self.category,
-            'archive_args': self.archive_args,
-            'scheduling_cfg': self.scheduling_cfg.to_dict()
+            'archiving_cfg': self.archiving_cfg.to_dict() if self.archiving_cfg else None,
+            'scheduling_cfg': self.scheduling_cfg.to_dict() if self.scheduling_cfg else None
         }
 
 
@@ -97,7 +100,7 @@ class TaskRegistry:
         self._tasks = {}
 
     def add(self, task_id, backend, category, backend_args,
-            archive_args=None, scheduling_cfg=None):
+            archiving_cfg=None, scheduling_cfg=None):
         """Add a task to the registry.
 
         This method adds task using `task_id` as identifier. If a task
@@ -108,7 +111,7 @@ class TaskRegistry:
         :param backend: backend used to fetch data from the repository
         :param category: category of the items to fetch
         :param backend_args: dictionary of arguments required to run the backend
-        :param archive_args: dict of arguments to configure the archive, if needed
+        :param archiving_cfg: archiving config for the task, if needed
         :param scheduling_cfg: scheduling config for the task, if needed
 
         :returns: the new task added to the registry
@@ -123,7 +126,7 @@ class TaskRegistry:
             raise AlreadyExistsError(element=str(task_id))
 
         task = Task(task_id, backend, category, backend_args,
-                    archive_args=archive_args,
+                    archiving_cfg=archiving_cfg,
                     scheduling_cfg=scheduling_cfg)
         self._tasks[task_id] = task
 
@@ -241,6 +244,79 @@ class _TaskConfig:
                 raise e
         else:
             return obj
+
+
+class ArchivingTaskConfig(_TaskConfig):
+    """Manages the archiving configuration of a task.
+
+    A limited number of archiving parameters can be configured for a
+    task.
+
+    The `archive_path` option stores the path where the archive
+    for this task is or will be stored.
+
+    The `fetch_from_archive` option sets if the task will fetch
+    items from the archive.
+
+    When `archived_after` is set, only those items archived after
+    this date will be fetched.
+
+    :param archive_path: path where the archive is or will be stored
+    :param fetch_from_archive: fetch items from the archive
+    :param archived_after: fetch items archived after the given date
+    """
+    def __init__(self, archive_path, fetch_from_archive,
+                 archived_after=None):
+        self.archive_path = archive_path
+        self.fetch_from_archive = fetch_from_archive
+        self.archived_after = archived_after
+
+    @property
+    def archive_path(self):
+        """Path where the archive for this task is or will be stored."""
+
+        return self._archive_path
+
+    @archive_path.setter
+    def archive_path(self, value):
+        if not isinstance(value, str):
+            raise ValueError("'archive_path' must be a str; %s given"
+                             % str(type(value)))
+        self._archive_path = value
+
+    @property
+    def fetch_from_archive(self):
+        """Defines if the task will fetch items from the archive."""
+
+        return self._fetch_from_archive
+
+    @fetch_from_archive.setter
+    def fetch_from_archive(self, value):
+        if not isinstance(value, bool):
+            raise ValueError("'fetch_from_archive' must be a bool; %s given"
+                             % str(type(value)))
+        self._fetch_from_archive = value
+
+    @property
+    def archived_after(self):
+        """Items archived after this date will be fetched."""
+
+        return self._archived_after
+
+    @archived_after.setter
+    def archived_after(self, value):
+        if value is None:
+            self._archived_after = None
+        elif isinstance(value, datetime.datetime):
+            self._archived_after = datetime_to_utc(value)
+        elif isinstance(value, str):
+            try:
+                self._archived_after = str_to_datetime(value)
+            except InvalidDateError as e:
+                raise ValueError("'archived_after' is invalid; %s" % str(e))
+        else:
+            raise ValueError("'archived_after' must be either a str or a datetime; %s given"
+                             % str(type(value)))
 
 
 class SchedulingTaskConfig(_TaskConfig):

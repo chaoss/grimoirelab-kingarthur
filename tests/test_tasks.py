@@ -21,12 +21,22 @@
 #     Santiago Dueñas <sduenas@bitergia.com>
 #
 
+import datetime
 import unittest
 
-from datetime import datetime
+import dateutil
 
 from arthur.errors import AlreadyExistsError, NotFoundError
-from arthur.tasks import SchedulingTaskConfig, Task, TaskRegistry
+from arthur.tasks import (ArchivingTaskConfig,
+                          SchedulingTaskConfig,
+                          Task,
+                          TaskRegistry)
+
+
+INVALID_ARCHIVE_PATH_ERROR = "'archive_path' must be a str"
+INVALID_ARCHIVED_AFTER_ERROR = "'archived_after' must be either a str or a datetime"
+INVALID_ARCHIVED_AFTER_INVALID_DATE_ERROR = "is not a valid date"
+INVALID_FETCH_FROM_ARCHIVE_ERROR = "'fetch_from_archive' must be a bool;"
 
 
 class TestTask(unittest.TestCase):
@@ -39,7 +49,7 @@ class TestTask(unittest.TestCase):
             'from_date': '1970-01-01',
             'component': 'test'
         }
-        before = datetime.now().timestamp()
+        before = datetime.datetime.now().timestamp()
 
         task = Task('mytask', 'mock_backend', 'category', args)
 
@@ -47,28 +57,25 @@ class TestTask(unittest.TestCase):
         self.assertEqual(task.backend, 'mock_backend')
         self.assertEqual(task.category, 'category')
         self.assertDictEqual(task.backend_args, args)
-        self.assertDictEqual(task.archive_args, {})
+        self.assertEqual(task.archiving_cfg, None)
         self.assertEqual(task.scheduling_cfg, None)
         self.assertGreater(task.created_on, before)
 
         # Test when archive and scheduler arguments are given
-        archive = {
-            'archive_path': '/tmp/archive',
-            'fetch_from_archive': False,
-            'archived_after': None
-        }
+        archive = ArchivingTaskConfig('/tmp/archive', False,
+                                      archived_after=None)
         sched = SchedulingTaskConfig(delay=10, max_retries=2)
 
-        before = datetime.now().timestamp()
+        before = datetime.datetime.now().timestamp()
 
         task = Task('mytask', 'mock_backend', 'category', args,
-                    archive_args=archive, scheduling_cfg=sched)
+                    archiving_cfg=archive, scheduling_cfg=sched)
 
         self.assertEqual(task.task_id, 'mytask')
         self.assertEqual(task.backend, 'mock_backend')
         self.assertEqual(task.category, 'category')
         self.assertDictEqual(task.backend_args, args)
-        self.assertDictEqual(task.archive_args, archive)
+        self.assertEqual(task.archiving_cfg, archive)
         self.assertEqual(task.scheduling_cfg, sched)
         self.assertGreater(task.created_on, before)
 
@@ -80,16 +87,13 @@ class TestTask(unittest.TestCase):
             'component': 'test'
         }
         category = 'mocked_category'
-        archive = {
-            'archive_path': '/tmp/archive',
-            'fetch_from_archive': False,
-            'archived_after': None,
-        }
+        archive = ArchivingTaskConfig('/tmp/archive', False,
+                                      archived_after=None)
         sched = SchedulingTaskConfig(delay=10, max_retries=2)
-        before = datetime.now().timestamp()
+        before = datetime.datetime.now().timestamp()
 
         task = Task('mytask', 'mock_backend', category, args,
-                    archive_args=archive, scheduling_cfg=sched)
+                    archiving_cfg=archive, scheduling_cfg=sched)
         d = task.to_dict()
 
         expected = {
@@ -97,7 +101,11 @@ class TestTask(unittest.TestCase):
             'backend': 'mock_backend',
             'backend_args': args,
             'category': category,
-            'archive_args': archive,
+            'archiving_cfg': {
+                'archive_path': '/tmp/archive',
+                'archived_after': None,
+                'fetch_from_archive': False
+            },
             'scheduling_cfg': {
                 'delay': 10,
                 'max_retries': 2
@@ -127,15 +135,12 @@ class TestTaskRegistry(unittest.TestCase):
             'from_date': '1970-01-01',
             'component': 'test'
         }
-        archive = {
-            'archive_path': '/tmp/archive',
-            'fetch_from_archive': False,
-            'archived_after': None,
-        }
+        archive = ArchivingTaskConfig('/tmp/archive', False,
+                                      archived_after=None)
         sched = SchedulingTaskConfig(delay=10, max_retries=2)
 
         registry = TaskRegistry()
-        before = datetime.now().timestamp()
+        before = datetime.datetime.now().timestamp()
         new_task = registry.add('mytask', 'mock_backend', 'category', args)
 
         tasks = registry.tasks
@@ -148,13 +153,13 @@ class TestTaskRegistry(unittest.TestCase):
         self.assertEqual(task.category, 'category')
         self.assertEqual(task.backend, 'mock_backend')
         self.assertDictEqual(task.backend_args, args)
-        self.assertDictEqual(task.archive_args, {})
+        self.assertEqual(task.archiving_cfg, None)
         self.assertEqual(task.scheduling_cfg, None)
         self.assertGreater(task.created_on, before)
 
-        before = datetime.now().timestamp()
+        before = datetime.datetime.now().timestamp()
         _ = registry.add('atask', 'mock_backend', 'category', args,
-                         archive_args=archive, scheduling_cfg=sched)
+                         archiving_cfg=archive, scheduling_cfg=sched)
 
         tasks = registry.tasks
         self.assertEqual(len(tasks), 2)
@@ -165,7 +170,7 @@ class TestTaskRegistry(unittest.TestCase):
         self.assertEqual(task0.backend, 'mock_backend')
         self.assertEqual(task0.category, 'category')
         self.assertDictEqual(task0.backend_args, args)
-        self.assertDictEqual(task0.archive_args, archive)
+        self.assertEqual(task0.archiving_cfg, archive)
         self.assertEqual(task0.scheduling_cfg, sched)
         self.assertGreater(task0.created_on, before)
 
@@ -262,6 +267,139 @@ class TestTaskRegistry(unittest.TestCase):
 
         with self.assertRaises(NotFoundError):
             registry.get('mytask')
+
+
+class TestArchivingTaskConfig(unittest.TestCase):
+    """Unit tests for ArchivingTaskConfig"""
+
+    def test_init(self):
+        """Test whether object properties are initialized"""
+
+        dt = datetime.datetime(2001, 12, 1, 23, 15, 32,
+                               tzinfo=dateutil.tz.tzutc())
+
+        archiving_cfg = ArchivingTaskConfig('/tmp/archive', True,
+                                            archived_after=dt)
+        self.assertEqual(archiving_cfg.archive_path, '/tmp/archive')
+        self.assertEqual(archiving_cfg.fetch_from_archive, True)
+        self.assertEqual(archiving_cfg.archived_after, dt)
+
+    def test_set_archive_path(self):
+        """Test if archive_path property can be set"""
+
+        archiving_cfg = ArchivingTaskConfig('/tmp/archive', False)
+        self.assertEqual(archiving_cfg.archive_path, '/tmp/archive')
+
+        archiving_cfg.archive_path = '/tmp/oldarchive'
+        self.assertEqual(archiving_cfg.archive_path, '/tmp/oldarchive')
+
+    def test_set_invalid_archive_path(self):
+        """Check if an exception is raised for invalid archive_path values"""
+
+        with self.assertRaisesRegex(ValueError, INVALID_ARCHIVE_PATH_ERROR):
+            archiving_cfg = ArchivingTaskConfig(5.0, False)
+
+        archiving_cfg = ArchivingTaskConfig('/tmp/archive', False)
+
+        with self.assertRaisesRegex(ValueError, INVALID_ARCHIVE_PATH_ERROR):
+            archiving_cfg.archive_path = 1.0
+
+        with self.assertRaisesRegex(ValueError, INVALID_ARCHIVE_PATH_ERROR):
+            archiving_cfg.archive_path = True
+
+        self.assertEqual(archiving_cfg.archive_path, '/tmp/archive')
+
+    def test_set_fetch_from_archive(self):
+        """Test if fetch_from_archive property can be set"""
+
+        archiving_cfg = ArchivingTaskConfig('/tmp/archive', True)
+        self.assertEqual(archiving_cfg.fetch_from_archive, True)
+
+        archiving_cfg.fetch_from_archive = False
+        self.assertEqual(archiving_cfg.fetch_from_archive, False)
+
+    def test_set_invalid_fetch_from_archive(self):
+        """Check if an exception is raised for invalid fetch_from_archive values"""
+
+        with self.assertRaisesRegex(ValueError, INVALID_FETCH_FROM_ARCHIVE_ERROR):
+            archiving_cfg = ArchivingTaskConfig('/tmp/archive', 'False')
+
+        archiving_cfg = ArchivingTaskConfig('/tmp/archive', True)
+
+        with self.assertRaisesRegex(ValueError, INVALID_FETCH_FROM_ARCHIVE_ERROR):
+            archiving_cfg.fetch_from_archive = 1.0
+
+        with self.assertRaisesRegex(ValueError, INVALID_FETCH_FROM_ARCHIVE_ERROR):
+            archiving_cfg.fetch_from_archive = 'False'
+
+        self.assertEqual(archiving_cfg.fetch_from_archive, True)
+
+    def test_set_archived_after(self):
+        """Test if archived_after property can be set"""
+
+        archiving_cfg = ArchivingTaskConfig('/tmp/archive', True)
+        self.assertEqual(archiving_cfg.archived_after, None)
+
+        dt = datetime.datetime(2001, 12, 1, 23, 15, 32,
+                               tzinfo=dateutil.tz.tzutc())
+
+        archiving_cfg = ArchivingTaskConfig('/tmp/archive', True,
+                                            archived_after=dt)
+        self.assertEqual(archiving_cfg.archived_after, dt)
+
+        dt = datetime.datetime(2018, 1, 1,
+                               tzinfo=dateutil.tz.tzutc())
+
+        archiving_cfg.archived_after = dt
+        self.assertEqual(archiving_cfg.archived_after, dt)
+
+    def test_set_archived_after_to_utc(self):
+        """Check whether dates are converted to UTC"""
+
+        dt = datetime.datetime(2001, 12, 1, 23, 15, 32,
+                               tzinfo=dateutil.tz.tzoffset(None, -21600))
+        expected = datetime.datetime(2001, 12, 2, 5, 15, 32,
+                                     tzinfo=dateutil.tz.tzutc())
+
+        archiving_cfg = ArchivingTaskConfig('/tmp/archive', True,
+                                            archived_after=dt)
+        # Date should have been converted to UTC
+        self.assertEqual(archiving_cfg.archived_after, expected)
+
+        archiving_cfg.archived_after = datetime.datetime(2001, 12, 2, 5, 15, 32)
+        self.assertEqual(archiving_cfg.archived_after, expected)
+
+    def test_set_archived_after_from_date_string(self):
+        """Test if archived_after property can be set from a date string"""
+
+        date_str = '2001-12-01 23:15:32 -0600'
+
+        expected = datetime.datetime(2001, 12, 2, 5, 15, 32,
+                                     tzinfo=dateutil.tz.tzutc())
+
+        archiving_cfg = ArchivingTaskConfig('/tmp/archive', True,
+                                            archived_after=date_str)
+        self.assertEqual(archiving_cfg.archived_after, expected)
+
+    def test_set_invalid_archived_after(self):
+        """Check if an exception is raised for invalid archived_after values"""
+
+        with self.assertRaisesRegex(ValueError, INVALID_ARCHIVED_AFTER_ERROR):
+            archiving_cfg = ArchivingTaskConfig('/tmp/archive', False,
+                                                archived_after=1.0)
+        with self.assertRaisesRegex(ValueError, INVALID_ARCHIVED_AFTER_INVALID_DATE_ERROR):
+            archiving_cfg = ArchivingTaskConfig('/tmp/archive', False,
+                                                archived_after='this date')
+
+        archiving_cfg = ArchivingTaskConfig('/tmp/archive', True)
+
+        with self.assertRaisesRegex(ValueError, INVALID_ARCHIVED_AFTER_ERROR):
+            archiving_cfg.archived_after = 1.0
+
+        with self.assertRaisesRegex(ValueError, INVALID_ARCHIVED_AFTER_INVALID_DATE_ERROR):
+            archiving_cfg.archived_after = ''
+
+        self.assertEqual(archiving_cfg.archived_after, None)
 
 
 class TestSchedulingTaskConfig(unittest.TestCase):

@@ -43,12 +43,12 @@ class TestScheduler(TestBaseRQ):
             'gitpath': os.path.join(self.dir, 'data/git_log.txt')
         }
         category = 'commit'
-        archive_args = {}
+        archiving_opts = None
         scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=0)
 
         registry = TaskRegistry()
         task = registry.add('mytask', 'git', category, args,
-                            archive_args=archive_args,
+                            archiving_cfg=archiving_opts,
                             scheduling_cfg=scheduler_opts)
 
         schlr = Scheduler(self.conn, registry, async_mode=False)

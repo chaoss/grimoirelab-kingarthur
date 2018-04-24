@@ -21,6 +21,7 @@
 #     Santiago Dueñas <sduenas@bitergia.com>
 #
 
+import datetime
 import os
 import os.path
 import shutil
@@ -28,12 +29,17 @@ import subprocess
 import tempfile
 import unittest
 
+import dateutil
+
 from arthur.arthur import Arthur
 from arthur.common import ARCHIVES_DEFAULT_PATH
 from arthur.errors import AlreadyExistsError
-from arthur.tasks import SchedulingTaskConfig
+from arthur.tasks import ArchivingTaskConfig, SchedulingTaskConfig
 
 from base import find_empty_redis_database
+
+
+INVALID_ARCHIVED_AFTER_INVALID_DATE_ERROR = "is not a valid date"
 
 
 class TestArthur(unittest.TestCase):
@@ -61,7 +67,7 @@ class TestArthur(unittest.TestCase):
         self.conn.flushdb()
 
     def test_add_task_no_archive(self):
-        """Check when a task a no archive params"""
+        """Check when a task has no archive params"""
 
         task_id = "arthur.task"
         backend = "backend"
@@ -79,7 +85,7 @@ class TestArthur(unittest.TestCase):
         self.assertEqual(t.task_id, task_id)
         self.assertEqual(t.backend, backend)
         self.assertDictEqual(t.backend_args, backend_params)
-        self.assertDictEqual(t.archive_args, {})
+        self.assertEqual(t.archiving_cfg, None)
         self.assertEqual(t.scheduling_cfg, None)
 
         self.assertEqual(initial_tasks, 0)
@@ -92,7 +98,7 @@ class TestArthur(unittest.TestCase):
         backend = "backend"
         category = None
         backend_params = {"a": "a", "b": "b"}
-        archive_params = {}
+        archive_params = None
 
         app = Arthur(self.conn, async_mode=False)
 
@@ -105,7 +111,7 @@ class TestArthur(unittest.TestCase):
         self.assertEqual(t.task_id, task_id)
         self.assertEqual(t.backend, backend)
         self.assertDictEqual(t.backend_args, backend_params)
-        self.assertDictEqual(t.archive_args, archive_params)
+        self.assertEqual(t.archiving_cfg, None)
         self.assertEqual(t.scheduling_cfg, None)
 
         self.assertEqual(initial_tasks, 0)
@@ -125,7 +131,8 @@ class TestArthur(unittest.TestCase):
         with self.assertRaises(ValueError) as ex:
             app.add_task(task_id, backend, category, backend_params, archive_params)
 
-        self.assertEqual(ex.exception.args[0], "unknown not accepted in archive_args")
+        self.assertEqual(ex.exception.args[0],
+                         "unknown 'unknown' task config parameter")
 
     def test_task_default_archive_path(self):
         """Check whether a default archive path is added when not defined in the archive params"""
@@ -134,15 +141,22 @@ class TestArthur(unittest.TestCase):
         backend = "backend"
         category = None
         backend_params = {"a": "a", "b": "b"}
-        archive_params = {"fetch_from_archive": True, "archived_after": "2010-10-10"}
+        archive_params = {
+            'fetch_from_archive': True,
+            'archived_after': "2010-10-10"
+        }
 
         app = Arthur(self.conn, async_mode=False)
         app.add_task(task_id, backend, category, backend_params, archive_params)
 
         t = app._tasks.tasks[0]
-        self.assertEqual(t.archive_args['fetch_from_archive'], archive_params["fetch_from_archive"])
-        self.assertEqual(t.archive_args['archived_after'], archive_params["archived_after"])
-        self.assertEqual(t.archive_args['archive_path'], os.path.expanduser(ARCHIVES_DEFAULT_PATH))
+
+        archiving_opts = t.archiving_cfg
+        expected_dt = datetime.datetime(2010, 10, 10, 0, 0, 0, tzinfo=dateutil.tz.tzutc())
+        self.assertIsInstance(archiving_opts, ArchivingTaskConfig)
+        self.assertEqual(archiving_opts.archive_path, os.path.expanduser(ARCHIVES_DEFAULT_PATH))
+        self.assertEqual(archiving_opts.fetch_from_archive, True)
+        self.assertEqual(archiving_opts.archived_after, expected_dt)
 
     def test_task_wrong_fetch_from_archive(self):
         """Check whether an exception is thrown when fetch_from_archive parameter is not properly set"""
@@ -158,13 +172,14 @@ class TestArthur(unittest.TestCase):
         with self.assertRaises(ValueError) as ex:
             app.add_task(task_id, backend, category, backend_params, archive_params)
 
-        self.assertEqual(ex.exception.args[0], "archive_args.fetch_from_archive not boolean")
+        self.assertEqual(ex.exception.args[0],
+                         "'fetch_from_archive' must be a bool; <class 'int'> given")
 
         archive_params = {"archived_after": "2010-10-10"}
-        with self.assertRaises(ValueError) as ex:
+        with self.assertRaises(TypeError) as ex:
             app.add_task(task_id, backend, category, backend_params, archive_params)
 
-        self.assertEqual(ex.exception.args[0], "archive_args.fetch_from_archive not defined")
+        self.assertEqual(ex.exception.args[0], "__init__() missing 1 required positional argument: 'fetch_from_archive'")
 
     def test_task_ignore_archive_after(self):
         """Check whether the archived_after parameter is not set when fetch_from_archive is false"""
@@ -176,11 +191,12 @@ class TestArthur(unittest.TestCase):
         archive_params = {"fetch_from_archive": False, "archived_after": "X"}
 
         app = Arthur(self.conn, async_mode=False)
-        app.add_task(task_id, backend, category, backend_params, archive_params)
 
-        t = app._tasks.tasks[0]
-        self.assertEqual(t.archive_args['fetch_from_archive'], False)
-        self.assertIsNone(t.archive_args['archived_after'])
+        with self.assertRaisesRegex(ValueError, INVALID_ARCHIVED_AFTER_INVALID_DATE_ERROR):
+            app.add_task(task_id, backend, category,
+                         backend_params, archive_params)
+
+        self.assertEqual(len(app._tasks.tasks), 0)
 
     def test_task_wrong_archive_after(self):
         """Check whether an exception is thrown when archived_after parameter is not properly set"""
@@ -196,13 +212,8 @@ class TestArthur(unittest.TestCase):
         with self.assertRaises(ValueError) as ex:
             app.add_task(task_id, backend, category, backend_params, archive_params)
 
-        self.assertEqual(ex.exception.args[0], "archive_args.archived_after datetime format not valid")
-
-        archive_params = {"fetch_from_archive": True}
-        with self.assertRaises(ValueError) as ex:
-            app.add_task(task_id, backend, category, backend_params, archive_params)
-
-        self.assertEqual(ex.exception.args[0], "archive_args.archived_after not defined")
+        self.assertEqual(ex.exception.args[0],
+                         "'archived_after' is invalid; X is not a valid date")
 
     def test_add_task_archive(self):
         """Check whether tasks are added"""
@@ -211,9 +222,10 @@ class TestArthur(unittest.TestCase):
         backend = "backend"
         category = 'acme-product'
         backend_params = {"a": "a", "b": "b"}
-        archive_params = {'fetch_from_archive': True,
-                          'archived_after': '2100-01-01',
-                          'archive_path': './acme-plan'}
+        archive_args = {
+            'fetch_from_archive': True,
+            'archived_after': '2100-01-01'
+        }
         sched_args = {
             'delay': 10,
             'max_retries': 5
@@ -223,7 +235,7 @@ class TestArthur(unittest.TestCase):
 
         initial_tasks = len(app._tasks.tasks)
         app.add_task(task_id, backend, category, backend_params,
-                     archive_params, sched_args)
+                     archive_args, sched_args)
         after_tasks = len(app._tasks.tasks)
 
         t = app._tasks.tasks[0]
@@ -232,7 +244,13 @@ class TestArthur(unittest.TestCase):
         self.assertEqual(t.backend, backend)
         self.assertEqual(t.category, category)
         self.assertDictEqual(t.backend_args, backend_params)
-        self.assertDictEqual(t.archive_args, archive_params)
+
+        archiving_opts = t.archiving_cfg
+        expected_dt = datetime.datetime(2100, 1, 1, 0, 0, 0, tzinfo=dateutil.tz.tzutc())
+        self.assertIsInstance(archiving_opts, ArchivingTaskConfig)
+        self.assertEqual(archiving_opts.archive_path, self.tmp_path)
+        self.assertEqual(archiving_opts.fetch_from_archive, True)
+        self.assertEqual(archiving_opts.archived_after, expected_dt)
 
         sched_opts = t.scheduling_cfg
         self.assertIsInstance(sched_opts, SchedulingTaskConfig)

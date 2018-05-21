@@ -28,6 +28,7 @@ import pickle
 import rq
 
 import perceval
+import perceval.backend
 import perceval.backends
 import perceval.archive
 
@@ -111,7 +112,7 @@ class PercevalJob:
     """
     def __init__(self, job_id, task_id, backend, category, conn, qitems):
         try:
-            self._bklass = perceval.find_backends(perceval.backends)[0][backend]
+            self._bklass = perceval.backend.find_backends(perceval.backends)[0][backend]
         except KeyError:
             raise NotFoundError(element=backend)
 
@@ -223,7 +224,7 @@ class PercevalJob:
         It will also be possible to retrieve the items from the
         archive setting to `True` the parameter `fetch_from_archive`.
 
-        :param bakend_args: arguments to execute the backend
+        :param backend_args: arguments to execute the backend
         :param archive_args: archive arguments
 
         :returns: iterator of items fetched by the backend
@@ -231,12 +232,11 @@ class PercevalJob:
         :raises AttributeError: raised when any of the required
             parameters is not found
         """
-
         if not archive_args or not archive_args['fetch_from_archive']:
-            return perceval.fetch(self._bklass, backend_args, manager=self.archive_manager)
+            return perceval.backend.fetch(self._bklass, backend_args, manager=self.archive_manager)
         else:
-            return perceval.fetch_from_archive(self._bklass, backend_args, self.archive_manager,
-                                               self.category, archive_args['archived_after'])
+            return perceval.backend.fetch_from_archive(self._bklass, backend_args, self.archive_manager,
+                                                       self.category, archive_args['archived_after'])
 
 
 def execute_perceval_job(backend, backend_args, qitems, task_id, category,

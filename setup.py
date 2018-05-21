@@ -99,7 +99,7 @@ setup(name="kingarthur",
           'rq>=0.6.0',
           'cheroot==5.8.3',
           'cherrypy>=8.1, <=11.0.0',
-          'perceval>=0.9.13',
+          'perceval>=0.11.0',
           'grimoirelab-toolkit>=0.1.0'
       ],
       tests_require=['httpretty==0.8.6', 'fakeredis'],

@@ -93,8 +93,8 @@ class ArthurServer(Arthur):
             try:
                 category = task_data['category']
                 backend_args = task_data['backend_args']
-                archive_args = task_data['archive']
-                sched_args = task_data['scheduler']
+                archive_args = task_data.get('archive', None)
+                sched_args = task_data.get('scheduler', None)
             except KeyError as ex:
                 logger.error("Task badly formed")
                 raise ex

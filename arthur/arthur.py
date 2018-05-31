@@ -21,18 +21,17 @@
 #     Alvaro del Castillo San Felix <acs@bitergia.com>
 #
 
+import copy
 import logging
 import os
 import pickle
 
 import rq
 
-from grimoirelab.toolkit.datetime import str_to_datetime, InvalidDateError
-
-from .common import ARCHIVES_DEFAULT_PATH, Q_STORAGE_ITEMS, MAX_JOB_RETRIES, WAIT_FOR_QUEUING
+from .common import ARCHIVES_DEFAULT_PATH, Q_STORAGE_ITEMS
 from .errors import AlreadyExistsError, NotFoundError
 from .scheduler import Scheduler
-from .tasks import TaskRegistry
+from .tasks import ArchivingTaskConfig, SchedulingTaskConfig, TaskRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +44,6 @@ class Arthur:
     :param async_mode: run in async mode (with workers); set to `False`
         for debugging purposes
     """
-
     def __init__(self, conn, base_archive_path=None, async_mode=True):
         self.conn = conn
         self.conn.flushdb()
@@ -68,21 +66,20 @@ class Arthur:
         :param category: category of the items to fecth
         :param backend_args: args needed to initialize the backend
         :param archive_args: args needed to initialize the archive
-        :param sched_args: args needed to initialize the sceduler
+        :param sched_args: scheduling args for this task
 
         :returns: the task created
         """
-
         try:
-            archive_args = self.__parse_archive_args(archive_args)
-            sched_args = self.__parse_schedule_args(sched_args)
+            archiving_cfg = self.__parse_archive_args(archive_args)
+            scheduling_cfg = self.__parse_schedule_args(sched_args)
         except ValueError as e:
             raise e
 
         try:
             task = self._tasks.add(task_id, backend, category, backend_args,
-                                   archive_args=archive_args,
-                                   sched_args=sched_args)
+                                   archiving_cfg=archiving_cfg,
+                                   scheduling_cfg=scheduling_cfg)
         except AlreadyExistsError as e:
             raise e
 
@@ -95,7 +92,6 @@ class Arthur:
 
         :param task_id: id of the task to be removed
         """
-
         try:
             self._scheduler.cancel_task(task_id)
         except NotFoundError as e:
@@ -122,58 +118,21 @@ class Arthur:
         """Parse the archive arguments of a task"""
 
         if not archive_args:
-            return {}
+            return None
+
+        archiving_args = copy.deepcopy(archive_args)
 
         if self.archive_path:
-            archive_args['archive_path'] = self.archive_path
+            archiving_args['archive_path'] = self.archive_path
         else:
-            archive_args['archive_path'] = os.path.expanduser(ARCHIVES_DEFAULT_PATH)
+            archiving_args['archive_path'] = os.path.expanduser(ARCHIVES_DEFAULT_PATH)
 
-        if 'fetch_from_archive' not in archive_args:
-            raise ValueError("archive_args.fetch_from_archive not defined")
-
-        if archive_args['fetch_from_archive'] and 'archived_after' not in archive_args:
-            raise ValueError("archive_args.archived_after not defined")
-
-        for arg in archive_args.keys():
-            if arg == 'archive_path':
-                continue
-            elif arg == 'fetch_from_archive':
-                if type(archive_args['fetch_from_archive']) is not bool:
-                    raise ValueError("archive_args.fetch_from_archive not boolean")
-            elif arg == 'archived_after':
-                if archive_args['fetch_from_archive']:
-                    try:
-                        archive_args['archived_after'] = str_to_datetime(archive_args['archived_after'])
-                    except InvalidDateError:
-                        raise ValueError("archive_args.archived_after datetime format not valid")
-                else:
-                    archive_args['archived_after'] = None
-            else:
-                raise ValueError("%s not accepted in archive_args" % arg)
-
-        return archive_args
+        return ArchivingTaskConfig.from_dict(archiving_args)
 
     def __parse_schedule_args(self, sched_args):
         """Parse the schedule arguments of a task"""
 
         if not sched_args:
-            sched_args = {}
+            return None
 
-        if 'delay' not in sched_args:
-            sched_args['delay'] = WAIT_FOR_QUEUING
-
-        if 'max_retries' not in sched_args:
-            sched_args['max_retries'] = MAX_JOB_RETRIES
-
-        for arg in sched_args.keys():
-            if arg == 'delay':
-                if type(sched_args['delay']) is not int:
-                    raise ValueError("sched_args.delay not int")
-            elif arg == 'max_retries':
-                if type(sched_args['max_retries']) is not int:
-                    raise ValueError("sched_args.max_retries not int")
-            else:
-                raise ValueError("%s not accepted in schedule_args" % arg)
-
-        return sched_args
+        return SchedulingTaskConfig.from_dict(sched_args)

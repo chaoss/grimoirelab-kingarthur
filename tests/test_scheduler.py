@@ -26,7 +26,7 @@ import unittest
 
 from arthur.common import Q_CREATION_JOBS
 from arthur.errors import NotFoundError
-from arthur.tasks import TaskRegistry
+from arthur.tasks import SchedulingTaskConfig, TaskRegistry
 from arthur.scheduler import Scheduler
 
 from base import TestBaseRQ
@@ -43,16 +43,13 @@ class TestScheduler(TestBaseRQ):
             'gitpath': os.path.join(self.dir, 'data/git_log.txt')
         }
         category = 'commit'
-        archive_args = {}
-        sched_args = {
-            'delay': 0,
-            'max_retries': 0
-        }
+        archiving_opts = None
+        scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=0)
 
         registry = TaskRegistry()
         task = registry.add('mytask', 'git', category, args,
-                            archive_args=archive_args,
-                            sched_args=sched_args)
+                            archiving_cfg=archiving_opts,
+                            scheduling_cfg=scheduler_opts)
 
         schlr = Scheduler(self.conn, registry, async_mode=False)
         job_id = schlr.schedule_task(task.task_id)

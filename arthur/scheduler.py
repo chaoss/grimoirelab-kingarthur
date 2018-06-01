@@ -336,13 +336,13 @@ class Scheduler:
             logger.info("Job #%s (task: %s) successfully finished", job.id, task_id)
             return
 
+        if result.nitems > 0:
+            task.backend_args['next_from_date'] = unixtime_to_datetime(result.max_date)
+
+            if result.offset:
+                task.backend_args['next_offset'] = result.offset
+
         job_args = self._build_job_arguments(task)
-
-        from_date = unixtime_to_datetime(result.max_date)
-        job_args['backend_args']['from_date'] = from_date
-
-        if result.offset:
-            job_args['backend_args']['offset'] = result.offset
 
         delay = task.scheduling_cfg.delay if task.scheduling_cfg else WAIT_FOR_QUEUING
 
@@ -370,7 +370,15 @@ class Scheduler:
 
         # Backend parameters
         job_args['backend'] = task.backend
-        job_args['backend_args'] = copy.deepcopy(task.backend_args)
+        backend_args = copy.deepcopy(task.backend_args)
+
+        if 'next_from_date' in backend_args:
+            backend_args['from_date'] = backend_args.pop('next_from_date')
+
+        if 'next_offset' in backend_args:
+            backend_args['offset'] = backend_args.pop('next_offset')
+
+        job_args['backend_args'] = backend_args
 
         # Category
         job_args['category'] = task.category

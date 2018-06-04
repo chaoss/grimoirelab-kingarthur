@@ -80,7 +80,7 @@ class TestArthurServer(unittest.TestCase):
                             "uri": "https://github.com/grimoirelab/arthur.git",
                             "from_date": "2015-03-01"
                         },
-                        "category": "acme",
+                        "category": "commit",
                         "archive": {},
                         "scheduler": {
                             "delay": 10
@@ -114,7 +114,7 @@ class TestArthurServer(unittest.TestCase):
                             "uri": "https://github.com/grimoirelab/arthur.git",
                             "from_date": "2015-03-01"
                         },
-                        "category": "acme",
+                        "category": "commit",
                         "archive": {},
                         "scheduler": {
                             "delay": 10
@@ -127,7 +127,7 @@ class TestArthurServer(unittest.TestCase):
                             "url": "https://bugzilla.redhat.com/",
                             "from_date": "2016-09-19"
                         },
-                        "category": "acme",
+                        "category": "issue",
                         "archive": {
                             'archive_path': '/tmp/archive',
                             'fetch_from_archive': False
@@ -165,7 +165,7 @@ class TestArthurServer(unittest.TestCase):
                             "uri": "https://github.com/grimoirelab/arthur.git",
                             "from_date": "2015-03-01"
                         },
-                        "category": "acme",
+                        "category": "commit",
                         "archive": {},
                         "scheduler": {
                             "delay": 10
@@ -178,7 +178,7 @@ class TestArthurServer(unittest.TestCase):
                             "url": "https://bugzilla.redhat.com/",
                             "from_date": "2016-09-19"
                         },
-                        "category": "acme",
+                        "category": "issue",
                         "archive": {
                             'archive_path': '/tmp/archive',
                             'fetch_from_archive': True,

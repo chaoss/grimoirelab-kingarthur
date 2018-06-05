@@ -233,10 +233,12 @@ class PercevalJob:
             parameters is not found
         """
         if not archive_args or not archive_args['fetch_from_archive']:
-            return perceval.backend.fetch(self._bklass, backend_args, manager=self.archive_manager)
+            return perceval.backend.fetch(self._bklass, backend_args, self.category,
+                                          manager=self.archive_manager)
         else:
-            return perceval.backend.fetch_from_archive(self._bklass, backend_args, self.archive_manager,
-                                                       self.category, archive_args['archived_after'])
+            return perceval.backend.fetch_from_archive(self._bklass, backend_args,
+                                                       self.archive_manager, self.category,
+                                                       archive_args['archived_after'])
 
 
 def execute_perceval_job(backend, backend_args, qitems, task_id, category,

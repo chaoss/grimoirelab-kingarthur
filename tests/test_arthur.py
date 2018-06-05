@@ -24,6 +24,7 @@
 import datetime
 import os
 import os.path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -39,7 +40,17 @@ from arthur.tasks import ArchivingTaskConfig, SchedulingTaskConfig
 from base import find_empty_redis_database
 
 
-INVALID_ARCHIVED_AFTER_INVALID_DATE_ERROR = "is not a valid date"
+INVALID_BACKEND_ARGS_ERROR = "Backend_args is not a dict, task .*"
+INVALID_FETCH_FROM_ARCHIVE = "'fetch_from_archive' must be a bool; <class 'int'> given"
+INVALID_SCHEDULER_PARAM = "unknown .+ task config parameter"
+INVALID_SCHEDULER_DELAY = "'delay' must be an int; <class 'str'> given"
+INVALID_SCHEDULER_MAX_RETRIES = "'max_retries' must be an int; <class 'str'> given"
+INVALID_ARCHIVED_AFTER_INVALID_DATE_ERROR = "'archived_after' is invalid; X is not a valid date"
+MISSING_TASK_ID_ERROR = "Missing task_id for task"
+MISSING_BACKEND_ERROR = "Missing backend for task .*"
+MISSING_CATEGORY_ERROR = "Missing category for task .*"
+MISSING_FETCH_FROM_ARCHIVE_PARAM = ".* missing 1 required positional argument: 'fetch_from_archive'"
+UNKNOWN_ARCHIVE_PARAMETER = "unknown .* task config parameter"
 
 
 class TestArthur(unittest.TestCase):
@@ -128,11 +139,8 @@ class TestArthur(unittest.TestCase):
 
         app = Arthur(self.conn, async_mode=False)
 
-        with self.assertRaises(ValueError) as ex:
+        with self.assertRaisesRegex(ValueError, re.compile(UNKNOWN_ARCHIVE_PARAMETER)):
             app.add_task(task_id, backend, category, backend_params, archive_params)
-
-        self.assertEqual(ex.exception.args[0],
-                         "unknown 'unknown' task config parameter")
 
     def test_task_default_archive_path(self):
         """Check whether a default archive path is added when not defined in the archive params"""
@@ -169,17 +177,12 @@ class TestArthur(unittest.TestCase):
 
         app = Arthur(self.conn, async_mode=False)
 
-        with self.assertRaises(ValueError) as ex:
+        with self.assertRaisesRegex(ValueError, INVALID_FETCH_FROM_ARCHIVE):
             app.add_task(task_id, backend, category, backend_params, archive_params)
-
-        self.assertEqual(ex.exception.args[0],
-                         "'fetch_from_archive' must be a bool; <class 'int'> given")
 
         archive_params = {"archived_after": "2010-10-10"}
-        with self.assertRaises(TypeError) as ex:
+        with self.assertRaisesRegex(TypeError, re.compile(MISSING_FETCH_FROM_ARCHIVE_PARAM)):
             app.add_task(task_id, backend, category, backend_params, archive_params)
-
-        self.assertEqual(ex.exception.args[0], "__init__() missing 1 required positional argument: 'fetch_from_archive'")
 
     def test_task_ignore_archive_after(self):
         """Check whether the archived_after parameter is not set when fetch_from_archive is false"""
@@ -209,11 +212,8 @@ class TestArthur(unittest.TestCase):
 
         app = Arthur(self.conn, async_mode=False)
 
-        with self.assertRaises(ValueError) as ex:
+        with self.assertRaisesRegex(ValueError, INVALID_ARCHIVED_AFTER_INVALID_DATE_ERROR):
             app.add_task(task_id, backend, category, backend_params, archive_params)
-
-        self.assertEqual(ex.exception.args[0],
-                         "'archived_after' is invalid; X is not a valid date")
 
     def test_add_task_archive(self):
         """Check whether tasks are added"""
@@ -275,11 +275,8 @@ class TestArthur(unittest.TestCase):
 
         app = Arthur(self.conn, async_mode=False)
 
-        with self.assertRaises(ValueError) as ex:
+        with self.assertRaisesRegex(ValueError, re.compile(INVALID_SCHEDULER_PARAM)):
             app.add_task(task_id, backend, category, backend_params, sched_args=sched_params)
-
-        self.assertEqual(ex.exception.args[0],
-                         "unknown 'not_valid_param' task config parameter")
 
     def test_task_wrong_delay(self):
         """Check whether an exception is thrown when delay parameter is not properly set"""
@@ -292,10 +289,8 @@ class TestArthur(unittest.TestCase):
 
         app = Arthur(self.conn, async_mode=False)
 
-        with self.assertRaises(ValueError) as ex:
+        with self.assertRaisesRegex(ValueError, INVALID_SCHEDULER_DELAY) as ex:
             app.add_task(task_id, backend, category, backend_params, sched_args=sched_params)
-
-        self.assertEqual(ex.exception.args[0], "'delay' must be an int; <class 'str'> given")
 
     def test_task_wrong_max_retries(self):
         """Check whether an exception is thrown when max_retries parameter is not properly set"""
@@ -308,10 +303,8 @@ class TestArthur(unittest.TestCase):
 
         app = Arthur(self.conn, async_mode=False)
 
-        with self.assertRaises(ValueError) as ex:
+        with self.assertRaisesRegex(ValueError, INVALID_SCHEDULER_MAX_RETRIES) as ex:
             app.add_task(task_id, backend, category, backend_params, sched_args=sched_params)
-
-        self.assertEqual(ex.exception.args[0], "'max_retries' must be an int; <class 'str'> given")
 
     def test_add_duplicated_task(self):
         """Check whether an exception is thrown when a duplicated task is added"""
@@ -333,58 +326,58 @@ class TestArthur(unittest.TestCase):
 
         app = Arthur(self.conn, async_mode=False)
 
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, MISSING_TASK_ID_ERROR):
             app.add_task(task_id, backend, category, backend_params)
 
         task_id = "     "
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, MISSING_TASK_ID_ERROR):
             app.add_task(task_id, backend, category, backend_params)
 
     def test_add_task_no_backend(self):
         """Check whether an exception is thrown when the backend is missing"""
 
-        task_id = "task"
+        task_id = "arthur.task"
         backend = None
         category = "mock_category"
         backend_params = {"a": "a", "b": "b"}
 
         app = Arthur(self.conn, async_mode=False)
 
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, re.compile(MISSING_BACKEND_ERROR)):
             app.add_task(task_id, backend, category, backend_params)
 
         backend = "     "
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, re.compile(MISSING_BACKEND_ERROR)):
             app.add_task(task_id, backend, category, backend_params)
 
     def test_add_task_no_category(self):
         """Check whether an exception is thrown when the backend category is missing"""
 
-        task_id = "task"
+        task_id = "arthur.task"
         backend = "backend"
         category = None
         backend_params = {"a": "a", "b": "b"}
 
         app = Arthur(self.conn, async_mode=False)
 
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, re.compile(MISSING_CATEGORY_ERROR)):
             app.add_task(task_id, backend, category, backend_params)
 
         category = "     "
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, re.compile(MISSING_CATEGORY_ERROR)):
             app.add_task(task_id, backend, category, backend_params)
 
     def test_add_task_invalid_format_backend_args(self):
         """Check whether an exception is thrown when the backend args is not a dict"""
 
-        task_id = "task"
+        task_id = "arthur.task"
         backend = "backend"
         category = "mock_item"
         backend_params = "wrong_params"
 
         app = Arthur(self.conn, async_mode=False)
 
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, re.compile(INVALID_BACKEND_ARGS_ERROR)):
             app.add_task(task_id, backend, category, backend_params)
 
     def test_remove_task(self):

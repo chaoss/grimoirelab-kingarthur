@@ -73,6 +73,7 @@ class Arthur:
         try:
             archiving_cfg = self.__parse_archive_args(archive_args)
             scheduling_cfg = self.__parse_schedule_args(sched_args)
+            self.__validate_args(task_id, backend, category, backend_args)
         except ValueError as e:
             raise e
 
@@ -113,6 +114,26 @@ class Arthur:
         for item in items:
             item = pickle.loads(item)
             yield item
+
+    @staticmethod
+    def __validate_args(task_id, backend, category, backend_args):
+        """Check that the task arguments received are valid"""
+
+        if not task_id or task_id.strip() == "":
+            msg = "Missing task_id for task"
+            raise ValueError(msg)
+
+        if not backend or backend.strip() == "":
+            msg = "Missing backend for task '%s'" % task_id
+            raise ValueError(msg)
+
+        if backend_args and not isinstance(backend_args, dict):
+            msg = "Backend_args is not a dict, task '%s'" % task_id
+            raise ValueError(msg)
+
+        if not category or category.strip() == "":
+            msg = "Missing category for task '%s'" % task_id
+            raise ValueError(msg)
 
     def __parse_archive_args(self, archive_args):
         """Parse the archive arguments of a task"""

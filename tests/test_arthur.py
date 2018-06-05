@@ -71,7 +71,7 @@ class TestArthur(unittest.TestCase):
 
         task_id = "arthur.task"
         backend = "backend"
-        category = None
+        category = "mock_category"
         backend_params = {"a": "a", "b": "b"}
 
         app = Arthur(self.conn, async_mode=False)
@@ -96,7 +96,7 @@ class TestArthur(unittest.TestCase):
 
         task_id = "arthur.task"
         backend = "backend"
-        category = None
+        category = "mock_category"
         backend_params = {"a": "a", "b": "b"}
         archive_params = None
 
@@ -139,7 +139,7 @@ class TestArthur(unittest.TestCase):
 
         task_id = "arthur.task"
         backend = "backend"
-        category = None
+        category = "mock_category"
         backend_params = {"a": "a", "b": "b"}
         archive_params = {
             'fetch_from_archive': True,
@@ -322,6 +322,70 @@ class TestArthur(unittest.TestCase):
 
         with self.assertRaises(AlreadyExistsError):
             app.add_task("arthur.task", "backend", "category", {"a": "a", "b": "b"})
+
+    def test_add_task_no_task_id(self):
+        """Check whether an exception is thrown when the task id is missing"""
+
+        task_id = None
+        backend = "backend"
+        category = "mock_category"
+        backend_params = {"a": "a", "b": "b"}
+
+        app = Arthur(self.conn, async_mode=False)
+
+        with self.assertRaises(ValueError):
+            app.add_task(task_id, backend, category, backend_params)
+
+        task_id = "     "
+        with self.assertRaises(ValueError):
+            app.add_task(task_id, backend, category, backend_params)
+
+    def test_add_task_no_backend(self):
+        """Check whether an exception is thrown when the backend is missing"""
+
+        task_id = "task"
+        backend = None
+        category = "mock_category"
+        backend_params = {"a": "a", "b": "b"}
+
+        app = Arthur(self.conn, async_mode=False)
+
+        with self.assertRaises(ValueError):
+            app.add_task(task_id, backend, category, backend_params)
+
+        backend = "     "
+        with self.assertRaises(ValueError):
+            app.add_task(task_id, backend, category, backend_params)
+
+    def test_add_task_no_category(self):
+        """Check whether an exception is thrown when the backend category is missing"""
+
+        task_id = "task"
+        backend = "backend"
+        category = None
+        backend_params = {"a": "a", "b": "b"}
+
+        app = Arthur(self.conn, async_mode=False)
+
+        with self.assertRaises(ValueError):
+            app.add_task(task_id, backend, category, backend_params)
+
+        category = "     "
+        with self.assertRaises(ValueError):
+            app.add_task(task_id, backend, category, backend_params)
+
+    def test_add_task_invalid_format_backend_args(self):
+        """Check whether an exception is thrown when the backend args is not a dict"""
+
+        task_id = "task"
+        backend = "backend"
+        category = "mock_item"
+        backend_params = "wrong_params"
+
+        app = Arthur(self.conn, async_mode=False)
+
+        with self.assertRaises(ValueError):
+            app.add_task(task_id, backend, category, backend_params)
 
     def test_remove_task(self):
         """Check whether the removal of tasks is properly handled"""

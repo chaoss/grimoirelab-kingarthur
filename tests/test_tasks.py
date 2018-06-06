@@ -228,7 +228,7 @@ class TestTaskRegistry(unittest.TestCase):
         with self.assertRaises(NotFoundError):
             registry.remove('mytask')
 
-        registry.add('task', 'mock_backend', None, '/tmp/example')
+        registry.add('task', 'mock_backend', "mock_category", {})
 
         with self.assertRaises(NotFoundError):
             registry.remove('mytask')

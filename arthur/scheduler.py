@@ -33,7 +33,7 @@ import uuid
 import rq
 import rq.job
 
-from grimoirelab.toolkit.datetime import unixtime_to_datetime
+from grimoirelab_toolkit.datetime import unixtime_to_datetime
 
 from .common import (CH_PUBSUB,
                      Q_ARCHIVE_JOBS,

@@ -25,10 +25,10 @@ import datetime
 import logging
 import re
 
-from grimoirelab.toolkit.datetime import (InvalidDateError,
+from grimoirelab_toolkit.datetime import (InvalidDateError,
                                           datetime_to_utc,
                                           str_to_datetime)
-from grimoirelab.toolkit.introspect import find_class_properties
+from grimoirelab_toolkit.introspect import find_class_properties
 
 
 from .common import MAX_JOB_RETRIES, WAIT_FOR_QUEUING

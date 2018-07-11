@@ -128,8 +128,8 @@ class _JobScheduler(threading.Thread):
 
         self._rwlock.writer_release()
 
-        logging.debug("Job #%s (task: %s) scheduled on %s (wait: %s)",
-                      job_id, task_id, queue_id, delay)
+        logger.debug("Job #%s (task: %s) scheduled on %s (wait: %s)",
+                     job_id, task_id, queue_id, delay)
 
         return job_id
 
@@ -160,9 +160,9 @@ class _JobScheduler(threading.Thread):
 
         self._rwlock.writer_release()
 
-        logging.debug("Job #%s (task: %s) (%s) queued in '%s'",
-                      job_id, job_args['task_id'],
-                      job_args['backend'], queue_id)
+        logger.debug("Job #%s (task: %s) (%s) queued in '%s'",
+                     job_id, job_args['task_id'],
+                     job_args['backend'], queue_id)
 
     def _cancel_job(self, job_id):
         event = self._jobs.get(job_id, None)
@@ -234,16 +234,16 @@ class _JobListener(threading.Thread):
             job = rq.job.Job.fetch(job_id, connection=self.conn)
 
             if data['status'] == 'finished':
-                logging.debug("Job #%s completed", job_id)
+                logger.debug("Job #%s completed", job_id)
                 handler = self.result_handler
             elif data['status'] == 'failed':
-                logging.debug("Job #%s failed", job_id)
+                logger.debug("Job #%s failed", job_id)
                 handler = self.result_handler_err
             else:
                 continue
 
             if handler:
-                logging.debug("Calling handler for job #%s", job_id)
+                logger.debug("Calling handler for job #%s", job_id)
                 handler(job)
 
 

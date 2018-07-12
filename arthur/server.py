@@ -27,7 +27,7 @@ import time
 
 import cherrypy
 
-from grimoirelab.toolkit.datetime import str_to_datetime
+from grimoirelab_toolkit.datetime import str_to_datetime
 
 from .arthur import Arthur
 from .utils import JSONEncoder

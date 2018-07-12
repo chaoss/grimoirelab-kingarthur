@@ -39,7 +39,7 @@ from arthur.jobs import (JobResult,
                          PercevalJob,
                          execute_perceval_job,
                          metadata)
-from grimoirelab.toolkit.datetime import datetime_utcnow
+from grimoirelab_toolkit.datetime import datetime_utcnow
 from perceval.archive import ArchiveManager
 
 from base import TestBaseRQ

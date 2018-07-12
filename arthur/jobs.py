@@ -32,7 +32,7 @@ import perceval.backend
 import perceval.backends
 import perceval.archive
 
-from grimoirelab.toolkit.datetime import (datetime_to_utc,
+from grimoirelab_toolkit.datetime import (datetime_to_utc,
                                           unixtime_to_datetime)
 
 from ._version import __version__

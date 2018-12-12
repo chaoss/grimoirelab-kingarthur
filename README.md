@@ -103,12 +103,12 @@ optional arguments:
 ## Requirements
 
 * Python >= 3.4
-* Redis >= 2.3
+* Redis >= 2.3 and < 3.0
 * python3-dateutil >= 2.6
-* python3-redis >= 2.10
-* python3-rq >= 0.6
-* python3-cherrypy >= 8.1.0
-* grimoirelab-toolkit >= 0.1.0
+* python3-redis >= 2.10 and <= 2.10.6
+* python3-rq >= 0.6 and <=0.12.0
+* python3-cherrypy >= 8.1.0 and <=11.0.0
+* grimoirelab-toolkit >= 0.1.8
 * perceval >= 0.11.0
 
 ## Installation

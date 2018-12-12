@@ -95,12 +95,12 @@ setup(name="kingarthur",
       setup_requires=['wheel'],
       install_requires=[
           'python-dateutil>=2.6.0',
-          'redis>=2.10.0',
-          'rq>=0.6.0',
+          'redis>=2.10.0, <=2.10.6',
+          'rq>=0.6.0, <=0.12.0',
           'cheroot==5.8.3',
           'cherrypy>=8.1, <=11.0.0',
           'perceval>=0.11.0',
-          'grimoirelab-toolkit>=0.1.0'
+          'grimoirelab-toolkit>=0.1.8'
       ],
       tests_require=['httpretty==0.8.6', 'fakeredis'],
       test_suite='tests',

@@ -40,14 +40,26 @@ class MockArthurWorker(rq.worker.SimpleWorker, ArthurWorker):
 class TestArthurWorker(TestBaseRQ):
     """Unit tests for ArthurWorker class"""
 
+    def test_publish_finished_job_status_channel_override(self):
+        self._publish_finished_job_status('test_channel')
+
+    def test_publish_finished_job_status_channel_default(self):
+        self._publish_finished_job_status(CH_PUBSUB, skip_pubsub_override=True)
+
     def test_publish_finished_job_status(self):
+        self._publish_finished_job_status(CH_PUBSUB)
+
+    def _publish_finished_job_status(self, pubsub_channel, skip_pubsub_override=False):
         """Test whether the worker publishes the status of a finished job"""
 
         pubsub = self.conn.pubsub()
-        pubsub.subscribe(CH_PUBSUB)
+        pubsub.subscribe(pubsub_channel)
 
         q = rq.Queue('foo')
         w = MockArthurWorker([q])
+
+        if not skip_pubsub_override:
+            w.pubsub_channel = pubsub_channel
 
         job_a = q.enqueue(mock_sum, a=2, b=3)
         job_b = q.enqueue(mock_failure)

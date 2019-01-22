@@ -35,10 +35,22 @@ logger = logging.getLogger(__name__)
 class ArthurWorker(rq.Worker):
     """Worker class for Arthur"""
 
+    def __init__(self, queues, **kwargs):
+        super().__init__(queues, **kwargs)
+        self.__pubsub_channel = CH_PUBSUB
+
+    @property
+    def pubsub_channel(self):
+        return self.__pubsub_channel
+
+    @pubsub_channel.setter
+    def pubsub_channel(self, value):
+        self.__pubsub_channel = value
+
     def prepare_job_execution(self, job):
         # Fixes the error #479 of RQ. Remove it as soon as it gets fixed.
         # (https://github.com/nvie/rq/issues/479)
-        rq.push_connection(self.connection)
+        # rq.push_connection(self.connection)
         super().prepare_job_execution(job)
 
     def perform_job(self, job, queue):
@@ -60,10 +72,10 @@ class ArthurWorker(rq.Worker):
         }
 
         msg = pickle.dumps(data)
-        self.connection.publish(CH_PUBSUB, msg)
+        self.connection.publish(self.pubsub_channel, msg)
 
         # Fixes the error #479 of RQ. Remove it as soon as it gets fixed.
         # (https://github.com/nvie/rq/issues/479)
-        rq.pop_connection()
+        # rq.pop_connection()
 
         return result

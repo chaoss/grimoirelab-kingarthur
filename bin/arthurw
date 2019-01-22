@@ -31,7 +31,8 @@ import rq.utils
 
 from arthur.common import (Q_ARCHIVE_JOBS,
                            Q_CREATION_JOBS,
-                           Q_UPDATING_JOBS)
+                           Q_UPDATING_JOBS,
+                           CH_PUBSUB)
 from arthur.worker import ArthurWorker
 
 
@@ -51,6 +52,7 @@ optional arguments:
   -g, --debug           set debug mode on
   -d, --database        URL database connection (default: 'redis://localhost/8')
   -b, --burst           Run in burst mode (quit after all work is done)
+  --pubsub-channel      name of redis pubsub channel on which to publish updates
 """
 
 # Logging formats
@@ -74,6 +76,7 @@ def main():
         queues = [rq.Queue(queue, connection=conn) for queue in queues]
 
         w = ArthurWorker(queues, connection=conn)
+        w.pubsub_channel = args.pubsub_channel
         w.work(burst=burst)
     except ConnectionError as e:
         print(e)
@@ -101,7 +104,9 @@ def parse_args():
                         help=argparse.SUPPRESS)
     parser.add_argument('queues', nargs='*',
                         help=argparse.SUPPRESS)
-
+    parser.add_argument('--pubsub-channel', dest='pubsub_channel',
+                        default=CH_PUBSUB,
+                        help=argparse.SUPPRESS)
     return parser.parse_args()
 
 

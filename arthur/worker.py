@@ -47,12 +47,6 @@ class ArthurWorker(rq.Worker):
     def pubsub_channel(self, value):
         self.__pubsub_channel = value
 
-    def prepare_job_execution(self, job):
-        # Fixes the error #479 of RQ. Remove it as soon as it gets fixed.
-        # (https://github.com/nvie/rq/issues/479)
-        # rq.push_connection(self.connection)
-        super().prepare_job_execution(job)
-
     def perform_job(self, job, queue):
         """Custom method to execute a job and notify of its result
 
@@ -73,9 +67,5 @@ class ArthurWorker(rq.Worker):
 
         msg = pickle.dumps(data)
         self.connection.publish(self.pubsub_channel, msg)
-
-        # Fixes the error #479 of RQ. Remove it as soon as it gets fixed.
-        # (https://github.com/nvie/rq/issues/479)
-        # rq.pop_connection()
 
         return result

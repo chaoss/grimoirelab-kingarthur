@@ -87,7 +87,7 @@ class _JobScheduler(threading.Thread):
         self._queues = {
             queue_id: rq.Queue(queue_id,
                                connection=self.conn,
-                               async=self.async_mode)
+                               async=self.async_mode)  # noqa: W606
             for queue_id in queues
         }
         self._jobs = {}
@@ -224,7 +224,7 @@ class _JobListener(threading.Thread):
         pubsub.subscribe(self.pubsub_channel)
 
         logger.debug("Listening on channel %s", self.pubsub_channel)
-        
+
         for msg in pubsub.listen():
             logger.debug("New message received of type %s", str(msg['type']))
 

@@ -87,7 +87,7 @@ class _JobScheduler(threading.Thread):
         self._queues = {
             queue_id: rq.Queue(queue_id,
                                connection=self.conn,
-                               async=self.async_mode)
+                               async=self.async_mode)  # noqa: W606
             for queue_id in queues
         }
         self._jobs = {}
@@ -197,12 +197,14 @@ class _JobListener(threading.Thread):
     failed ones.
 
     :param conn: connection to the Redis database
+    :param pubsub_channel: pubsub channel
     :param result_handler: callable object to handle successful jobs
     :param result_handler_err: callabe object to handle failed jobs
     """
-    def __init__(self, conn, result_handler=None, result_handler_err=None):
+    def __init__(self, conn, pubsub_channel=CH_PUBSUB, result_handler=None, result_handler_err=None):
         super().__init__()
         self.conn = conn
+        self.pubsub_channel = pubsub_channel
         self.result_handler = result_handler
         self.result_handler_err = result_handler_err
 
@@ -219,7 +221,9 @@ class _JobListener(threading.Thread):
         """Listen for completed jobs and reschedule successful ones."""
 
         pubsub = self.conn.pubsub()
-        pubsub.subscribe(CH_PUBSUB)
+        pubsub.subscribe(self.pubsub_channel)
+
+        logger.debug("Listening on channel %s", self.pubsub_channel)
 
         for msg in pubsub.listen():
             logger.debug("New message received of type %s", str(msg['type']))
@@ -260,7 +264,7 @@ class Scheduler:
     :param async_mode: run in async mode (with workers); set to `False`
         for debugging purposes
     """
-    def __init__(self, conn, registry, async_mode=True):
+    def __init__(self, conn, registry, pubsub_channel=CH_PUBSUB, async_mode=True):
         self.conn = conn
         self.registry = registry
         self.async_mode = async_mode
@@ -269,6 +273,7 @@ class Scheduler:
                                         polling=SCHED_POLLING,
                                         async_mode=self.async_mode)
         self._listener = _JobListener(self.conn,
+                                      pubsub_channel=pubsub_channel,
                                       result_handler=self._handle_successful_job,
                                       result_handler_err=self._handle_failed_job)
 

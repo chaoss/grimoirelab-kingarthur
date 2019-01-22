@@ -31,7 +31,7 @@ import sys
 import cherrypy
 import redis
 
-from arthur.common import ARCHIVES_DEFAULT_PATH
+from arthur.common import ARCHIVES_DEFAULT_PATH, CH_PUBSUB
 from arthur.server import ArthurServer
 from arthur.writers import ElasticItemsWriter
 
@@ -64,6 +64,7 @@ optional arguments:
   --archive-path        path to archive manager directory
   --no-archive          do not archive fetched raw data
   --no-daemon           do not run arthur in daemon mode
+  --pubsub-channel      name of redis pubsub channel on which to publish updates
 """
 
 # Logging formats
@@ -91,6 +92,7 @@ def main():
 
     app = ArthurServer(conn, base_archive_path,
                        async_mode=args.sync_mode,
+                       pubsub_channel=args.pubsub_channel,
                        writer=writer)
 
     run_daemon = not args.no_daemon
@@ -209,6 +211,9 @@ def create_common_arguments_parser(defaults):
                         help=argparse.SUPPRESS)
     parser.add_argument('--no-daemon', dest='no_daemon',
                         action='store_true',
+                        help=argparse.SUPPRESS)
+    parser.add_argument('--pubsub-channel', dest='pubsub_channel',
+                        default=CH_PUBSUB,
                         help=argparse.SUPPRESS)
 
     # Set default values

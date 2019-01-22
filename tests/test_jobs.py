@@ -148,18 +148,17 @@ def setup_mock_redmine_server(max_failures=0):
         params = last_request.querystring
 
         if uri.startswith(REDMINE_ISSUES_URL):
-            if (params['updated_on'][0] == '>=1970-01-01T00:00:00Z' and
-                params['offset'][0] == '0'):
-                    body = issues_body
-            elif (params['updated_on'][0] == '>=1970-01-01T00:00:00Z' and
-                  params['offset'][0] == '3'):
-                    body = issues_next_body
-            elif (params['updated_on'][0] == '>=2016-07-27T00:00:00Z' and
-                  params['offset'][0] == '0'):
-                    body = issues_next_body
-            elif (params['updated_on'][0] == '>=2011-12-08T17:58:37Z' and
-                  params['offset'][0] == '0'):
-                    body = issues_next_body
+            updated_on = params['updated_on'][0]
+            offset = params['offset'][0]
+
+            if (updated_on == '>=1970-01-01T00:00:00Z' and offset == '0'):
+                body = issues_body
+            elif (updated_on == '>=1970-01-01T00:00:00Z' and offset == '3'):
+                body = issues_next_body
+            elif (updated_on == '>=2016-07-27T00:00:00Z' and offset == '0'):
+                body = issues_next_body
+            elif (updated_on == '>=2011-12-08T17:58:37Z' and offset == '0'):
+                body = issues_next_body
             else:
                 body = issues_empty_body
         elif uri.startswith(REDMINE_ISSUE_2_URL):
@@ -542,7 +541,7 @@ class TestExecuteJob(TestBaseRQ):
         }
         archive_args = {}
 
-        q = rq.Queue('queue', async=False)
+        q = rq.Queue('queue', async=False)  # noqa: W606
 
         job = q.enqueue(execute_perceval_job,
                         backend='git', backend_args=backend_args, category='commit',
@@ -591,7 +590,7 @@ class TestExecuteJob(TestBaseRQ):
             'max_issues': 3
         }
 
-        q = rq.Queue('queue', async=False)
+        q = rq.Queue('queue', async=False)  # noqa: W606
         job = q.enqueue(execute_perceval_job,
                         backend='redmine', backend_args=backend_args,
                         category='issue',
@@ -637,7 +636,7 @@ class TestExecuteJob(TestBaseRQ):
             'max_issues': 3
         }
 
-        q = rq.Queue('queue', async=False)
+        q = rq.Queue('queue', async=False)  # noqa: W606
 
         with self.assertRaises(requests.exceptions.HTTPError):
             job = q.enqueue(execute_perceval_job,
@@ -656,7 +655,7 @@ class TestExecuteJob(TestBaseRQ):
             'from_date': datetime.datetime(2020, 1, 1, 1, 1, 1)
         }
 
-        q = rq.Queue('queue', async=False)
+        q = rq.Queue('queue', async=False)  # noqa: W606
         job = q.enqueue(execute_perceval_job,
                         backend='git', backend_args=backend_args,
                         category='commit',
@@ -692,7 +691,7 @@ class TestExecuteJob(TestBaseRQ):
                     '4b166308f205121bc57704032acdc81b6c9bb8b1',
                     'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c']
 
-        q = rq.Queue('queue', async=False)
+        q = rq.Queue('queue', async=False)  # noqa: W606
 
         # First, we fetch the bugs from the server, storing them
         # in an archive
@@ -768,7 +767,7 @@ class TestExecuteJob(TestBaseRQ):
             'fetch_from_archive': True
         }
 
-        q = rq.Queue('queue', async=False)
+        q = rq.Queue('queue', async=False)  # noqa: W606
 
         with self.assertRaises(AttributeError):
             _ = q.enqueue(execute_perceval_job,

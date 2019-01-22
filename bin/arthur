@@ -34,7 +34,7 @@ import redis
 from grimoirelab.toolkit.datetime import str_to_datetime
 
 from arthur.arthur import Arthur
-from arthur.common import ARCHIVES_DEFAULT_PATH
+from arthur.common import CH_PUBSUB, ARCHIVES_DEFAULT_PATH
 
 
 ARTHUR_USAGE_MSG = \
@@ -62,6 +62,7 @@ optional arguments:
   -o, --outfile         output filename
   --archive-path        path to archive manager directory
   --no-archive          do not archive fetched raw data
+  --pubsub-channel      name of redis pubsub channel on which to publish updates
 """
 
 # Logging formats
@@ -89,7 +90,10 @@ def main():
 
     conn = connect_to_redis(args.database)
 
-    arthur = Arthur(conn, args.sync_mode, base_archive_path)
+    arthur = Arthur(conn,
+                    async_mode=args.sync_mode,
+                    base_archive_path=base_archive_path,
+                    pubsub_channel=args.pubsub_channel)
 
     repositories = json.load(args.repositories)
 
@@ -148,7 +152,9 @@ def parse_args():
     parser.add_argument('repositories', nargs='?', type=argparse.FileType('r'),
                         default=sys.stdin,
                         help=argparse.SUPPRESS)
-
+    parser.add_argument('--pubsub-channel', dest='pubsub_channel',
+                        default=CH_PUBSUB,
+                        help=argparse.SUPPRESS)
     return parser.parse_args()
 
 

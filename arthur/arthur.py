@@ -28,7 +28,7 @@ import pickle
 
 import rq
 
-from .common import ARCHIVES_DEFAULT_PATH, Q_STORAGE_ITEMS
+from .common import CH_PUBSUB, ARCHIVES_DEFAULT_PATH, Q_STORAGE_ITEMS
 from .errors import AlreadyExistsError, NotFoundError
 from .scheduler import Scheduler
 from .tasks import ArchivingTaskConfig, SchedulingTaskConfig, TaskRegistry
@@ -44,7 +44,7 @@ class Arthur:
     :param async_mode: run in async mode (with workers); set to `False`
         for debugging purposes
     """
-    def __init__(self, conn, base_archive_path=None, async_mode=True):
+    def __init__(self, conn, base_archive_path=None, async_mode=True, pubsub_channel=CH_PUBSUB):
         self.conn = conn
         self.conn.flushdb()
         rq.push_connection(self.conn)
@@ -52,6 +52,7 @@ class Arthur:
         self.archive_path = base_archive_path
         self._tasks = TaskRegistry()
         self._scheduler = Scheduler(self.conn, self._tasks,
+                                    pubsub_channel=pubsub_channel,
                                     async_mode=async_mode)
 
     def start(self):

@@ -96,7 +96,7 @@ setup(name="kingarthur",
       install_requires=[
           'python-dateutil>=2.6.0',
           'redis>=2.10.0, <=2.10.6',
-          'rq>=0.6.0, <=0.12.0',
+          'rq==0.12.0',
           'cheroot==5.8.3',
           'cherrypy>=8.1, <=11.0.0',
           'perceval>=0.11.0',

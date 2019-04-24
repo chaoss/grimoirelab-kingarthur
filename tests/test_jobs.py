@@ -541,7 +541,7 @@ class TestExecuteJob(TestBaseRQ):
         }
         archive_args = {}
 
-        q = rq.Queue('queue', async=False)  # noqa: W606
+        q = rq.Queue('queue', is_async=False)  # noqa: W606
 
         job = q.enqueue(execute_perceval_job,
                         backend='git', backend_args=backend_args, category='commit',
@@ -590,7 +590,7 @@ class TestExecuteJob(TestBaseRQ):
             'max_issues': 3
         }
 
-        q = rq.Queue('queue', async=False)  # noqa: W606
+        q = rq.Queue('queue', is_async=False)  # noqa: W606
         job = q.enqueue(execute_perceval_job,
                         backend='redmine', backend_args=backend_args,
                         category='issue',
@@ -636,7 +636,7 @@ class TestExecuteJob(TestBaseRQ):
             'max_issues': 3
         }
 
-        q = rq.Queue('queue', async=False)  # noqa: W606
+        q = rq.Queue('queue', is_async=False)  # noqa: W606
 
         with self.assertRaises(requests.exceptions.HTTPError):
             job = q.enqueue(execute_perceval_job,
@@ -655,7 +655,7 @@ class TestExecuteJob(TestBaseRQ):
             'from_date': datetime.datetime(2020, 1, 1, 1, 1, 1)
         }
 
-        q = rq.Queue('queue', async=False)  # noqa: W606
+        q = rq.Queue('queue', is_async=False)  # noqa: W606
         job = q.enqueue(execute_perceval_job,
                         backend='git', backend_args=backend_args,
                         category='commit',
@@ -691,7 +691,7 @@ class TestExecuteJob(TestBaseRQ):
                     '4b166308f205121bc57704032acdc81b6c9bb8b1',
                     'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c']
 
-        q = rq.Queue('queue', async=False)  # noqa: W606
+        q = rq.Queue('queue', is_async=False)  # noqa: W606
 
         # First, we fetch the bugs from the server, storing them
         # in an archive
@@ -767,7 +767,7 @@ class TestExecuteJob(TestBaseRQ):
             'fetch_from_archive': True
         }
 
-        q = rq.Queue('queue', async=False)  # noqa: W606
+        q = rq.Queue('queue', is_async=False)  # noqa: W606
 
         with self.assertRaises(AttributeError):
             _ = q.enqueue(execute_perceval_job,

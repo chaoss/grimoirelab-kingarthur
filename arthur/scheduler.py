@@ -87,7 +87,7 @@ class _JobScheduler(threading.Thread):
         self._queues = {
             queue_id: rq.Queue(queue_id,
                                connection=self.conn,
-                               async=self.async_mode)  # noqa: W606
+                               is_async=self.async_mode)  # noqa: W606
             for queue_id in queues
         }
         self._jobs = {}

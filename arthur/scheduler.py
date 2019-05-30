@@ -82,6 +82,8 @@ class _JobScheduler(threading.Thread):
         self.polling = polling
         self.async_mode = async_mode
 
+        self.do_run = True
+
         self._rwlock = RWLock()
         self._scheduler = sched.scheduler()
         self._queues = {
@@ -102,10 +104,15 @@ class _JobScheduler(threading.Thread):
             logger.critical("JobScheduler instance crashed. Error: %s", str(e))
             logger.critical(traceback.format_exc())
 
-    def schedule(self):
-        """Schedule jobs in loop."""""
+    def goodbye(self):
+        """Stop scheduling jobs."""
 
-        while True:
+        self.do_run = False
+
+    def schedule(self):
+        """Schedule jobs in loop."""
+
+        while self.do_run or len(self._jobs) > 0:
             self._scheduler.run(blocking=False)
 
             if not self.async_mode:
@@ -217,6 +224,11 @@ class _JobListener(threading.Thread):
             logger.critical("JobListener instence crashed. Error: %s", str(e))
             logger.critical(traceback.format_exc())
 
+    def goodbye(self):
+        """Stop listening for jobs."""
+
+        self.conn.publish(CH_PUBSUB, "goodbye")
+
     def listen(self):
         """Listen for completed jobs and reschedule successful ones."""
 
@@ -232,9 +244,13 @@ class _JobListener(threading.Thread):
                 logger.debug("Ignoring job message")
                 continue
 
-            data = pickle.loads(msg['data'])
-            job_id = data['job_id']
+            if msg['data'].decode("utf-8") == 'goodbye':
+                logger.debug("Stop listening for jobs")
+                break
 
+            data = pickle.loads(msg['data'])
+
+            job_id = data['job_id']
             job = rq.job.Job.fetch(job_id, connection=self.conn)
 
             if data['status'] == 'finished':
@@ -285,6 +301,18 @@ class Scheduler:
             self._listener.start()
         else:
             self._scheduler.schedule()
+
+    def stop_listener(self):
+        """Stop listener."""
+
+        self._listener.goodbye()
+        self._listener.join()
+
+    def stop_scheduler(self):
+        """Stop scheduler."""
+
+        self._scheduler.goodbye()
+        self._scheduler.join()
 
     def schedule_task(self, task_id):
         """Schedule a task.

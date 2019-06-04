@@ -23,7 +23,6 @@
 
 import copy
 import logging
-import pickle
 import threading
 import time
 import traceback
@@ -44,6 +43,7 @@ from .common import (CH_PUBSUB,
                      WAIT_FOR_QUEUING,
                      TIMEOUT)
 from .errors import NotFoundError
+from .events import JobEventsListener
 from .jobs import execute_perceval_job
 from .utils import RWLock
 
@@ -188,69 +188,6 @@ class _JobScheduler(threading.Thread):
         return job_id
 
 
-class _JobListener(threading.Thread):
-    """Listen for finished jobs.
-
-    Private class that listens for the result of a job. To manage
-    the result two callables may be provided: `result_handler` for
-    managing successful jobs and `result_handler_err` for managing
-    failed ones.
-
-    :param conn: connection to the Redis database
-    :param pubsub_channel: pubsub channel
-    :param result_handler: callable object to handle successful jobs
-    :param result_handler_err: callabe object to handle failed jobs
-    """
-    def __init__(self, conn, pubsub_channel=CH_PUBSUB, result_handler=None, result_handler_err=None):
-        super().__init__()
-        self.conn = conn
-        self.pubsub_channel = pubsub_channel
-        self.result_handler = result_handler
-        self.result_handler_err = result_handler_err
-
-    def run(self):
-        """Run thread to listen for jobs and reschedule successful ones."""
-
-        try:
-            self.listen()
-        except Exception as e:
-            logger.critical("JobListener instence crashed. Error: %s", str(e))
-            logger.critical(traceback.format_exc())
-
-    def listen(self):
-        """Listen for completed jobs and reschedule successful ones."""
-
-        pubsub = self.conn.pubsub()
-        pubsub.subscribe(self.pubsub_channel)
-
-        logger.debug("Listening on channel %s", self.pubsub_channel)
-
-        for msg in pubsub.listen():
-            logger.debug("New message received of type %s", str(msg['type']))
-
-            if msg['type'] != 'message':
-                logger.debug("Ignoring job message")
-                continue
-
-            data = pickle.loads(msg['data'])
-            job_id = data['job_id']
-
-            job = rq.job.Job.fetch(job_id, connection=self.conn)
-
-            if data['status'] == 'finished':
-                logging.debug("Job #%s completed", job_id)
-                handler = self.result_handler
-            elif data['status'] == 'failed':
-                logging.debug("Job #%s failed", job_id)
-                handler = self.result_handler_err
-            else:
-                continue
-
-            if handler:
-                logging.debug("Calling handler for job #%s", job_id)
-                handler(job)
-
-
 class Scheduler:
     """Scheduler of jobs.
 
@@ -272,10 +209,10 @@ class Scheduler:
                                         [Q_ARCHIVE_JOBS, Q_CREATION_JOBS, Q_UPDATING_JOBS],
                                         polling=SCHED_POLLING,
                                         async_mode=self.async_mode)
-        self._listener = _JobListener(self.conn,
-                                      pubsub_channel=pubsub_channel,
-                                      result_handler=self._handle_successful_job,
-                                      result_handler_err=self._handle_failed_job)
+        self._listener = JobEventsListener(self.conn,
+                                           events_channel=pubsub_channel,
+                                           result_handler=self._handle_successful_job,
+                                           result_handler_err=self._handle_failed_job)
 
     def schedule(self):
         """Start scheduling jobs."""

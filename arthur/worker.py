@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (C) 2015-2016 Bitergia
+# Copyright (C) 2014-2019 Bitergia
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,8 +13,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 # Authors:
 #     Santiago Dueñas <sduenas@bitergia.com>
@@ -22,11 +21,12 @@
 #
 
 import logging
-import pickle
 
 import rq
+import rq.job
 
 from .common import CH_PUBSUB
+from .events import JobEventType, JobEvent
 
 
 logger = logging.getLogger(__name__)
@@ -53,19 +53,25 @@ class ArthurWorker(rq.Worker):
         :param job: Job object
         :param queue: the queue containing the object
         """
-
         result = super().perform_job(job, queue)
 
         job_status = job.get_status()
-        job_result = job.return_value if job_status == 'finished' else None
 
-        data = {
-            'job_id': job.id,
-            'status': job_status,
-            'result': job_result
-        }
+        if job_status == rq.job.JobStatus.FINISHED:
+            event_type = JobEventType.COMPLETED
+            payload = job.return_value
+        elif job_status == rq.job.JobStatus.FAILED:
+            event_type = JobEventType.FAILURE
+            payload = job.exc_info
+        else:
+            logger.warning("Unexpected job status %s for finished job %s",
+                           job_status, job.id)
+            event_type = JobEventType.UNDEFINED
+            payload = job_status
 
-        msg = pickle.dumps(data)
+        event = JobEvent(event_type, job.id, payload)
+
+        msg = event.serialize()
         self.connection.publish(self.pubsub_channel, msg)
 
         return result

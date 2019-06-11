@@ -21,10 +21,83 @@
 
 import unittest
 
+from grimoirelab_toolkit.datetime import datetime_utcnow
+
 from arthur.common import CH_PUBSUB
-from arthur.events import JobEventsListener
+from arthur.events import (JobEventType,
+                           JobEvent,
+                           JobEventsListener)
 
 from base import TestBaseRQ
+
+
+class MockJobResult:
+    """Class to test/mock job results"""
+
+    def __init__(self, result, category):
+        self.result = result
+        self.category = category
+        self.timestamp = datetime_utcnow()
+
+
+class TestJobEvent(unittest.TestCase):
+    """Unit tests for JobEvent class"""
+
+    def test_initialization(self):
+        """Test if the instance is correctly initialized"""
+
+        dt_before = datetime_utcnow()
+        event = JobEvent(JobEventType.COMPLETED, '1', None)
+        dt_after = datetime_utcnow()
+
+        self.assertEqual(event.type, JobEventType.COMPLETED)
+        self.assertEqual(event.job_id, '1')
+        self.assertEqual(event.payload, None)
+        self.assertGreater(event.timestamp, dt_before)
+        self.assertLess(event.timestamp, dt_after)
+
+        dt_before = datetime_utcnow()
+        event = JobEvent(JobEventType.FAILURE, '2', "Error")
+        dt_after = datetime_utcnow()
+
+        self.assertEqual(event.type, JobEventType.FAILURE)
+        self.assertEqual(event.job_id, '2')
+        self.assertEqual(event.payload, "Error")
+        self.assertGreater(event.timestamp, dt_before)
+        self.assertLess(event.timestamp, dt_after)
+
+    def test_unique_identifier(self):
+        """Test if different identifiers create unique identifiers"""
+
+        event_a = JobEvent(JobEventType.COMPLETED, '1', None)
+        event_b = JobEvent(JobEventType.COMPLETED, '2', None)
+        event_c = JobEvent(JobEventType.FAILURE, '3', None)
+
+        self.assertNotEqual(event_a.uuid, None)
+        self.assertNotEqual(event_a.uuid, event_b.uuid)
+        self.assertNotEqual(event_b.uuid, event_c.uuid)
+        self.assertNotEqual(event_c.uuid, event_a.uuid)
+
+    def test_serializer(self):
+        """Test if an event is properly serialized and deserialized"""
+
+        result = MockJobResult(10, 'mockbackend')
+        event_a = JobEvent(JobEventType.COMPLETED, '1', result)
+
+        data = event_a.serialize()
+        event = JobEvent.deserialize(data)
+
+        self.assertIsInstance(event, JobEvent)
+        self.assertEqual(event.uuid, event_a.uuid)
+        self.assertEqual(event.timestamp, event_a.timestamp)
+        self.assertEqual(event.type, event_a.type)
+        self.assertEqual(event.job_id, event_a.job_id)
+
+        payload = event.payload
+        self.assertIsInstance(payload, MockJobResult)
+        self.assertEqual(payload.result, result.result)
+        self.assertEqual(payload.category, result.category)
+        self.assertEqual(payload.timestamp, result.timestamp)
 
 
 class TestJobEventsListener(TestBaseRQ):

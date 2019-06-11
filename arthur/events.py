@@ -19,17 +19,59 @@
 #     Santiago Dueñas <sduenas@bitergia.com>
 #
 
+import enum
 import logging
 import pickle
 import traceback
 import threading
+import uuid
 
 import rq
+
+from grimoirelab_toolkit.datetime import datetime_utcnow
 
 from .common import CH_PUBSUB
 
 
 logger = logging.getLogger(__name__)
+
+
+@enum.unique
+class JobEventType(enum.Enum):
+    COMPLETED = 1
+    FAILURE = 2
+    UNDEFINED = 999
+
+
+class JobEvent:
+    """Job activity notification.
+
+    Job events can be used to notify the activity of a job. Usually,
+    they will inform whether the job was completed or finished with
+    a failure.
+
+    Each event has a type, a unique identifier and the time when it
+    was generated (in UTC), the identifier of the job that produced
+    it and a payload. Depending on the type of event, the payload
+    might contain different data.
+
+    :param type: event type
+    :param job_id: identifier of the job
+    :param payload: data of the event
+    """
+    def __init__(self, type, job_id, payload):
+        self.uuid = str(uuid.uuid4())
+        self.timestamp = datetime_utcnow()
+        self.type = type
+        self.job_id = job_id
+        self.payload = payload
+
+    def serialize(self):
+        return pickle.dumps(self)
+
+    @classmethod
+    def deserialize(cls, data):
+        return pickle.loads(data)
 
 
 class JobEventsListener(threading.Thread):
@@ -76,27 +118,24 @@ class JobEventsListener(threading.Thread):
                 logger.debug("Ignoring job message")
                 continue
 
-            data = pickle.loads(msg['data'])
+            event = JobEvent.deserialize(msg['data'])
 
-            self._dispatch_event(data)
+            self._dispatch_event(event)
 
-    def _dispatch_event(self, data):
+    def _dispatch_event(self, event):
         """Dispatches the job event to the right handler."""
 
-        job_id = data['job_id']
-        status = data['status']
-
-        if status == 'finished':
-            logging.debug("Job #%s completed", job_id)
+        if event.type == JobEventType.COMPLETED:
+            logging.debug("Job #%s completed", event.job_id)
             handler = self.result_handler
-        elif status == 'failed':
-            logging.debug("Job #%s failed", job_id)
+        elif event.type == JobEventType.FAILURE:
+            logging.debug("Job #%s failed", event.job_id)
             handler = self.result_handler_err
         else:
-            logging.debug("No handler defined for %s", status)
+            logging.debug("No handler defined for %s", event.type.name)
             return
 
         if handler:
-            logging.debug("Calling handler for job #%s", job_id)
-            job = rq.job.Job.fetch(job_id, connection=self.conn)
+            logging.debug("Calling handler for job #%s", event.job_id)
+            job = rq.job.Job.fetch(event.job_id, connection=self.conn)
             handler(job)

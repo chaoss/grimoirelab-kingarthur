@@ -261,8 +261,10 @@ class Scheduler:
 
         logger.info("Task %s canceled", task_id)
 
-    def _handle_successful_job(self, job):
+    def _handle_successful_job(self, event):
         """Handle successufl jobs"""
+
+        job = rq.job.Job.fetch(event.job_id, connection=self.conn)
 
         result = job.result
         task_id = job.kwargs['task_id']
@@ -295,8 +297,10 @@ class Scheduler:
         logger.info("Job #%s (task: %s, old job: %s) re-scheduled",
                     job_id, task_id, job.id)
 
-    def _handle_failed_job(self, job):
+    def _handle_failed_job(self, event):
         """Handle failed jobs"""
+
+        job = rq.job.Job.fetch(event.job_id, connection=self.conn)
 
         task_id = job.kwargs['task_id']
         logger.error("Job #%s (task: %s) failed; cancelled",

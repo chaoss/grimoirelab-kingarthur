@@ -26,8 +26,6 @@ import traceback
 import threading
 import uuid
 
-import rq
-
 from grimoirelab_toolkit.datetime import datetime_utcnow
 
 from .common import CH_PUBSUB
@@ -78,8 +76,12 @@ class JobEventsListener(threading.Thread):
     """Listen jobs events.
 
     This class listens in a separate thread for those events produced
-    by the running jobs. A set of handlers can be given to process
-    those events.
+    by the running jobs. Events can be processed using a set of
+    handlers.
+
+    Handlers can be registered for a certain type of events using the
+    method `subscribe`. To stop handling them call the method
+    `unsubscribe`.
 
     :param conn: connection to the Redis database
     :param events_channel: name of the events channel where jobs write events
@@ -91,8 +93,10 @@ class JobEventsListener(threading.Thread):
         super().__init__()
         self.conn = conn
         self.events_channel = events_channel
-        self.result_handler = result_handler
-        self.result_handler_err = result_handler_err
+        self.handlers = {}
+
+        self.subscribe(JobEventType.COMPLETED, result_handler)
+        self.subscribe(JobEventType.FAILURE, result_handler_err)
 
     def run(self):
         """Start a thread to listen for jobs events."""
@@ -103,14 +107,60 @@ class JobEventsListener(threading.Thread):
             logger.critical("JobEventsListener instance crashed. Error: %s", str(e))
             logger.critical(traceback.format_exc())
 
-    def listen(self):
-        """Listen for completed jobs and reschedule successful ones."""
+    def subscribe(self, event_type, handler):
+        """Activate the listener to handle events of a type.
 
+        The listener will start processing events of the given type.
+        When an event of that type is caught, the listener will call
+        to `handler` passing it that event.
+
+        Next calls to this method will replace the handler that was
+        processing those events.
+
+        :param event_type: type of event to subscribe
+        :param handler: callable object to process the events
+
+        :raises TypeError: when `even_type` is not a `JobEventType` object.
+        """
+        if not isinstance(event_type, JobEventType):
+            msg = "'%s' object is not a JobEventType" % event_type.__class__.__name__
+            raise TypeError(msg)
+
+        self.handlers[event_type] = handler
+
+    def unsubscribe(self, event_type):
+        """Deactivate the listener to handle events of a type.
+
+        When this method is called, the listener will stop processing
+        events of the given type.
+
+        :param event_type: type of the event to unsubscribe
+
+        :raises TypeError: when `even_type` is not a `JobEventType` object.
+        """
+        if not isinstance(event_type, JobEventType):
+            msg = "'%s' object is not a JobEventType" % event_type.__class__.__name__
+            raise TypeError(msg)
+
+        self.handlers[event_type] = None
+
+    def listen(self):
+        """Listen for events.
+
+        The object will start listening for those events produced in
+        the system. When an event arrives, the event will be handled
+        if the listener was previously subscribed to it.
+
+        Take into account this is a blocking call. The listener will
+        be waiting for new events and it will not return the control
+        to the caller.
+        """
         pubsub = self.conn.pubsub()
         pubsub.subscribe(self.events_channel)
 
         logger.debug("Listening on channel %s", self.events_channel)
 
+        # Redis 'listen' method is a blocking call
         for msg in pubsub.listen():
             logger.debug("New message received of type %s", str(msg['type']))
 
@@ -122,20 +172,15 @@ class JobEventsListener(threading.Thread):
 
             self._dispatch_event(event)
 
+        logger.debug("End listening on channel %s", self.events_channel)
+
     def _dispatch_event(self, event):
         """Dispatches the job event to the right handler."""
 
-        if event.type == JobEventType.COMPLETED:
-            logging.debug("Job #%s completed", event.job_id)
-            handler = self.result_handler
-        elif event.type == JobEventType.FAILURE:
-            logging.debug("Job #%s failed", event.job_id)
-            handler = self.result_handler_err
-        else:
-            logging.debug("No handler defined for %s", event.type.name)
-            return
+        handler = self.handlers.get(event.type, None)
 
         if handler:
-            logging.debug("Calling handler for job #%s", event.job_id)
-            job = rq.job.Job.fetch(event.job_id, connection=self.conn)
-            handler(job)
+            logger.debug("Calling handler for job #%s", event.job_id)
+            handler(event)
+        else:
+            logger.debug("No handler defined for %s", event.type.name)

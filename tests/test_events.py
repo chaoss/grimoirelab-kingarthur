@@ -21,6 +21,8 @@
 
 import unittest
 
+import fakeredis
+
 from grimoirelab_toolkit.datetime import datetime_utcnow
 
 from arthur.common import CH_PUBSUB
@@ -100,6 +102,34 @@ class TestJobEvent(unittest.TestCase):
         self.assertEqual(payload.timestamp, result.timestamp)
 
 
+class MockPubSub:
+    """Mock class to have a non-blocking job events listener"""
+
+    def __init__(self, fake_events):
+        self.fake_events = fake_events
+
+    def subscribe(self, *args, **kwargs):
+        pass
+
+    def listen(self):
+        for event in self.fake_events:
+            yield {
+                'type': 'message',
+                'data': event.serialize()
+            }
+
+
+class MockRedisPubSubConnection(fakeredis.FakeStrictRedis):
+    """Class to produce mock pubsub objects"""
+
+    def __init__(self, fake_events, *args, **kwargs):
+        self.fake_events = fake_events
+        super().__init__(*args, **kwargs)
+
+    def pubsub(self):
+        return MockPubSub(self.fake_events)
+
+
 class TestJobEventsListener(TestBaseRQ):
     """Unit tests for JobEventsListener class"""
 
@@ -109,8 +139,12 @@ class TestJobEventsListener(TestBaseRQ):
         listener = JobEventsListener(self.conn)
         self.assertEqual(listener.conn, self.conn)
         self.assertEqual(listener.events_channel, CH_PUBSUB)
-        self.assertEqual(listener.result_handler, None)
-        self.assertEqual(listener.result_handler_err, None)
+
+        expected = {
+            JobEventType.COMPLETED: None,
+            JobEventType.FAILURE: None
+        }
+        self.assertDictEqual(expected, listener.handlers)
 
         def handle_successful_job(job):
             pass
@@ -124,8 +158,183 @@ class TestJobEventsListener(TestBaseRQ):
                                      result_handler_err=handle_failed_job)
         self.assertEqual(listener.conn, self.conn)
         self.assertEqual(listener.events_channel, 'events')
-        self.assertEqual(listener.result_handler, handle_successful_job)
-        self.assertEqual(listener.result_handler_err, handle_failed_job)
+
+        expected = {
+            JobEventType.COMPLETED: handle_successful_job,
+            JobEventType.FAILURE: handle_failed_job
+        }
+        self.assertDictEqual(expected, listener.handlers)
+
+    def test_subscribe(self):
+        """Test if a listener is subscribed to a set of events"""
+
+        def handle_successful_job(job):
+            pass
+
+        def handle_failed_job(job):
+            pass
+
+        listener = JobEventsListener(self.conn)
+
+        listener.subscribe(JobEventType.COMPLETED, handle_successful_job)
+        listener.subscribe(JobEventType.FAILURE, handle_failed_job)
+
+        self.assertEqual(listener.handlers[JobEventType.COMPLETED],
+                         handle_successful_job)
+        self.assertEqual(listener.handlers[JobEventType.FAILURE],
+                         handle_failed_job)
+
+    def test_replace_subscription(self):
+        """Test if a handler is replaced when subscription is called multiple times"""
+
+        def handle_generic_event(job):
+            pass
+
+        listener = JobEventsListener(self.conn)
+
+        listener.subscribe(JobEventType.COMPLETED, handle_generic_event)
+        self.assertEqual(listener.handlers[JobEventType.COMPLETED],
+                         handle_generic_event)
+
+        def handle_specific_event(job):
+            pass
+
+        # This should replace the handler by the newer one
+        listener.subscribe(JobEventType.COMPLETED, handle_specific_event)
+        self.assertEqual(listener.handlers[JobEventType.COMPLETED],
+                         handle_specific_event)
+
+    def test_subscribe_invalid_type(self):
+        """Check if an exception is raised when the event type is invalid"""
+
+        def handle_generic_event(job):
+            pass
+
+        listener = JobEventsListener(self.conn)
+
+        with self.assertRaisesRegex(TypeError, "'str' object is not a JobEventType"):
+            listener.subscribe('COMPLETED', handle_generic_event)
+
+    def test_unsubscribe(self):
+        """Check if a listener removes its subscription from a set of events"""
+
+        def handle_generic_event(job):
+            pass
+
+        listener = JobEventsListener(self.conn)
+
+        listener.subscribe(JobEventType.COMPLETED, handle_generic_event)
+        self.assertEqual(listener.handlers[JobEventType.COMPLETED],
+                         handle_generic_event)
+
+        listener.unsubscribe(JobEventType.COMPLETED)
+        self.assertEqual(listener.handlers[JobEventType.COMPLETED], None)
+
+    def test_unsubscribe_invalid_type(self):
+        """Check if an exception is raised when the event type is invalid"""
+
+        listener = JobEventsListener(self.conn)
+
+        with self.assertRaisesRegex(TypeError, "'str' object is not a JobEventType"):
+            listener.unsubscribe('COMPLETED')
+
+    def test_listen(self):
+        """Check if if listens and handles event messages.
+
+        Due to listening on a channel is a blocking call (because
+        Redis lib implementation), this test mocks the connection
+        with it to simulate events reception.
+        """
+
+        class TrackedEvents:
+            def __init__(self):
+                self.handled = 0
+                self.ok = 0
+                self.failures = 0
+
+        global tracked_events
+        tracked_events = TrackedEvents()
+
+        def handle_successful_job(job):
+            tracked_events.handled += 1
+            tracked_events.ok += 1
+
+        def handle_failed_job(job):
+            tracked_events.handled += 1
+            tracked_events.failures += 1
+
+        events = [
+            JobEvent(JobEventType.COMPLETED, 1, MockJobResult(20, 'A')),
+            JobEvent(JobEventType.FAILURE, 2, 'ERROR'),
+            JobEvent(JobEventType.FAILURE, 3, 'ERROR'),
+            JobEvent(JobEventType.FAILURE, 4, 'ERROR'),
+            JobEvent(JobEventType.COMPLETED, 5, MockJobResult(22, 'B')),
+            JobEvent(JobEventType.FAILURE, 6, 'ERROR'),
+            JobEvent(JobEventType.UNDEFINED, 7, 'OK'),
+        ]
+
+        conn = MockRedisPubSubConnection(events)
+        listener = JobEventsListener(conn)
+        listener.subscribe(JobEventType.COMPLETED, handle_successful_job)
+        listener.subscribe(JobEventType.FAILURE, handle_failed_job)
+
+        listener.run()
+
+        # UNDEFINED event was not handled
+        self.assertEqual(tracked_events.handled, 6)
+        self.assertEqual(tracked_events.ok, 2)
+        self.assertEqual(tracked_events.failures, 4)
+
+    def test_listen_after_unsubscribing(self):
+        """Check if only handles subscribed messages after unsubscribing.
+
+        Due to listening on a channel is a blocking call (because
+        Redis lib implementation), this test mocks the connection
+        with it to simulate events reception.
+        """
+
+        class TrackedEvents:
+            def __init__(self):
+                self.handled = 0
+                self.ok = 0
+                self.failures = 0
+
+        global tracked_events
+        tracked_events = TrackedEvents()
+
+        def handle_successful_job(job):
+            tracked_events.handled += 1
+            tracked_events.ok += 1
+
+        def handle_failed_job(job):
+            tracked_events.handled += 1
+            tracked_events.failures += 1
+
+        events = [
+            JobEvent(JobEventType.COMPLETED, 1, MockJobResult(20, 'A')),
+            JobEvent(JobEventType.FAILURE, 2, 'ERROR'),
+            JobEvent(JobEventType.FAILURE, 3, 'ERROR'),
+            JobEvent(JobEventType.FAILURE, 4, 'ERROR'),
+            JobEvent(JobEventType.COMPLETED, 5, MockJobResult(22, 'B')),
+            JobEvent(JobEventType.FAILURE, 6, 'ERROR'),
+            JobEvent(JobEventType.UNDEFINED, 7, 'OK'),
+        ]
+
+        conn = MockRedisPubSubConnection(events)
+        listener = JobEventsListener(conn)
+
+        # COMPLETED and FAILURE events are handled on the first call
+        # to run(); on the next call only FAILURE events are handled,
+        # tracked_events keeps track of both calls
+        listener.subscribe(JobEventType.COMPLETED, handle_successful_job)
+        listener.subscribe(JobEventType.FAILURE, handle_failed_job)
+        listener.run()
+        listener.unsubscribe(JobEventType.COMPLETED)
+        listener.run()
+
+        self.assertEqual(tracked_events.handled, 10)
+        self.assertEqual(tracked_events.ok, 2)
+        self.assertEqual(tracked_events.failures, 8)
 
 
 if __name__ == "__main__":

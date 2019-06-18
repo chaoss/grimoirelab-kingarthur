@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Copyright (C) 2015-2016 Bitergia
+# Copyright (C) 2014-2019 Bitergia
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,19 +13,18 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 # Authors:
 #     Santiago Dueñas <sduenas@bitergia.com>
 #
 
-import pickle
 import unittest
 
 import rq.worker
 
 from arthur.common import CH_PUBSUB
+from arthur.events import JobEventType, JobEvent
 from arthur.worker import ArthurWorker
 
 from base import TestBaseRQ, mock_sum, mock_failure
@@ -73,17 +71,17 @@ class TestArthurWorker(TestBaseRQ):
         msg_a = pubsub.get_message()
         msg_b = pubsub.get_message()
 
-        data = pickle.loads(msg_a['data'])
+        event = JobEvent.deserialize(msg_a['data'])
         self.assertEqual(job_a.result, 5)
-        self.assertEqual(data['job_id'], job_a.id)
-        self.assertEqual(data['status'], 'finished')
-        self.assertEqual(data['result'], 5)
+        self.assertEqual(event.job_id, job_a.id)
+        self.assertEqual(event.type, JobEventType.COMPLETED)
+        self.assertEqual(event.payload, 5)
 
-        data = pickle.loads(msg_b['data'])
+        event = JobEvent.deserialize(msg_b['data'])
         self.assertEqual(job_b.result, None)
-        self.assertEqual(data['job_id'], job_b.id)
-        self.assertEqual(data['status'], 'failed')
-        self.assertEqual(data['result'], None)
+        self.assertEqual(event.job_id, job_b.id)
+        self.assertEqual(event.type, JobEventType.FAILURE)
+        self.assertRegex(event.payload, "Traceback")
 
 
 if __name__ == "__main__":

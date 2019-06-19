@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (C) 2015-2016 Bitergia
+# Copyright (C) 2015-2019 Bitergia
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,8 +13,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 # Authors:
 #     Santiago Dueñas <sduenas@bitergia.com>
@@ -22,6 +21,7 @@
 #
 
 import datetime
+import enum
 import logging
 import re
 
@@ -37,6 +37,37 @@ from .utils import RWLock
 
 
 logger = logging.getLogger(__name__)
+
+
+@enum.unique
+class TaskStatus(enum.Enum):
+    """Task life cycle statuses.
+
+    The life cycle of a task starts when is created and added
+    to the system as `NEW`.
+
+    The next step will be to program a task job. Once this is
+    done the task will be `SCHEDULED` to run at a defined time.
+    It will remain in this status until its job is `ENQUEUED`.
+
+    The job will advance in the queue while other jobs are
+    executed. Right after it gets to the head of the queue and a
+    worker is free it will execute. The task will be `RUNNING`.
+
+    Depending on the result executing the job, the outcomes will
+    be different. If the job executed successfully, the task
+    will be set to `COMPLETED`. If there was an error the status
+    will be `FAILED`.
+
+    Recurring tasks, that were successful, will be re-scheduled
+    again (`SCHEDULED`), stating a new cycle.
+    """
+    NEW = 1
+    SCHEDULED = 2
+    ENQUEUED = 3
+    RUNNING = 4
+    COMPLETED = 5
+    FAILED = 6
 
 
 class Task:
@@ -61,6 +92,7 @@ class Task:
     def __init__(self, task_id, backend, category, backend_args,
                  archiving_cfg=None, scheduling_cfg=None):
         self._task_id = task_id
+        self.status = TaskStatus.NEW
         self.created_on = datetime.datetime.now().timestamp()
         self.backend = backend
         self.category = category
@@ -75,6 +107,7 @@ class Task:
     def to_dict(self):
         return {
             'task_id': self.task_id,
+            'status': self.status.name,
             'created_on': self.created_on,
             'backend': self.backend,
             'backend_args': self.backend_args,

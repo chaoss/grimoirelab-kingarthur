@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Copyright (C) 2015-2016 Bitergia
+# Copyright (C) 2015-2019 Bitergia
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,8 +14,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 # Authors:
 #     Santiago Dueñas <sduenas@bitergia.com>
@@ -30,7 +29,8 @@ from arthur.errors import AlreadyExistsError, NotFoundError
 from arthur.tasks import (ArchivingTaskConfig,
                           SchedulingTaskConfig,
                           Task,
-                          TaskRegistry)
+                          TaskRegistry,
+                          TaskStatus)
 
 
 INVALID_ARCHIVE_PATH_ERROR = "'archive_path' must be a str"
@@ -54,6 +54,7 @@ class TestTask(unittest.TestCase):
         task = Task('mytask', 'mock_backend', 'category', args)
 
         self.assertEqual(task.task_id, 'mytask')
+        self.assertEqual(task.status, TaskStatus.NEW)
         self.assertEqual(task.backend, 'mock_backend')
         self.assertEqual(task.category, 'category')
         self.assertDictEqual(task.backend_args, args)
@@ -72,6 +73,7 @@ class TestTask(unittest.TestCase):
                     archiving_cfg=archive, scheduling_cfg=sched)
 
         self.assertEqual(task.task_id, 'mytask')
+        self.assertEqual(task.status, TaskStatus.NEW)
         self.assertEqual(task.backend, 'mock_backend')
         self.assertEqual(task.category, 'category')
         self.assertDictEqual(task.backend_args, args)
@@ -98,6 +100,7 @@ class TestTask(unittest.TestCase):
 
         expected = {
             'task_id': 'mytask',
+            'status': 'NEW',
             'backend': 'mock_backend',
             'backend_args': args,
             'category': category,
@@ -150,6 +153,7 @@ class TestTaskRegistry(unittest.TestCase):
         self.assertIsInstance(task, Task)
         self.assertEqual(task, new_task)
         self.assertEqual(task.task_id, 'mytask')
+        self.assertEqual(task.status, TaskStatus.NEW)
         self.assertEqual(task.category, 'category')
         self.assertEqual(task.backend, 'mock_backend')
         self.assertDictEqual(task.backend_args, args)
@@ -167,6 +171,7 @@ class TestTaskRegistry(unittest.TestCase):
         task0 = tasks[0]
         self.assertIsInstance(task0, Task)
         self.assertEqual(task0.task_id, 'atask')
+        self.assertEqual(task0.status, TaskStatus.NEW)
         self.assertEqual(task0.backend, 'mock_backend')
         self.assertEqual(task0.category, 'category')
         self.assertDictEqual(task0.backend_args, args)
@@ -251,6 +256,7 @@ class TestTaskRegistry(unittest.TestCase):
         task = registry.get('atask')
         self.assertIsInstance(task, Task)
         self.assertEqual(task.task_id, 'atask')
+        self.assertEqual(task.status, TaskStatus.NEW)
         self.assertEqual(task.category, 'category')
         self.assertEqual(task.backend, 'test_backend')
         self.assertEqual(task.backend_args, None)

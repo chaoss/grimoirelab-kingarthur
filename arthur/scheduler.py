@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (C) 2015-2016 Bitergia
+# Copyright (C) 2015-2019 Bitergia
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,8 +13,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 # Authors:
 #     Santiago Dueñas <sduenas@bitergia.com>
@@ -45,6 +44,7 @@ from .common import (CH_PUBSUB,
 from .errors import NotFoundError
 from .events import JobEventsListener
 from .jobs import execute_perceval_job
+from .tasks import TaskStatus
 from .utils import RWLock
 
 
@@ -70,14 +70,16 @@ class _JobScheduler(threading.Thread):
     can be configured using the attribute `polling`. By default, it is
     set to `SCHED_POLLING` value.
 
+    :param registry: tasks registry
     :param conn: connection to the Redis database
     :param queues: list of queues created during the initialization
     :param polling: sleep time to poll jobs
     :param async_mode: run in async mode (with workers); set to `False`
         for debugging purposes
     """
-    def __init__(self, conn, queues, polling=SCHED_POLLING, async_mode=True):
+    def __init__(self, registry, conn, queues, polling=SCHED_POLLING, async_mode=True):
         super().__init__()
+        self.registry = registry
         self.conn = conn
         self.polling = polling
         self.async_mode = async_mode
@@ -152,11 +154,22 @@ class _JobScheduler(threading.Thread):
     def _enqueue_job(self, queue_id, job_id, job_args):
         self._rwlock.writer_acquire()
 
+        task_id = job_args['task_id']
+
+        try:
+            task = self.registry.get(task_id)
+        except NotFoundError:
+            logger.warning("Task %s was canceled; ignore job", task_id)
+            del self._jobs[job_id]
+            return
+
         self._queues[queue_id].enqueue(execute_perceval_job,
                                        job_id=job_id,
                                        timeout=TIMEOUT,
                                        **job_args)
         del self._jobs[job_id]
+
+        task.status = TaskStatus.ENQUEUED
 
         self._rwlock.writer_release()
 
@@ -197,7 +210,7 @@ class Scheduler:
     rescheduled once they finished.
 
     :param conn: connection to the Redis database
-    :param registry: regsitry of tasks
+    :param registry: registry of tasks
     :param async_mode: run in async mode (with workers); set to `False`
         for debugging purposes
     """
@@ -205,7 +218,8 @@ class Scheduler:
         self.conn = conn
         self.registry = registry
         self.async_mode = async_mode
-        self._scheduler = _JobScheduler(self.conn,
+        self._scheduler = _JobScheduler(self.registry,
+                                        self.conn,
                                         [Q_ARCHIVE_JOBS, Q_CREATION_JOBS, Q_UPDATING_JOBS],
                                         polling=SCHED_POLLING,
                                         async_mode=self.async_mode)
@@ -243,6 +257,7 @@ class Scheduler:
         job_id = self._scheduler.schedule_job_task(queue,
                                                    task.task_id, job_args,
                                                    delay=0)
+        task.status = TaskStatus.SCHEDULED
 
         logger.info("Job #%s (task: %s) scheduled", job_id, task.task_id)
 
@@ -278,6 +293,7 @@ class Scheduler:
 
         if task.archiving_cfg and task.archiving_cfg.fetch_from_archive:
             logger.info("Job #%s (task: %s) successfully finished", job.id, task_id)
+            task.status = TaskStatus.COMPLETED
             return
 
         if result.nitems > 0:
@@ -293,6 +309,7 @@ class Scheduler:
         job_id = self._scheduler.schedule_job_task(Q_UPDATING_JOBS,
                                                    task_id, job_args,
                                                    delay=delay)
+        task.status = TaskStatus.SCHEDULED
 
         logger.info("Job #%s (task: %s, old job: %s) re-scheduled",
                     job_id, task_id, job.id)
@@ -303,6 +320,13 @@ class Scheduler:
         job = rq.job.Job.fetch(event.job_id, connection=self.conn)
 
         task_id = job.kwargs['task_id']
+
+        try:
+            task = self.registry.get(task_id)
+            task.status = TaskStatus.FAILED
+        except NotFoundError:
+            pass
+
         logger.error("Job #%s (task: %s) failed; cancelled",
                      job.id, task_id)
 

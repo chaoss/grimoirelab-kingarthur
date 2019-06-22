@@ -97,7 +97,7 @@ class _TaskScheduler(threading.Thread):
         self.async_mode = async_mode
 
         self._rwlock = RWLock()
-        self._scheduler = sched.scheduler()
+        self._delayer = sched.scheduler()
         self._queues = {
             queue_id: rq.Queue(queue_id,
                                connection=self.conn,
@@ -120,7 +120,7 @@ class _TaskScheduler(threading.Thread):
         """Start scheduling tasks in loop."""""
 
         while True:
-            self._scheduler.run(blocking=False)
+            self._delayer.run(blocking=False)
 
             if not self.async_mode:
                 break
@@ -128,15 +128,15 @@ class _TaskScheduler(threading.Thread):
             # Let other threads run
             time.sleep(self.polling)
 
-    def schedule_job_task(self, task_id, delay=0):
+    def schedule_task(self, task_id, delay=0):
         """Schedule the task in the given queue."""
 
         task = self.registry.get(task_id)
 
         self._rwlock.writer_acquire()
 
-        event = self._scheduler.enter(delay, 1, self._enqueue_job_task,
-                                      argument=(task_id, ))
+        event = self._delayer.enter(delay, 1, self._enqueue_job_task,
+                                    argument=(task_id, ))
 
         self._tasks_events[task_id] = event
         task.status = TaskStatus.SCHEDULED
@@ -146,7 +146,7 @@ class _TaskScheduler(threading.Thread):
         logging.debug("Task: %s scheduled (wait: %s)",
                       task_id, delay)
 
-    def cancel_job_task(self, task_id):
+    def cancel_task(self, task_id):
         """Cancel the given task."""
 
         self._rwlock.writer_acquire()
@@ -198,7 +198,7 @@ class _TaskScheduler(threading.Thread):
         # The job is in the scheduler
         if event:
             try:
-                self._scheduler.cancel(event)
+                self._delayer.cancel(event)
                 del self._tasks_events[task_id]
                 logger.debug("Event found for task %s; canceling it", task_id)
                 return
@@ -274,8 +274,8 @@ class Scheduler:
         :raises NotFoundError: raised when the requested task is not
             found in the registry
         """
-        self._scheduler.schedule_job_task(task_id,
-                                          delay=0)
+        self._scheduler.schedule_task(task_id,
+                                      delay=0)
         logger.info("Task: %s scheduled", task_id)
 
     def cancel_task(self, task_id):
@@ -287,7 +287,7 @@ class Scheduler:
             found in the registry
         """
         self.registry.remove(task_id)
-        self._scheduler.cancel_job_task(task_id)
+        self._scheduler.cancel_task(task_id)
 
         logger.info("Task %s canceled", task_id)
 
@@ -319,8 +319,8 @@ class Scheduler:
 
         delay = task.scheduling_cfg.delay if task.scheduling_cfg else WAIT_FOR_QUEUING
 
-        self._scheduler.schedule_job_task(task_id,
-                                          delay=delay)
+        self._scheduler.schedule_task(task_id,
+                                      delay=delay)
 
         logger.info("Task: %s re-scheduled", task_id)
 

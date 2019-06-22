@@ -55,8 +55,11 @@ class TestScheduler(TestBaseRQ):
         schlr = Scheduler(self.conn, registry, async_mode=False)
         schlr.schedule_task(task.task_id)
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
+        self.assertEqual(task.age, 0)
 
         schlr.schedule()
+
+        self.assertEqual(task.age, 1)
 
         job = schlr._scheduler._queues[Q_CREATION_JOBS].fetch_job(task.last_job)
         result = job.return_value

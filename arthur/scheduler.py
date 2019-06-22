@@ -128,20 +128,23 @@ class _TaskScheduler(threading.Thread):
             # Let other threads run
             time.sleep(self.polling)
 
-    def schedule_job_task(self, queue_id, task_id, delay=0):
+    def schedule_job_task(self, task_id, delay=0):
         """Schedule the task in the given queue."""
+
+        task = self.registry.get(task_id)
 
         self._rwlock.writer_acquire()
 
         event = self._scheduler.enter(delay, 1, self._enqueue_job_task,
-                                      argument=(queue_id, task_id))
+                                      argument=(task_id, ))
 
         self._tasks_events[task_id] = event
+        task.status = TaskStatus.SCHEDULED
 
         self._rwlock.writer_release()
 
-        logging.debug("Task: %s scheduled on %s (wait: %s)",
-                      task_id, queue_id, delay)
+        logging.debug("Task: %s scheduled (wait: %s)",
+                      task_id, delay)
 
     def cancel_job_task(self, task_id):
         """Cancel the given task."""
@@ -158,7 +161,7 @@ class _TaskScheduler(threading.Thread):
 
         self._rwlock.writer_release()
 
-    def _enqueue_job_task(self, queue_id, task_id):
+    def _enqueue_job_task(self, task_id):
         self._rwlock.writer_acquire()
 
         try:
@@ -171,6 +174,8 @@ class _TaskScheduler(threading.Thread):
         job_id = self._generate_job_id(task_id)
         job_args = _build_job_arguments(task)
 
+        queue_id = self._determine_queue(task)
+
         self._queues[queue_id].enqueue(execute_perceval_job,
                                        job_id=job_id,
                                        timeout=TIMEOUT,
@@ -179,10 +184,11 @@ class _TaskScheduler(threading.Thread):
 
         task.status = TaskStatus.ENQUEUED
         task.last_job = job_id
+        task.age += 1
 
         self._rwlock.writer_release()
 
-        logging.debug("Job #%s (task: %s) (%s) queued in '%s'",
+        logging.debug("Job #%s (task: %s) (%s) enqueued in '%s'",
                       job_id, job_args['task_id'],
                       job_args['backend'], queue_id)
 
@@ -205,6 +211,18 @@ class _TaskScheduler(threading.Thread):
         rq.cancel_job(job_id, connection=self.conn)
         logger.debug("Job #%s canceled", job_id)
         del self._tasks_jobs[task_id]
+
+    @staticmethod
+    def _determine_queue(task):
+        archiving_cfg = task.archiving_cfg
+
+        if archiving_cfg and archiving_cfg.fetch_from_archive:
+            queue_id = Q_ARCHIVE_JOBS
+        elif task.age > 0:
+            queue_id = Q_UPDATING_JOBS
+        else:
+            queue_id = Q_CREATION_JOBS
+        return queue_id
 
     @staticmethod
     def _generate_job_id(task_id):
@@ -256,19 +274,9 @@ class Scheduler:
         :raises NotFoundError: raised when the requested task is not
             found in the registry
         """
-        task = self.registry.get(task_id)
-
-        archiving_cfg = task.archiving_cfg
-
-        fetch_from_archive = False if not archiving_cfg else archiving_cfg.fetch_from_archive
-        # Schedule the job as soon as possible
-        queue = Q_ARCHIVE_JOBS if fetch_from_archive else Q_CREATION_JOBS
-        self._scheduler.schedule_job_task(queue,
-                                          task.task_id,
+        self._scheduler.schedule_job_task(task_id,
                                           delay=0)
-        task.status = TaskStatus.SCHEDULED
-
-        logger.info("Task: %s scheduled", task.task_id)
+        logger.info("Task: %s scheduled", task_id)
 
     def cancel_task(self, task_id):
         """Cancel or 'un-schedule' a task.
@@ -311,11 +319,10 @@ class Scheduler:
 
         delay = task.scheduling_cfg.delay if task.scheduling_cfg else WAIT_FOR_QUEUING
 
-        self._scheduler.schedule_job_task(Q_UPDATING_JOBS,
-                                          task_id,
+        self._scheduler.schedule_job_task(task_id,
                                           delay=delay)
 
-        logger.info("Task: %s re-scheduled", task_id, job.id)
+        logger.info("Task: %s re-scheduled", task_id)
 
     def _handle_failed_job(self, event):
         """Handle failed jobs"""

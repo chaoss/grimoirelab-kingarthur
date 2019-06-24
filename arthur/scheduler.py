@@ -55,25 +55,37 @@ logger = logging.getLogger(__name__)
 SCHED_POLLING = 0.5
 
 
-class _JobScheduler(threading.Thread):
-    """Class handler for scheduling jobs.
+class _TaskScheduler(threading.Thread):
+    """Private class to schedule tasks.
 
-    Private class needed to schedule jobs. The scheduler does not really
-    runs the job. It queues jobs in some predefined worker queues.
-    Depending on the overhead of these queue, the jobs will execute sooner.
-    These queues are created during the initialization of the class,
-    giving a list of queues identifiers in the paramater `queues`.
+    Tasks added to the scheduler go through different stages.
+    When a task is added, the scheduler will set it to
+    `TaskStatus.SCHEDULED`. It will remain on this stage if a
+    waiting time was given. This is useful to delay the execution
+    of certain tasks. For example, those recurring tasks that
+    overhead and stress some services.
 
-    Take into account that the enqueuing of a job can be delayed using a
-    waiting time. The scheduler will poll jobs to check their waiting
-    times. Once it is expired, the tasks will be enqueued. Polling time
-    can be configured using the attribute `polling`. By default, it is
-    set to `SCHED_POLLING` value.
+    The scheduler will poll tasks to check their waiting times.
+    Polling time can be configured using the attribute `polling`.
+
+    Once waiting time is expired, the task will advance to the
+    next stage. The scheduler generates one job for each task and
+    enqueues it in some predefined worker queues. At this point,
+    the task is set as `TaskStatus.ENQUEUED`.
+
+    Task jobs will execute as soon as possible but it will depend
+    on the overhead of the queues. These queues are created during
+    the initialization of the class, giving a list of queues
+    identifiers in the parameter `queues`.
+
+    Task jobs execution is delegated to external workers. It is
+    possible to bypass this behaviour, running tasks in the same
+    thread. To do it, set `async_mode` to `False`.
 
     :param registry: tasks registry
     :param conn: connection to the Redis database
     :param queues: list of queues created during the initialization
-    :param polling: sleep time to poll jobs
+    :param polling: sleep time to poll tasks
     :param async_mode: run in async mode (with workers); set to `False`
         for debugging purposes
     """
@@ -85,30 +97,30 @@ class _JobScheduler(threading.Thread):
         self.async_mode = async_mode
 
         self._rwlock = RWLock()
-        self._scheduler = sched.scheduler()
+        self._delayer = sched.scheduler()
         self._queues = {
             queue_id: rq.Queue(queue_id,
                                connection=self.conn,
                                is_async=self.async_mode)  # noqa: W606
             for queue_id in queues
         }
-        self._jobs = {}
-        self._tasks = {}
+        self._tasks_events = {}
+        self._tasks_jobs = {}
 
     def run(self):
-        """Run thread to schedule jobs."""
+        """Run thread to schedule tasks."""
 
         try:
             self.schedule()
         except Exception as e:
-            logger.critical("JobScheduler instance crashed. Error: %s", str(e))
+            logger.critical("TaskScheduler instance crashed. Error: %s", str(e))
             logger.critical(traceback.format_exc())
 
     def schedule(self):
-        """Schedule jobs in loop."""""
+        """Start scheduling tasks in loop."""""
 
         while True:
-            self._scheduler.run(blocking=False)
+            self._delayer.run(blocking=False)
 
             if not self.async_mode:
                 break
@@ -116,84 +128,101 @@ class _JobScheduler(threading.Thread):
             # Let other threads run
             time.sleep(self.polling)
 
-    def schedule_job_task(self, queue_id, task_id, job_args, delay=0):
-        """Schedule a job in the given queue."""
+    def schedule_task(self, task_id, delay=0):
+        """Schedule the task in the given queue."""
+
+        task = self.registry.get(task_id)
 
         self._rwlock.writer_acquire()
 
-        job_id = self._generate_job_id(task_id)
+        event = self._delayer.enter(delay, 1, self._enqueue_job_task,
+                                    argument=(task_id, ))
 
-        event = self._scheduler.enter(delay, 1, self._enqueue_job,
-                                      argument=(queue_id, job_id, job_args,))
-        self._jobs[job_id] = event
-        self._tasks[task_id] = job_id
+        self._tasks_events[task_id] = event
+        task.status = TaskStatus.SCHEDULED
 
         self._rwlock.writer_release()
 
-        logging.debug("Job #%s (task: %s) scheduled on %s (wait: %s)",
-                      job_id, task_id, queue_id, delay)
+        logging.debug("Task: %s scheduled (wait: %s)",
+                      task_id, delay)
 
-        return job_id
+    def cancel_task(self, task_id):
+        """Cancel the given task."""
 
-    def cancel_job_task(self, task_id):
-        """Cancel the job related to the given task."""
-
-        try:
-            self._rwlock.writer_acquire()
-
-            job_id = self._tasks.get(task_id, None)
-
-            if job_id:
-                self._cancel_job(job_id)
-            else:
-                logger.warning("Task %s set to be removed was not found",
-                               task_id)
-        finally:
-            self._rwlock.writer_release()
-
-    def _enqueue_job(self, queue_id, job_id, job_args):
         self._rwlock.writer_acquire()
 
-        task_id = job_args['task_id']
+        is_scheduled = task_id in self._tasks_events or task_id in self._tasks_jobs
+
+        if is_scheduled:
+            self._cancel_task(task_id)
+        else:
+            logger.warning("Task %s set to be removed was not found",
+                           task_id)
+
+        self._rwlock.writer_release()
+
+    def _enqueue_job_task(self, task_id):
+        self._rwlock.writer_acquire()
 
         try:
             task = self.registry.get(task_id)
         except NotFoundError:
             logger.warning("Task %s was canceled; ignore job", task_id)
-            del self._jobs[job_id]
+            del self._tasks_events[task_id]
             return
+
+        job_id = self._generate_job_id(task_id)
+        job_args = _build_job_arguments(task)
+
+        queue_id = self._determine_queue(task)
 
         self._queues[queue_id].enqueue(execute_perceval_job,
                                        job_id=job_id,
                                        timeout=TIMEOUT,
                                        **job_args)
-        del self._jobs[job_id]
+        del self._tasks_events[task_id]
 
         task.status = TaskStatus.ENQUEUED
+        task.last_job = job_id
+        task.age += 1
 
         self._rwlock.writer_release()
 
-        logging.debug("Job #%s (task: %s) (%s) queued in '%s'",
+        logging.debug("Job #%s (task: %s) (%s) enqueued in '%s'",
                       job_id, job_args['task_id'],
                       job_args['backend'], queue_id)
 
-    def _cancel_job(self, job_id):
-        event = self._jobs.get(job_id, None)
+    def _cancel_task(self, task_id):
+        event = self._tasks_events.get(task_id, None)
 
         # The job is in the scheduler
         if event:
             try:
-                self._scheduler.cancel(event)
-                del self._jobs[job_id]
-                logger.debug("Event found for #%s; canceling it", job_id)
+                self._delayer.cancel(event)
+                del self._tasks_events[task_id]
+                logger.debug("Event found for task %s; canceling it", task_id)
                 return
             except ValueError:
-                logger.debug("Event not found for #%s; it should be on the queue",
-                             job_id)
+                logger.debug("Event not found for task %s; it should be on the queue",
+                             task_id)
 
         # The job is running on a queue
+        job_id = self._tasks_jobs[task_id]
         rq.cancel_job(job_id, connection=self.conn)
         logger.debug("Job #%s canceled", job_id)
+        del self._tasks_jobs[task_id]
+
+    @staticmethod
+    def _determine_queue(task):
+        archiving_cfg = task.archiving_cfg
+
+        if archiving_cfg and archiving_cfg.fetch_from_archive:
+            queue_id = Q_ARCHIVE_JOBS
+        elif task.age > 0:
+            queue_id = Q_UPDATING_JOBS
+        else:
+            queue_id = Q_CREATION_JOBS
+        return queue_id
 
     @staticmethod
     def _generate_job_id(task_id):
@@ -218,11 +247,11 @@ class Scheduler:
         self.conn = conn
         self.registry = registry
         self.async_mode = async_mode
-        self._scheduler = _JobScheduler(self.registry,
-                                        self.conn,
-                                        [Q_ARCHIVE_JOBS, Q_CREATION_JOBS, Q_UPDATING_JOBS],
-                                        polling=SCHED_POLLING,
-                                        async_mode=self.async_mode)
+        self._scheduler = _TaskScheduler(self.registry,
+                                         self.conn,
+                                         [Q_ARCHIVE_JOBS, Q_CREATION_JOBS, Q_UPDATING_JOBS],
+                                         polling=SCHED_POLLING,
+                                         async_mode=self.async_mode)
         self._listener = JobEventsListener(self.conn,
                                            events_channel=pubsub_channel,
                                            result_handler=self._handle_successful_job,
@@ -245,23 +274,9 @@ class Scheduler:
         :raises NotFoundError: raised when the requested task is not
             found in the registry
         """
-        task = self.registry.get(task_id)
-
-        job_args = self._build_job_arguments(task)
-
-        archiving_cfg = task.archiving_cfg
-
-        fetch_from_archive = False if not archiving_cfg else archiving_cfg.fetch_from_archive
-        # Schedule the job as soon as possible
-        queue = Q_ARCHIVE_JOBS if fetch_from_archive else Q_CREATION_JOBS
-        job_id = self._scheduler.schedule_job_task(queue,
-                                                   task.task_id, job_args,
-                                                   delay=0)
-        task.status = TaskStatus.SCHEDULED
-
-        logger.info("Job #%s (task: %s) scheduled", job_id, task.task_id)
-
-        return job_id
+        self._scheduler.schedule_task(task_id,
+                                      delay=0)
+        logger.info("Task: %s scheduled", task_id)
 
     def cancel_task(self, task_id):
         """Cancel or 'un-schedule' a task.
@@ -272,7 +287,7 @@ class Scheduler:
             found in the registry
         """
         self.registry.remove(task_id)
-        self._scheduler.cancel_job_task(task_id)
+        self._scheduler.cancel_task(task_id)
 
         logger.info("Task %s canceled", task_id)
 
@@ -302,17 +317,12 @@ class Scheduler:
             if result.offset:
                 task.backend_args['next_offset'] = result.offset
 
-        job_args = self._build_job_arguments(task)
-
         delay = task.scheduling_cfg.delay if task.scheduling_cfg else WAIT_FOR_QUEUING
 
-        job_id = self._scheduler.schedule_job_task(Q_UPDATING_JOBS,
-                                                   task_id, job_args,
-                                                   delay=delay)
-        task.status = TaskStatus.SCHEDULED
+        self._scheduler.schedule_task(task_id,
+                                      delay=delay)
 
-        logger.info("Job #%s (task: %s, old job: %s) re-scheduled",
-                    job_id, task_id, job.id)
+        logger.info("Task: %s re-scheduled", task_id)
 
     def _handle_failed_job(self, event):
         """Handle failed jobs"""
@@ -330,35 +340,35 @@ class Scheduler:
         logger.error("Job #%s (task: %s) failed; cancelled",
                      job.id, task_id)
 
-    @staticmethod
-    def _build_job_arguments(task):
-        """Build the set of arguments required for running a job"""
 
-        job_args = {}
-        job_args['qitems'] = Q_STORAGE_ITEMS
-        job_args['task_id'] = task.task_id
+def _build_job_arguments(task):
+    """Build the set of arguments required for running a job"""
 
-        # Backend parameters
-        job_args['backend'] = task.backend
-        backend_args = copy.deepcopy(task.backend_args)
+    job_args = {}
+    job_args['qitems'] = Q_STORAGE_ITEMS
+    job_args['task_id'] = task.task_id
 
-        if 'next_from_date' in backend_args:
-            backend_args['from_date'] = backend_args.pop('next_from_date')
+    # Backend parameters
+    job_args['backend'] = task.backend
+    backend_args = copy.deepcopy(task.backend_args)
 
-        if 'next_offset' in backend_args:
-            backend_args['offset'] = backend_args.pop('next_offset')
+    if 'next_from_date' in backend_args:
+        backend_args['from_date'] = backend_args.pop('next_from_date')
 
-        job_args['backend_args'] = backend_args
+    if 'next_offset' in backend_args:
+        backend_args['offset'] = backend_args.pop('next_offset')
 
-        # Category
-        job_args['category'] = task.category
+    job_args['backend_args'] = backend_args
 
-        # Archiving parameters
-        archiving_cfg = task.archiving_cfg
-        job_args['archive_args'] = archiving_cfg.to_dict() if archiving_cfg else None
+    # Category
+    job_args['category'] = task.category
 
-        # Scheduler parameters
-        sched_cfg = task.scheduling_cfg
-        job_args['max_retries'] = sched_cfg.max_retries if sched_cfg else MAX_JOB_RETRIES
+    # Archiving parameters
+    archiving_cfg = task.archiving_cfg
+    job_args['archive_args'] = archiving_cfg.to_dict() if archiving_cfg else None
 
-        return job_args
+    # Scheduler parameters
+    sched_cfg = task.scheduling_cfg
+    job_args['max_retries'] = sched_cfg.max_retries if sched_cfg else MAX_JOB_RETRIES
+
+    return job_args

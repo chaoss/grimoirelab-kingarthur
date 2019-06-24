@@ -53,12 +53,15 @@ class TestScheduler(TestBaseRQ):
                             scheduling_cfg=scheduler_opts)
 
         schlr = Scheduler(self.conn, registry, async_mode=False)
-        job_id = schlr.schedule_task(task.task_id)
+        schlr.schedule_task(task.task_id)
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
+        self.assertEqual(task.age, 0)
 
         schlr.schedule()
 
-        job = schlr._scheduler._queues[Q_CREATION_JOBS].fetch_job(job_id)
+        self.assertEqual(task.age, 1)
+
+        job = schlr._scheduler._queues[Q_CREATION_JOBS].fetch_job(task.last_job)
         result = job.return_value
 
         self.assertEqual(result.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')

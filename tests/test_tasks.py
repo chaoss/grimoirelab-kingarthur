@@ -101,6 +101,7 @@ class TestTask(unittest.TestCase):
         expected = {
             'task_id': 'mytask',
             'status': 'NEW',
+            'age': 0,
             'backend': 'mock_backend',
             'backend_args': args,
             'category': category,
@@ -154,6 +155,7 @@ class TestTaskRegistry(unittest.TestCase):
         self.assertEqual(task, new_task)
         self.assertEqual(task.task_id, 'mytask')
         self.assertEqual(task.status, TaskStatus.NEW)
+        self.assertEqual(task.age, 0)
         self.assertEqual(task.category, 'category')
         self.assertEqual(task.backend, 'mock_backend')
         self.assertDictEqual(task.backend_args, args)
@@ -172,6 +174,7 @@ class TestTaskRegistry(unittest.TestCase):
         self.assertIsInstance(task0, Task)
         self.assertEqual(task0.task_id, 'atask')
         self.assertEqual(task0.status, TaskStatus.NEW)
+        self.assertEqual(task.age, 0)
         self.assertEqual(task0.backend, 'mock_backend')
         self.assertEqual(task0.category, 'category')
         self.assertDictEqual(task0.backend_args, args)

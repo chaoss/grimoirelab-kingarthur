@@ -253,6 +253,8 @@ class TestJobResult(unittest.TestCase):
 
         self.assertEqual(result.offset, 128)
         self.assertEqual(result.nresumed, 10)
+        self.assertEqual(str(result), 'job id: arthur-job-1234567890, task id: mytask, '
+                                      'backend: mock_backend, category: category, nitems: 58')
 
 
 class TestPercevalJob(TestBaseRQ):

@@ -92,6 +92,10 @@ class JobResult:
         self.offset = offset
         self.nresumed = nresumed
 
+    def __repr__(self):
+        return "job id: %s, task id: %s, backend: %s, category: %s, nitems: %s" % \
+               (self.job_id, self.task_id, self.backend, self.category, self.nitems)
+
 
 class PercevalJob:
     """Class for wrapping Perceval jobs.

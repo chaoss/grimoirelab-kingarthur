@@ -33,20 +33,20 @@ from .errors import BaseError
 logger = logging.getLogger(__name__)
 
 
-NOT_ANALIZE_STRINGS_MAPPING = {
+NOT_ANALYZED_STRINGS_MAPPING = {
     'dynamic_templates': [
         {
             'notanalyzed': {
                 'match': '*',
                 'match_mapping_type': 'string',
                 'mapping': {
-                    'type': 'string',
-                    'index': 'not_analyzed'
+                    'type': 'keyword'
                 }
             }
         }
     ]
 }
+
 
 DISABLE_DYNAMIC_MAPPING = {
     'dynamic': True,
@@ -57,6 +57,9 @@ DISABLE_DYNAMIC_MAPPING = {
         }
     }
 }
+
+
+HEADERS = {"Content-Type": "application/json"}
 
 
 class ElasticSearchError(BaseError):
@@ -71,11 +74,11 @@ class ElasticItemsWriter:
         was_created = self.create_index(self.idx_url, clean=clean)
 
         if was_created:
-            self.create_mapping(idx_url, NOT_ANALIZE_STRINGS_MAPPING)
+            self.create_mapping(idx_url, NOT_ANALYZED_STRINGS_MAPPING)
             self.create_mapping(idx_url, DISABLE_DYNAMIC_MAPPING)
 
     def write(self, items, max_items=100):
-        url = self.idx_url + '/items/_bulk'
+        url = self.idx_url + '/items/_bulk?refresh=true'
 
         nitems = 0
         bulk_size = 0
@@ -108,14 +111,22 @@ class ElasticItemsWriter:
             task_init = time.time()
 
             try:
-                requests.put(url, data=bulk,
-                             headers={'Content-Type': 'application/json'})
+                response = requests.put(url, data=bulk, headers=HEADERS)
+                response.raise_for_status()
             except UnicodeEncodeError:
                 # Related to body.encode('iso-8859-1'). mbox data
                 logger.error("Encondig error ... converting bulk to iso-8859-1")
                 bulk = bulk.encode('iso-8859-1', 'ignore')
-                requests.put(url, data=bulk,
-                             headers={'Content-Type': 'application/json'})
+                response = requests.put(url, data=bulk, headers=HEADERS)
+                response.raise_for_status()
+
+            result = response.json()
+            if result['errors']:
+                # Due to multiple errors that may be thrown when inserting bulk data, only the first error is returned
+                failed_items = [item['index'] for item in result['items'] if 'error' in item['index']]
+                error = str(failed_items[0]['error'])
+
+                logger.error("Failed to insert data to ES: %s, %s", error, url)
 
             logger.debug("Bulk package sent (%.2f sec prev, %i total)",
                          time.time() - task_init, nitems)
@@ -158,7 +169,7 @@ class ElasticItemsWriter:
 
         try:
             r = requests.put(mapping_url, data=mapping,
-                             headers={'Content-Type': 'application/json'})
+                             headers=HEADERS)
         except requests.exceptions.ConnectionError:
             cause = "Error connecting to Elastic Search (index: %s, url: %s)" \
                 % (idx_url, mapping_url)

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (C) 2014-2019 Bitergia
+# Copyright (C) 2015-2019 Bitergia
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -139,31 +139,14 @@ class TestJobEventsListener(TestBaseRQ):
         listener = JobEventsListener(self.conn)
         self.assertEqual(listener.conn, self.conn)
         self.assertEqual(listener.events_channel, CH_PUBSUB)
-
-        expected = {
-            JobEventType.COMPLETED: None,
-            JobEventType.FAILURE: None
-        }
-        self.assertDictEqual(expected, listener.handlers)
-
-        def handle_successful_job(job):
-            pass
-
-        def handle_failed_job(job):
-            pass
+        self.assertDictEqual(listener.handlers, {})
 
         listener = JobEventsListener(self.conn,
-                                     events_channel='events',
-                                     result_handler=handle_successful_job,
-                                     result_handler_err=handle_failed_job)
+                                     events_channel='events')
+
         self.assertEqual(listener.conn, self.conn)
         self.assertEqual(listener.events_channel, 'events')
-
-        expected = {
-            JobEventType.COMPLETED: handle_successful_job,
-            JobEventType.FAILURE: handle_failed_job
-        }
-        self.assertDictEqual(expected, listener.handlers)
+        self.assertDictEqual(listener.handlers, {})
 
     def test_subscribe(self):
         """Test if a listener is subscribed to a set of events"""

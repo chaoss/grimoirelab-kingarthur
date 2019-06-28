@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (C) 2014-2019 Bitergia
+# Copyright (C) 2015-2019 Bitergia
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -62,7 +62,10 @@ class ArthurWorker(rq.Worker):
             payload = job.return_value
         elif job_status == rq.job.JobStatus.FAILED:
             event_type = JobEventType.FAILURE
-            payload = job.exc_info
+            payload = {
+                'task_id': job.kwargs['task_id'],
+                'error': job.exc_info
+            }
         else:
             logger.warning("Unexpected job status %s for finished job %s",
                            job_status, job.id)

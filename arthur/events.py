@@ -85,18 +85,12 @@ class JobEventsListener(threading.Thread):
 
     :param conn: connection to the Redis database
     :param events_channel: name of the events channel where jobs write events
-    :param result_handler: callable object to handle successful jobs
-    :param result_handler_err: callable object to handle failed jobs
     """
-    def __init__(self, conn, events_channel=CH_PUBSUB,
-                 result_handler=None, result_handler_err=None):
+    def __init__(self, conn, events_channel=CH_PUBSUB):
         super().__init__()
         self.conn = conn
         self.events_channel = events_channel
         self.handlers = {}
-
-        self.subscribe(JobEventType.COMPLETED, result_handler)
-        self.subscribe(JobEventType.FAILURE, result_handler_err)
 
     def run(self):
         """Start a thread to listen for jobs events."""

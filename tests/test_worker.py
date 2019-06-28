@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (C) 2014-2019 Bitergia
+# Copyright (C) 2015-2019 Bitergia
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -59,8 +59,8 @@ class TestArthurWorker(TestBaseRQ):
         if not skip_pubsub_override:
             w.pubsub_channel = pubsub_channel
 
-        job_a = q.enqueue(mock_sum, a=2, b=3)
-        job_b = q.enqueue(mock_failure)
+        job_a = q.enqueue(mock_sum, task_id=0, a=2, b=3)
+        job_b = q.enqueue(mock_failure, task_id=0)
 
         status = w.work(burst=True)
         self.assertEqual(status, True)
@@ -81,7 +81,8 @@ class TestArthurWorker(TestBaseRQ):
         self.assertEqual(job_b.result, None)
         self.assertEqual(event.job_id, job_b.id)
         self.assertEqual(event.type, JobEventType.FAILURE)
-        self.assertRegex(event.payload, "Traceback")
+        self.assertEqual(event.payload['task_id'], 0)
+        self.assertRegex(event.payload['error'], "Traceback")
 
 
 if __name__ == "__main__":

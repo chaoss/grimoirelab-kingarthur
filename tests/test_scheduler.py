@@ -20,15 +20,24 @@
 #     Santiago Dueñas <sduenas@bitergia.com>
 #
 
+import datetime
 import os.path
 import unittest
 
+from dateutil.tz import UTC
+
 from arthur.common import Q_CREATION_JOBS
 from arthur.errors import NotFoundError
-from arthur.tasks import (SchedulingTaskConfig,
+from arthur.events import JobEventType, JobEvent
+from arthur.jobs import JobResult
+from arthur.scheduler import (_TaskScheduler,
+                              CompletedJobHandler,
+                              FailedJobHandler,
+                              Scheduler)
+from arthur.tasks import (ArchivingTaskConfig,
+                          SchedulingTaskConfig,
                           TaskRegistry,
                           TaskStatus)
-from arthur.scheduler import Scheduler
 
 from base import TestBaseRQ
 
@@ -75,6 +84,149 @@ class TestScheduler(TestBaseRQ):
 
         schlr = Scheduler(self.conn, registry, async_mode=False)
         self.assertRaises(NotFoundError, schlr.schedule_task, 'mytask')
+
+
+class TestCompletedJobHandler(TestBaseRQ):
+    """Unit tests for CompletedJobHandler"""
+
+    def setUp(self):
+        super().setUp()
+        self.registry = TaskRegistry()
+        self.task_scheduler = _TaskScheduler(self.registry, self.conn, [])
+
+    def test_initialization(self):
+        """Check if the handler is correctly initialized"""
+
+        handler = CompletedJobHandler(self.task_scheduler)
+        self.assertEqual(handler.task_scheduler, self.task_scheduler)
+
+    def test_task_rescheduling(self):
+        """Check if the task related to the event is re-scheduled"""
+
+        handler = CompletedJobHandler(self.task_scheduler)
+
+        task = self.registry.add('mytask', 'git', 'commit', {})
+        result = JobResult(0, 'mytask', 'git', 'commit',
+                           'FFFFFFFF', 1392185439.0, 9)
+        event = JobEvent(JobEventType.COMPLETED, 0, result)
+
+        handled = handler(event)
+        self.assertEqual(handled, True)
+        self.assertEqual(task.status, TaskStatus.SCHEDULED)
+
+    def test_task_not_rescheduled_archive_task(self):
+        """Check if archive tasks are not rescheduled"""
+
+        handler = CompletedJobHandler(self.task_scheduler)
+
+        archiving_cfg = ArchivingTaskConfig('/tmp/archive', True)
+        task = self.registry.add('mytask', 'git', 'commit', {},
+                                 archiving_cfg=archiving_cfg)
+        result = JobResult(0, 'mytask', 'git', 'commit',
+                           'FFFFFFFF', 1392185439.0, 9)
+        event = JobEvent(JobEventType.COMPLETED, 0, result)
+
+        handled = handler(event)
+        self.assertEqual(handled, True)
+        self.assertEqual(task.status, TaskStatus.COMPLETED)
+
+    def test_task_rescheduled_with_next_from_date(self):
+        """Check if tasks are rescheduled updating next_from_date"""
+
+        handler = CompletedJobHandler(self.task_scheduler)
+
+        task = self.registry.add('mytask', 'git', 'commit', {})
+        result = JobResult(0, 'mytask', 'git', 'commit',
+                           'FFFFFFFF', 1392185439.0, 9)
+        event = JobEvent(JobEventType.COMPLETED, 0, result)
+
+        handled = handler(event)
+        self.assertEqual(handled, True)
+        self.assertEqual(task.status, TaskStatus.SCHEDULED)
+
+        # The field is updated to the last date received
+        # within the result
+        self.assertEqual(task.backend_args['next_from_date'],
+                         datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC))
+
+    def test_task_rescheduled_with_next_offset(self):
+        """Check if tasks are rescheduled updating next_offset"""
+
+        handler = CompletedJobHandler(self.task_scheduler)
+
+        task = self.registry.add('mytask', 'git', 'commit', {})
+        result = JobResult(0, 'mytask', 'git', 'commit',
+                           'FFFFFFFF', 1392185439.0, 9,
+                           offset=1000)
+        event = JobEvent(JobEventType.COMPLETED, 0, result)
+
+        handled = handler(event)
+        self.assertEqual(handled, True)
+        self.assertEqual(task.status, TaskStatus.SCHEDULED)
+
+        # Both fields are updated to the last value received
+        # within the result
+        self.assertEqual(task.backend_args['next_from_date'],
+                         datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC))
+        self.assertEqual(task.backend_args['next_offset'], 1000)
+
+    def test_ignore_orphan_event(self):
+        """Check if an orphan event is ignored"""
+
+        handler = CompletedJobHandler(self.task_scheduler)
+
+        result = JobResult(0, 'mytask', 'git', 'commit',
+                           'FFFFFFFF', 1392185439.0, 9)
+        event = JobEvent(JobEventType.COMPLETED, 0, result)
+
+        handled = handler(event)
+        self.assertEqual(handled, False)
+
+
+class TestFailedJobHandler(TestBaseRQ):
+    """Unit tests for CompletedJobHandler"""
+
+    def setUp(self):
+        super().setUp()
+        self.registry = TaskRegistry()
+        self.task_scheduler = _TaskScheduler(self.registry, self.conn, [])
+
+    def test_initialization(self):
+        """Check if the handler is correctly initialized"""
+
+        handler = FailedJobHandler(self.task_scheduler)
+        self.assertEqual(handler.task_scheduler, self.task_scheduler)
+
+    def test_handle_event(self):
+        """Check if the event is handled correctly"""
+
+        handler = FailedJobHandler(self.task_scheduler)
+
+        task = self.registry.add('mytask', 'git', 'commit', {})
+
+        payload = {
+            'task_id': 'mytask',
+            'error': "Error"
+        }
+        event = JobEvent(JobEventType.FAILURE, 0, payload)
+
+        handled = handler(event)
+        self.assertEqual(handled, True)
+        self.assertEqual(task.status, TaskStatus.FAILED)
+
+    def test_ignore_orphan_event(self):
+        """Check if an orphan event is ignored"""
+
+        handler = FailedJobHandler(self.task_scheduler)
+
+        payload = {
+            'task_id': 'mytask',
+            'error': "Error"
+        }
+        event = JobEvent(JobEventType.FAILURE, 0, payload)
+
+        handled = handler(event)
+        self.assertEqual(handled, False)
 
 
 if __name__ == "__main__":

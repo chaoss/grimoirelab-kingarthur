@@ -42,7 +42,7 @@ from .common import (CH_PUBSUB,
                      WAIT_FOR_QUEUING,
                      TIMEOUT)
 from .errors import NotFoundError
-from .events import JobEventsListener
+from .events import JobEventType, JobEventsListener
 from .jobs import execute_perceval_job
 from .tasks import TaskStatus
 from .utils import RWLock
@@ -143,8 +143,8 @@ class _TaskScheduler(threading.Thread):
 
         self._rwlock.writer_release()
 
-        logging.debug("Task: %s scheduled (wait: %s)",
-                      task_id, delay)
+        logger.debug("Task: %s scheduled (wait: %s)",
+                     task_id, delay)
 
     def cancel_task(self, task_id):
         """Cancel the given task."""
@@ -188,9 +188,9 @@ class _TaskScheduler(threading.Thread):
 
         self._rwlock.writer_release()
 
-        logging.debug("Job #%s (task: %s) (%s) enqueued in '%s'",
-                      job_id, job_args['task_id'],
-                      job_args['backend'], queue_id)
+        logger.debug("Job #%s (task: %s) (%s) enqueued in '%s'",
+                     job_id, job_args['task_id'],
+                     job_args['backend'], queue_id)
 
     def _cancel_task(self, task_id):
         event = self._tasks_events.get(task_id, None)
@@ -230,6 +230,106 @@ class _TaskScheduler(threading.Thread):
         return job_id
 
 
+class CompletedJobHandler:
+    """Handle completed job events.
+
+    This callable will handle the given `JobEventType.COMPLETED`
+    event re-scheduling the task related to the successful job.
+    Archive tasks will not be re-scheduled, setting the task
+    to `TaskStatus.COMPLETED`.
+
+    Depending on whether new items where retrieved during the
+    last execution, either backend parameters `next_from_date`
+    or `next_offset` will be updated accordingly to continue
+    with the incremental retrieval for that task.
+
+    Take into account that while an event is received, the task
+    related to it could have been deleted but the notification
+    to cancel the job could have not reached on time. On that
+    case, the event will be considered as orphan and ignored
+    by the handler.
+
+    :param task_scheduler: TaskScheduler instance to manage tasks
+
+    :returns: `True` when the event was handled; `False` when
+        it was ignored.
+    """
+    def __init__(self, task_scheduler):
+        self.task_scheduler = task_scheduler
+
+    def __call__(self, event):
+        result = event.payload
+        job_id = event.job_id
+        task_id = result.task_id
+
+        try:
+            task = self.task_scheduler.registry.get(task_id)
+        except NotFoundError:
+            logger.debug("Task %s not found; orphan event %s for job #%s ignored",
+                         task_id, event.uuid, job_id)
+            return False
+
+        if task.archiving_cfg and task.archiving_cfg.fetch_from_archive:
+            task.status = TaskStatus.COMPLETED
+            logger.info("Job #%s (task: %s - archiving) finished successfully",
+                        job_id, task_id)
+            return True
+
+        if result.nitems > 0:
+            task.backend_args['next_from_date'] = unixtime_to_datetime(result.max_date)
+
+            if result.offset:
+                task.backend_args['next_offset'] = result.offset
+
+        delay = task.scheduling_cfg.delay if task.scheduling_cfg else WAIT_FOR_QUEUING
+
+        self.task_scheduler.schedule_task(task_id, delay=delay)
+
+        logger.info("Task: %s re-scheduled", task_id)
+
+        return True
+
+
+class FailedJobHandler:
+    """Handle failed job events.
+
+    This callable will handle `JobEventType.FAILURE` events.
+    Related tasks will be set as `TaskStatus.FAILED`.
+
+    Take into account that while an event is received, the task
+    related to it could have been deleted but the notification
+    to cancel the job could have not reached on time. On that
+    case, the event will be considered as orphan and ignored
+    by the handler.
+
+    :param task_scheduler: TaskScheduler instance to manage tasks
+
+    :returns: `True` when the event was handled; `False` when
+        it was ignored.
+    """
+    def __init__(self, task_scheduler):
+        self.task_scheduler = task_scheduler
+
+    def __call__(self, event):
+        result = event.payload
+        job_id = event.job_id
+        task_id = result['task_id']
+
+        try:
+            task = self.task_scheduler.registry.get(task_id)
+        except NotFoundError:
+            logger.debug("Task %s not found; orphan event %s for job %s ignored",
+                         task_id, event.uuid, job_id)
+            return False
+
+        task.status = TaskStatus.FAILED
+
+        logger.error("Job #%s (task: %s) failed; cancelled",
+                     job_id, task_id)
+
+        return True
+
+
 class Scheduler:
     """Scheduler of jobs.
 
@@ -252,10 +352,13 @@ class Scheduler:
                                          [Q_ARCHIVE_JOBS, Q_CREATION_JOBS, Q_UPDATING_JOBS],
                                          polling=SCHED_POLLING,
                                          async_mode=self.async_mode)
+
         self._listener = JobEventsListener(self.conn,
-                                           events_channel=pubsub_channel,
-                                           result_handler=self._handle_successful_job,
-                                           result_handler_err=self._handle_failed_job)
+                                           events_channel=pubsub_channel)
+        self._listener.subscribe(JobEventType.COMPLETED,
+                                 CompletedJobHandler(self._scheduler))
+        self._listener.subscribe(JobEventType.FAILURE,
+                                 FailedJobHandler(self._scheduler))
 
     def schedule(self):
         """Start scheduling jobs."""
@@ -290,55 +393,6 @@ class Scheduler:
         self._scheduler.cancel_task(task_id)
 
         logger.info("Task %s canceled", task_id)
-
-    def _handle_successful_job(self, event):
-        """Handle successufl jobs"""
-
-        job = rq.job.Job.fetch(event.job_id, connection=self.conn)
-
-        result = job.result
-        task_id = job.kwargs['task_id']
-
-        try:
-            task = self.registry.get(task_id)
-        except NotFoundError:
-            logger.warning("Task %s not found; related job #%s will not be rescheduled",
-                           task_id, job.id)
-            return
-
-        if task.archiving_cfg and task.archiving_cfg.fetch_from_archive:
-            logger.info("Job #%s (task: %s) successfully finished", job.id, task_id)
-            task.status = TaskStatus.COMPLETED
-            return
-
-        if result.nitems > 0:
-            task.backend_args['next_from_date'] = unixtime_to_datetime(result.max_date)
-
-            if result.offset:
-                task.backend_args['next_offset'] = result.offset
-
-        delay = task.scheduling_cfg.delay if task.scheduling_cfg else WAIT_FOR_QUEUING
-
-        self._scheduler.schedule_task(task_id,
-                                      delay=delay)
-
-        logger.info("Task: %s re-scheduled", task_id)
-
-    def _handle_failed_job(self, event):
-        """Handle failed jobs"""
-
-        job = rq.job.Job.fetch(event.job_id, connection=self.conn)
-
-        task_id = job.kwargs['task_id']
-
-        try:
-            task = self.registry.get(task_id)
-            task.status = TaskStatus.FAILED
-        except NotFoundError:
-            pass
-
-        logger.error("Job #%s (task: %s) failed; cancelled",
-                     job.id, task_id)
 
 
 def _build_job_arguments(task):

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (C) 2014-2019 Bitergia
+# Copyright (C) 2015-2019 Bitergia
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -36,8 +36,9 @@ logger = logging.getLogger(__name__)
 
 @enum.unique
 class JobEventType(enum.Enum):
-    COMPLETED = 1
-    FAILURE = 2
+    STARTED = 1
+    COMPLETED = 2
+    FAILURE = 3
     UNDEFINED = 999
 
 

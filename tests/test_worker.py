@@ -38,17 +38,23 @@ class MockArthurWorker(rq.worker.SimpleWorker, ArthurWorker):
 class TestArthurWorker(TestBaseRQ):
     """Unit tests for ArthurWorker class"""
 
-    def test_publish_finished_job_status_channel_override(self):
-        self._publish_finished_job_status('test_channel')
+    def test_publish_job_events(self):
+        """Tests whether job events are correctly sent"""
 
-    def test_publish_finished_job_status_channel_default(self):
-        self._publish_finished_job_status(CH_PUBSUB, skip_pubsub_override=True)
+        self._publish_job_events(CH_PUBSUB)
 
-    def test_publish_finished_job_status(self):
-        self._publish_finished_job_status(CH_PUBSUB)
+    def test_publish_job_events_channel_default(self):
+        """Tests whether job events are correctly sent to the default channel"""
 
-    def _publish_finished_job_status(self, pubsub_channel, skip_pubsub_override=False):
-        """Test whether the worker publishes the status of a finished job"""
+        self._publish_job_events(CH_PUBSUB)
+
+    def test_publish_job_events_channel_override(self):
+        """"Tests whether job events are correctly sent in a defined channel"""
+
+        self._publish_job_events('test_channel', pubsub_override=True)
+
+    def _publish_job_events(self, pubsub_channel, pubsub_override=False):
+        """Generic job events tests"""
 
         pubsub = self.conn.pubsub()
         pubsub.subscribe(pubsub_channel)
@@ -56,32 +62,51 @@ class TestArthurWorker(TestBaseRQ):
         q = rq.Queue('foo')
         w = MockArthurWorker([q])
 
-        if not skip_pubsub_override:
+        if pubsub_override:
             w.pubsub_channel = pubsub_channel
 
         job_a = q.enqueue(mock_sum, task_id=0, a=2, b=3)
-        job_b = q.enqueue(mock_failure, task_id=0)
+        job_b = q.enqueue(mock_failure, task_id=1)
 
         status = w.work(burst=True)
         self.assertEqual(status, True)
 
-        # Ignore the first message because it is a
+        # Ignore the first messages because it is a
         # subscription notification
         _ = pubsub.get_message()
-        msg_a = pubsub.get_message()
-        msg_b = pubsub.get_message()
 
+        # STARTED event for job 'a'
+        msg_a = pubsub.get_message()
+        event = JobEvent.deserialize(msg_a['data'])
+        self.assertEqual(event.job_id, job_a.id)
+        self.assertEqual(event.task_id, 0)
+        self.assertEqual(event.type, JobEventType.STARTED)
+        self.assertEqual(event.payload, None)
+
+        # COMPLETED event for job 'a'
+        msg_a = pubsub.get_message()
         event = JobEvent.deserialize(msg_a['data'])
         self.assertEqual(job_a.result, 5)
         self.assertEqual(event.job_id, job_a.id)
+        self.assertEqual(event.task_id, 0)
         self.assertEqual(event.type, JobEventType.COMPLETED)
         self.assertEqual(event.payload, 5)
 
+        # STARTED event for job 'b'
+        msg_b = pubsub.get_message()
+        event = JobEvent.deserialize(msg_b['data'])
+        self.assertEqual(event.job_id, job_b.id)
+        self.assertEqual(event.task_id, 1)
+        self.assertEqual(event.type, JobEventType.STARTED)
+        self.assertEqual(event.payload, None)
+
+        # FAILURE event for job 'b'
+        msg_b = pubsub.get_message()
         event = JobEvent.deserialize(msg_b['data'])
         self.assertEqual(job_b.result, None)
         self.assertEqual(event.job_id, job_b.id)
+        self.assertEqual(event.task_id, 1)
         self.assertEqual(event.type, JobEventType.FAILURE)
-        self.assertEqual(event.payload['task_id'], 0)
         self.assertRegex(event.payload['error'], "Traceback")
 
 

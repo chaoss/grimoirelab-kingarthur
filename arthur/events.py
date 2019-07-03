@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (C) 2014-2019 Bitergia
+# Copyright (C) 2015-2019 Bitergia
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -36,8 +36,9 @@ logger = logging.getLogger(__name__)
 
 @enum.unique
 class JobEventType(enum.Enum):
-    COMPLETED = 1
-    FAILURE = 2
+    STARTED = 1
+    COMPLETED = 2
+    FAILURE = 3
     UNDEFINED = 999
 
 
@@ -49,19 +50,21 @@ class JobEvent:
     a failure.
 
     Each event has a type, a unique identifier and the time when it
-    was generated (in UTC), the identifier of the job that produced
-    it and a payload. Depending on the type of event, the payload
-    might contain different data.
+    was generated (in UTC), the identifier of the job and task that
+    produced it and a payload. Depending on the type of event, the
+    payload might contain different data.
 
     :param type: event type
     :param job_id: identifier of the job
+    :param task_id: identifier of the task
     :param payload: data of the event
     """
-    def __init__(self, type, job_id, payload):
+    def __init__(self, type, job_id, task_id, payload):
         self.uuid = str(uuid.uuid4())
         self.timestamp = datetime_utcnow()
         self.type = type
         self.job_id = job_id
+        self.task_id = task_id
         self.payload = payload
 
     def serialize(self):

@@ -230,6 +230,42 @@ class _TaskScheduler(threading.Thread):
         return job_id
 
 
+class StartedJobHandler:
+    """Handle started job events.
+
+    This callable will handle the given `JobEventType.STARTED`
+    event, changing the status of the task to `TaskStatus.RUNNING`.
+
+    Take into account that while an event is received, the task
+    related to it could have been deleted but the notification
+    to cancel the job could have not reached on time. On that
+    case, the event will be considered as orphan and ignored
+    by the handler.
+
+    :param task_scheduler: TaskScheduler instance to manage tasks
+
+    :returns: `True` when the event was handled; `False` when
+        it was ignored.
+    """
+    def __init__(self, task_scheduler):
+        self.task_scheduler = task_scheduler
+
+    def __call__(self, event):
+        job_id = event.job_id
+        task_id = event.task_id
+
+        try:
+            task = self.task_scheduler.registry.get(task_id)
+        except NotFoundError:
+            logger.debug("Task %s not found; orphan event %s for job #%s ignored",
+                         task_id, event.uuid, job_id)
+            return False
+
+        task.status = TaskStatus.RUNNING
+
+        return True
+
+
 class CompletedJobHandler:
     """Handle completed job events.
 
@@ -260,7 +296,7 @@ class CompletedJobHandler:
     def __call__(self, event):
         result = event.payload
         job_id = event.job_id
-        task_id = result.task_id
+        task_id = event.task_id
 
         try:
             task = self.task_scheduler.registry.get(task_id)
@@ -311,9 +347,9 @@ class FailedJobHandler:
         self.task_scheduler = task_scheduler
 
     def __call__(self, event):
-        result = event.payload
+        error = event.payload['error']
         job_id = event.job_id
-        task_id = result['task_id']
+        task_id = event.task_id
 
         try:
             task = self.task_scheduler.registry.get(task_id)
@@ -324,8 +360,8 @@ class FailedJobHandler:
 
         task.status = TaskStatus.FAILED
 
-        logger.error("Job #%s (task: %s) failed; cancelled",
-                     job_id, task_id)
+        logger.error("Job #%s (task: %s) failed; cancelled; error: %s",
+                     job_id, task_id, error)
 
         return True
 
@@ -355,6 +391,8 @@ class Scheduler:
 
         self._listener = JobEventsListener(self.conn,
                                            events_channel=pubsub_channel)
+        self._listener.subscribe(JobEventType.STARTED,
+                                 StartedJobHandler(self._scheduler))
         self._listener.subscribe(JobEventType.COMPLETED,
                                  CompletedJobHandler(self._scheduler))
         self._listener.subscribe(JobEventType.FAILURE,

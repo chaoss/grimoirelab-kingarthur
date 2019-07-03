@@ -108,7 +108,7 @@ class TestCompletedJobHandler(TestBaseRQ):
         task = self.registry.add('mytask', 'git', 'commit', {})
         result = JobResult(0, 'mytask', 'git', 'commit',
                            'FFFFFFFF', 1392185439.0, 9)
-        event = JobEvent(JobEventType.COMPLETED, 0, result)
+        event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
 
         handled = handler(event)
         self.assertEqual(handled, True)
@@ -124,7 +124,7 @@ class TestCompletedJobHandler(TestBaseRQ):
                                  archiving_cfg=archiving_cfg)
         result = JobResult(0, 'mytask', 'git', 'commit',
                            'FFFFFFFF', 1392185439.0, 9)
-        event = JobEvent(JobEventType.COMPLETED, 0, result)
+        event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
 
         handled = handler(event)
         self.assertEqual(handled, True)
@@ -138,7 +138,7 @@ class TestCompletedJobHandler(TestBaseRQ):
         task = self.registry.add('mytask', 'git', 'commit', {})
         result = JobResult(0, 'mytask', 'git', 'commit',
                            'FFFFFFFF', 1392185439.0, 9)
-        event = JobEvent(JobEventType.COMPLETED, 0, result)
+        event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
 
         handled = handler(event)
         self.assertEqual(handled, True)
@@ -158,7 +158,7 @@ class TestCompletedJobHandler(TestBaseRQ):
         result = JobResult(0, 'mytask', 'git', 'commit',
                            'FFFFFFFF', 1392185439.0, 9,
                            offset=1000)
-        event = JobEvent(JobEventType.COMPLETED, 0, result)
+        event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
 
         handled = handler(event)
         self.assertEqual(handled, True)
@@ -177,7 +177,7 @@ class TestCompletedJobHandler(TestBaseRQ):
 
         result = JobResult(0, 'mytask', 'git', 'commit',
                            'FFFFFFFF', 1392185439.0, 9)
-        event = JobEvent(JobEventType.COMPLETED, 0, result)
+        event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
 
         handled = handler(event)
         self.assertEqual(handled, False)
@@ -205,10 +205,9 @@ class TestFailedJobHandler(TestBaseRQ):
         task = self.registry.add('mytask', 'git', 'commit', {})
 
         payload = {
-            'task_id': 'mytask',
             'error': "Error"
         }
-        event = JobEvent(JobEventType.FAILURE, 0, payload)
+        event = JobEvent(JobEventType.FAILURE, 0, 'mytask', payload)
 
         handled = handler(event)
         self.assertEqual(handled, True)
@@ -220,10 +219,9 @@ class TestFailedJobHandler(TestBaseRQ):
         handler = FailedJobHandler(self.task_scheduler)
 
         payload = {
-            'task_id': 'mytask',
             'error': "Error"
         }
-        event = JobEvent(JobEventType.FAILURE, 0, payload)
+        event = JobEvent(JobEventType.FAILURE, 0, 'mytask', payload)
 
         handled = handler(event)
         self.assertEqual(handled, False)

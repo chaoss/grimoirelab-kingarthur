@@ -260,7 +260,7 @@ class CompletedJobHandler:
     def __call__(self, event):
         result = event.payload
         job_id = event.job_id
-        task_id = result.task_id
+        task_id = event.task_id
 
         try:
             task = self.task_scheduler.registry.get(task_id)
@@ -311,9 +311,9 @@ class FailedJobHandler:
         self.task_scheduler = task_scheduler
 
     def __call__(self, event):
-        result = event.payload
+        error = event.payload['error']
         job_id = event.job_id
-        task_id = result['task_id']
+        task_id = event.task_id
 
         try:
             task = self.task_scheduler.registry.get(task_id)
@@ -324,8 +324,8 @@ class FailedJobHandler:
 
         task.status = TaskStatus.FAILED
 
-        logger.error("Job #%s (task: %s) failed; cancelled",
-                     job_id, task_id)
+        logger.error("Job #%s (task: %s) failed; cancelled; error: %s",
+                     job_id, task_id, error)
 
         return True
 

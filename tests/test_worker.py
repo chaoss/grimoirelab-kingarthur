@@ -79,14 +79,16 @@ class TestArthurWorker(TestBaseRQ):
         msg_a = pubsub.get_message()
         event = JobEvent.deserialize(msg_a['data'])
         self.assertEqual(event.job_id, job_a.id)
+        self.assertEqual(event.task_id, 0)
         self.assertEqual(event.type, JobEventType.STARTED)
-        self.assertEqual(event.payload, {'task_id': 0})
+        self.assertEqual(event.payload, None)
 
         # COMPLETED event for job 'a'
         msg_a = pubsub.get_message()
         event = JobEvent.deserialize(msg_a['data'])
         self.assertEqual(job_a.result, 5)
         self.assertEqual(event.job_id, job_a.id)
+        self.assertEqual(event.task_id, 0)
         self.assertEqual(event.type, JobEventType.COMPLETED)
         self.assertEqual(event.payload, 5)
 
@@ -94,16 +96,17 @@ class TestArthurWorker(TestBaseRQ):
         msg_b = pubsub.get_message()
         event = JobEvent.deserialize(msg_b['data'])
         self.assertEqual(event.job_id, job_b.id)
+        self.assertEqual(event.task_id, 1)
         self.assertEqual(event.type, JobEventType.STARTED)
-        self.assertEqual(event.payload, {'task_id': 1})
+        self.assertEqual(event.payload, None)
 
         # FAILURE event for job 'b'
         msg_b = pubsub.get_message()
         event = JobEvent.deserialize(msg_b['data'])
         self.assertEqual(job_b.result, None)
         self.assertEqual(event.job_id, job_b.id)
+        self.assertEqual(event.task_id, 1)
         self.assertEqual(event.type, JobEventType.FAILURE)
-        self.assertEqual(event.payload['task_id'], 1)
         self.assertRegex(event.payload['error'], "Traceback")
 
 

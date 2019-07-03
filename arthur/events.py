@@ -50,19 +50,21 @@ class JobEvent:
     a failure.
 
     Each event has a type, a unique identifier and the time when it
-    was generated (in UTC), the identifier of the job that produced
-    it and a payload. Depending on the type of event, the payload
-    might contain different data.
+    was generated (in UTC), the identifier of the job and task that
+    produced it and a payload. Depending on the type of event, the
+    payload might contain different data.
 
     :param type: event type
     :param job_id: identifier of the job
+    :param task_id: identifier of the task
     :param payload: data of the event
     """
-    def __init__(self, type, job_id, payload):
+    def __init__(self, type, job_id, task_id, payload):
         self.uuid = str(uuid.uuid4())
         self.timestamp = datetime_utcnow()
         self.type = type
         self.job_id = job_id
+        self.task_id = task_id
         self.payload = payload
 
     def serialize(self):

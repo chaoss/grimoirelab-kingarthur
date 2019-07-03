@@ -62,10 +62,10 @@ class ArthurWorker(rq.Worker):
     def _publish_job_event_when_started(self, job):
         """Send event notifying the job started"""
 
-        payload = {
-            'task_id': job.kwargs['task_id']
-        }
-        event = JobEvent(JobEventType.STARTED, job.id, payload)
+        task_id = job.kwargs['task_id']
+
+        event = JobEvent(JobEventType.STARTED, job.id, task_id,
+                         None)
 
         msg = event.serialize()
         self.connection.publish(self.pubsub_channel, msg)
@@ -81,7 +81,6 @@ class ArthurWorker(rq.Worker):
         elif job_status == rq.job.JobStatus.FAILED:
             event_type = JobEventType.FAILURE
             payload = {
-                'task_id': job.kwargs['task_id'],
                 'error': job.exc_info
             }
         else:
@@ -90,7 +89,9 @@ class ArthurWorker(rq.Worker):
             event_type = JobEventType.UNDEFINED
             payload = job_status
 
-        event = JobEvent(event_type, job.id, payload)
+        task_id = job.kwargs['task_id']
+
+        event = JobEvent(event_type, job.id, task_id, payload)
 
         msg = event.serialize()
         self.connection.publish(self.pubsub_channel, msg)

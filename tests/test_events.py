@@ -49,21 +49,23 @@ class TestJobEvent(unittest.TestCase):
         """Test if the instance is correctly initialized"""
 
         dt_before = datetime_utcnow()
-        event = JobEvent(JobEventType.COMPLETED, '1', None)
+        event = JobEvent(JobEventType.COMPLETED, '1', 'mytask', None)
         dt_after = datetime_utcnow()
 
         self.assertEqual(event.type, JobEventType.COMPLETED)
         self.assertEqual(event.job_id, '1')
+        self.assertEqual(event.task_id, 'mytask')
         self.assertEqual(event.payload, None)
         self.assertGreater(event.timestamp, dt_before)
         self.assertLess(event.timestamp, dt_after)
 
         dt_before = datetime_utcnow()
-        event = JobEvent(JobEventType.FAILURE, '2', "Error")
+        event = JobEvent(JobEventType.FAILURE, '2', 'myothertask', "Error")
         dt_after = datetime_utcnow()
 
         self.assertEqual(event.type, JobEventType.FAILURE)
         self.assertEqual(event.job_id, '2')
+        self.assertEqual(event.task_id, 'myothertask')
         self.assertEqual(event.payload, "Error")
         self.assertGreater(event.timestamp, dt_before)
         self.assertLess(event.timestamp, dt_after)
@@ -71,9 +73,9 @@ class TestJobEvent(unittest.TestCase):
     def test_unique_identifier(self):
         """Test if different identifiers create unique identifiers"""
 
-        event_a = JobEvent(JobEventType.COMPLETED, '1', None)
-        event_b = JobEvent(JobEventType.COMPLETED, '2', None)
-        event_c = JobEvent(JobEventType.FAILURE, '3', None)
+        event_a = JobEvent(JobEventType.COMPLETED, '1', 'A', None)
+        event_b = JobEvent(JobEventType.COMPLETED, '2', 'B', None)
+        event_c = JobEvent(JobEventType.FAILURE, '3', 'C', None)
 
         self.assertNotEqual(event_a.uuid, None)
         self.assertNotEqual(event_a.uuid, event_b.uuid)
@@ -84,7 +86,7 @@ class TestJobEvent(unittest.TestCase):
         """Test if an event is properly serialized and deserialized"""
 
         result = MockJobResult(10, 'mockbackend')
-        event_a = JobEvent(JobEventType.COMPLETED, '1', result)
+        event_a = JobEvent(JobEventType.COMPLETED, '1', 'A', result)
 
         data = event_a.serialize()
         event = JobEvent.deserialize(data)
@@ -94,6 +96,7 @@ class TestJobEvent(unittest.TestCase):
         self.assertEqual(event.timestamp, event_a.timestamp)
         self.assertEqual(event.type, event_a.type)
         self.assertEqual(event.job_id, event_a.job_id)
+        self.assertEqual(event.task_id, event_a.task_id)
 
         payload = event.payload
         self.assertIsInstance(payload, MockJobResult)
@@ -247,13 +250,13 @@ class TestJobEventsListener(TestBaseRQ):
             tracked_events.failures += 1
 
         events = [
-            JobEvent(JobEventType.COMPLETED, 1, MockJobResult(20, 'A')),
-            JobEvent(JobEventType.FAILURE, 2, 'ERROR'),
-            JobEvent(JobEventType.FAILURE, 3, 'ERROR'),
-            JobEvent(JobEventType.FAILURE, 4, 'ERROR'),
-            JobEvent(JobEventType.COMPLETED, 5, MockJobResult(22, 'B')),
-            JobEvent(JobEventType.FAILURE, 6, 'ERROR'),
-            JobEvent(JobEventType.UNDEFINED, 7, 'OK'),
+            JobEvent(JobEventType.COMPLETED, 1, 'A', MockJobResult(20, 'A')),
+            JobEvent(JobEventType.FAILURE, 2, 'B', 'ERROR'),
+            JobEvent(JobEventType.FAILURE, 3, 'C', 'ERROR'),
+            JobEvent(JobEventType.FAILURE, 4, 'D', 'ERROR'),
+            JobEvent(JobEventType.COMPLETED, 5, 'E', MockJobResult(22, 'B')),
+            JobEvent(JobEventType.FAILURE, 6, 'F', 'ERROR'),
+            JobEvent(JobEventType.UNDEFINED, 7, 'G', 'OK'),
         ]
 
         conn = MockRedisPubSubConnection(events)
@@ -294,13 +297,13 @@ class TestJobEventsListener(TestBaseRQ):
             tracked_events.failures += 1
 
         events = [
-            JobEvent(JobEventType.COMPLETED, 1, MockJobResult(20, 'A')),
-            JobEvent(JobEventType.FAILURE, 2, 'ERROR'),
-            JobEvent(JobEventType.FAILURE, 3, 'ERROR'),
-            JobEvent(JobEventType.FAILURE, 4, 'ERROR'),
-            JobEvent(JobEventType.COMPLETED, 5, MockJobResult(22, 'B')),
-            JobEvent(JobEventType.FAILURE, 6, 'ERROR'),
-            JobEvent(JobEventType.UNDEFINED, 7, 'OK'),
+            JobEvent(JobEventType.COMPLETED, 1, 'A', MockJobResult(20, 'A')),
+            JobEvent(JobEventType.FAILURE, 2, 'B', 'ERROR'),
+            JobEvent(JobEventType.FAILURE, 3, 'C', 'ERROR'),
+            JobEvent(JobEventType.FAILURE, 4, 'D', 'ERROR'),
+            JobEvent(JobEventType.COMPLETED, 5, 'E', MockJobResult(22, 'B')),
+            JobEvent(JobEventType.FAILURE, 6, 'F', 'ERROR'),
+            JobEvent(JobEventType.UNDEFINED, 7, 'G', 'OK'),
         ]
 
         conn = MockRedisPubSubConnection(events)

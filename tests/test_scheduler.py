@@ -33,6 +33,7 @@ from arthur.jobs import JobResult
 from arthur.scheduler import (_TaskScheduler,
                               CompletedJobHandler,
                               FailedJobHandler,
+                              StartedJobHandler,
                               Scheduler)
 from arthur.tasks import (ArchivingTaskConfig,
                           SchedulingTaskConfig,
@@ -84,6 +85,44 @@ class TestScheduler(TestBaseRQ):
 
         schlr = Scheduler(self.conn, registry, async_mode=False)
         self.assertRaises(NotFoundError, schlr.schedule_task, 'mytask')
+
+
+class TestStartedJobHandler(TestBaseRQ):
+    """Unit tests for StartedJobHandler"""
+
+    def setUp(self):
+        super().setUp()
+        self.registry = TaskRegistry()
+        self.task_scheduler = _TaskScheduler(self.registry, self.conn, [])
+
+    def test_initialization(self):
+        """Check if the handler is correctly initialized"""
+
+        handler = StartedJobHandler(self.task_scheduler)
+        self.assertEqual(handler.task_scheduler, self.task_scheduler)
+
+    def test_task_status(self):
+        """Check if the handler changes the task status to running"""
+
+        handler = StartedJobHandler(self.task_scheduler)
+
+        task = self.registry.add('mytask', 'git', 'commit', {})
+
+        event = JobEvent(JobEventType.STARTED, 0, 'mytask', None)
+
+        handled = handler(event)
+        self.assertEqual(handled, True)
+        self.assertEqual(task.status, TaskStatus.RUNNING)
+
+    def test_ignore_orphan_event(self):
+        """Check if an orphan event is ignored"""
+
+        handler = StartedJobHandler(self.task_scheduler)
+
+        event = JobEvent(JobEventType.STARTED, 0, 'mytask', None)
+
+        handled = handler(event)
+        self.assertEqual(handled, False)
 
 
 class TestCompletedJobHandler(TestBaseRQ):

@@ -94,6 +94,7 @@ class Task:
         self._task_id = task_id
         self.status = TaskStatus.NEW
         self.age = 0
+        self.jobs = []
         self.created_on = datetime.datetime.now().timestamp()
         self.backend = backend
         self.category = category
@@ -110,6 +111,7 @@ class Task:
             'task_id': self.task_id,
             'status': self.status.name,
             'age': self.age,
+            'jobs': self.jobs,
             'created_on': self.created_on,
             'backend': self.backend,
             'backend_args': self.backend_args,

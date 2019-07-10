@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (C) 2015-2016 Bitergia
+# Copyright (C) 2015-2019 Bitergia
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,8 +13,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 # Authors:
 #     Santiago Dueñas <sduenas@bitergia.com>
@@ -26,10 +25,12 @@ import threading
 import time
 
 import cherrypy
+import rq
 
 from grimoirelab_toolkit.datetime import str_to_datetime
 
 from .arthur import Arthur
+from .jobs import JobResult
 from .utils import JSONEncoder
 
 
@@ -147,3 +148,39 @@ class ArthurServer(Arthur):
         logger.debug("Tasks registry read")
 
         return result
+
+    @cherrypy.expose
+    @cherrypy.tools.json_out(handler=json_encoder)
+    def task(self, task_id):
+        """Get info about a task"""
+
+        logger.debug("API 'task' method called for task %s", task_id)
+
+        task = self._tasks.get(task_id)
+
+        jobs = []
+
+        for job_id in task.jobs:
+            job_rq = rq.job.Job.fetch(job_id, connection=self.conn)
+            result = job_rq.result
+
+            if isinstance(result, JobResult):
+                job_result = result.to_dict()
+            else:
+                job_result = None
+
+            job = {
+                'task_id': task_id,
+                'job_id': job_rq.id,
+                'job_status': job_rq.get_status(),
+                'result': job_result
+            }
+
+            jobs.append(job)
+
+        task_dict = task.to_dict()
+        task_dict['jobs'] = jobs
+
+        logger.debug("Task %s data generated", task_id)
+
+        return task_dict

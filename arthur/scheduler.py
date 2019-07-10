@@ -183,8 +183,8 @@ class _TaskScheduler(threading.Thread):
         del self._tasks_events[task_id]
 
         task.status = TaskStatus.ENQUEUED
-        task.last_job = job_id
         task.age += 1
+        task.jobs.append(job_id)
 
         self._rwlock.writer_release()
 

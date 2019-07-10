@@ -71,9 +71,10 @@ class TestScheduler(TestBaseRQ):
 
         self.assertEqual(task.age, 1)
 
-        job = schlr._scheduler._queues[Q_CREATION_JOBS].fetch_job(task.last_job)
+        job = schlr._scheduler._queues[Q_CREATION_JOBS].fetch_job(task.jobs[0])
         result = job.return_value
 
+        self.assertEqual(result.task_id, task.task_id)
         self.assertEqual(result.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
         self.assertEqual(result.max_date, 1392185439.0)
         self.assertEqual(result.nitems, 9)
@@ -85,6 +86,33 @@ class TestScheduler(TestBaseRQ):
 
         schlr = Scheduler(self.conn, registry, async_mode=False)
         self.assertRaises(NotFoundError, schlr.schedule_task, 'mytask')
+
+    def test_task_jobs_is_updated(self):
+        """Test if the list of job ids for a task is updated"""
+
+        args = {
+            'uri': 'http://example.com/',
+            'gitpath': os.path.join(self.dir, 'data/git_log.txt')
+        }
+        category = 'commit'
+        archiving_opts = None
+        scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=0)
+
+        registry = TaskRegistry()
+        task = registry.add('mytask', 'git', category, args,
+                            archiving_cfg=archiving_opts,
+                            scheduling_cfg=scheduler_opts)
+
+        schlr = Scheduler(self.conn, registry, async_mode=False)
+        schlr.schedule_task(task.task_id)
+        self.assertEqual(task.status, TaskStatus.SCHEDULED)
+        self.assertEqual(task.age, 0)
+        self.assertListEqual(task.jobs, [])
+
+        schlr.schedule()
+
+        self.assertEqual(task.age, 1)
+        self.assertEqual(len(task.jobs), 1)
 
 
 class TestStartedJobHandler(TestBaseRQ):

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (C) 2015-2016 Bitergia
+# Copyright (C) 2015-2019 Bitergia
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,8 +13,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 # Authors:
 #     Santiago Dueñas <sduenas@bitergia.com>
@@ -91,6 +90,18 @@ class JobResult:
         self.nitems = nitems
         self.offset = offset
         self.nresumed = nresumed
+
+    def to_dict(self):
+        """Convert object to a dict"""
+
+        return {
+            'job_id': self.job_id,
+            'task_id': self.task_id,
+            'last_uuid': self.last_uuid,
+            'max_date': self.max_date,
+            'nitems': self.nitems,
+            'offset': self.offset
+        }
 
 
 class PercevalJob:

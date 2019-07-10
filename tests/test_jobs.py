@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Copyright (C) 2015-2016 Bitergia
+# Copyright (C) 2015-2019 Bitergia
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,8 +14,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 # Authors:
 #     Santiago Dueñas <sduenas@bitergia.com>
@@ -253,6 +252,24 @@ class TestJobResult(unittest.TestCase):
 
         self.assertEqual(result.offset, 128)
         self.assertEqual(result.nresumed, 10)
+
+    def test_to_dict(self):
+        """Test whether a JobResult object is converted to a dict"""
+
+        result = JobResult('arthur-job-1234567890', 'mytask', 'mock_backend', 'category',
+                           'ABCDEFGHIJK', 1344965413.0, 58)
+
+        expected = {
+            'job_id': 'arthur-job-1234567890',
+            'task_id': 'mytask',
+            'last_uuid': 'ABCDEFGHIJK',
+            'max_date': 1344965413.0,
+            'nitems': 58,
+            'offset': None,
+        }
+
+        d = result.to_dict()
+        self.assertEqual(d, expected)
 
 
 class TestPercevalJob(TestBaseRQ):

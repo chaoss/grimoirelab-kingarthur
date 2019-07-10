@@ -22,6 +22,7 @@
 
 import datetime
 import unittest
+import unittest.mock
 
 import dateutil
 
@@ -42,14 +43,17 @@ INVALID_FETCH_FROM_ARCHIVE_ERROR = "'fetch_from_archive' must be a bool;"
 class TestTask(unittest.TestCase):
     """Unit tests for Task"""
 
-    def test_init(self):
+    @unittest.mock.patch('arthur.tasks.datetime_utcnow')
+    def test_init(self, mock_utcnow):
         """Check arguments initialization"""
+
+        mock_utcnow.return_value = datetime.datetime(2017, 1, 1,
+                                                     tzinfo=dateutil.tz.tzutc())
 
         args = {
             'from_date': '1970-01-01',
             'component': 'test'
         }
-        before = datetime.datetime.now().timestamp()
 
         task = Task('mytask', 'mock_backend', 'category', args)
 
@@ -62,14 +66,12 @@ class TestTask(unittest.TestCase):
         self.assertDictEqual(task.backend_args, args)
         self.assertEqual(task.archiving_cfg, None)
         self.assertEqual(task.scheduling_cfg, None)
-        self.assertGreater(task.created_on, before)
+        self.assertEqual(task.created_on, 1483228800.0)
 
         # Test when archive and scheduler arguments are given
         archive = ArchivingTaskConfig('/tmp/archive', False,
                                       archived_after=None)
         sched = SchedulingTaskConfig(delay=10, max_retries=2)
-
-        before = datetime.datetime.now().timestamp()
 
         task = Task('mytask', 'mock_backend', 'category', args,
                     archiving_cfg=archive, scheduling_cfg=sched)
@@ -83,7 +85,7 @@ class TestTask(unittest.TestCase):
         self.assertDictEqual(task.backend_args, args)
         self.assertEqual(task.archiving_cfg, archive)
         self.assertEqual(task.scheduling_cfg, sched)
-        self.assertGreater(task.created_on, before)
+        self.assertEqual(task.created_on, 1483228800.0)
 
     def test_to_dict(self):
         """Check whether the object is converted into a dict"""

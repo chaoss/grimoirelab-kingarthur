@@ -27,6 +27,7 @@ import re
 
 from grimoirelab_toolkit.datetime import (InvalidDateError,
                                           datetime_to_utc,
+                                          datetime_utcnow,
                                           str_to_datetime)
 from grimoirelab_toolkit.introspect import find_class_properties
 
@@ -95,7 +96,7 @@ class Task:
         self.status = TaskStatus.NEW
         self.age = 0
         self.jobs = []
-        self.created_on = datetime.datetime.now().timestamp()
+        self.created_on = datetime_utcnow().timestamp()
         self.backend = backend
         self.category = category
         self.backend_args = backend_args

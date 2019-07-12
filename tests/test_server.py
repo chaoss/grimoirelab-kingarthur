@@ -23,6 +23,7 @@
 from contextlib import contextmanager
 import datetime
 import json
+import os
 import unittest.mock
 
 import cherrypy
@@ -30,7 +31,8 @@ import dateutil
 import requests
 
 from arthur.server import ArthurServer
-from base import find_empty_redis_database
+
+from base import TestBaseRQ
 
 
 @contextmanager
@@ -46,15 +48,8 @@ def run_server(conn):
     cherrypy.engine.block()
 
 
-class TestArthurServer(unittest.TestCase):
+class TestArthurServer(TestBaseRQ):
     """Unit tests for ArthurServer"""
-
-    def setUp(self):
-        self.conn = find_empty_redis_database()
-        self.conn.flushdb()
-
-    def tearDown(self):
-        self.conn.flushdb()
 
     def test_init(self):
         """Check arguments initialization"""
@@ -77,9 +72,8 @@ class TestArthurServer(unittest.TestCase):
                         "task_id": "arthur.git",
                         "backend": "git",
                         "backend_args": {
-                            "gitpath": "/tmp/git/arthur.git/",
-                            "uri": "https://github.com/grimoirelab/arthur.git",
-                            "from_date": "2015-03-01"
+                            "gitpath": os.path.join(self.dir, 'data/git_log.txt'),
+                            "uri": "http://example.com/",
                         },
                         "category": "commit",
                         "archive": {},
@@ -111,9 +105,8 @@ class TestArthurServer(unittest.TestCase):
                         "task_id": "arthur.git",
                         "backend": "git",
                         "backend_args": {
-                            "gitpath": "/tmp/git/arthur.git/",
-                            "uri": "https://github.com/grimoirelab/arthur.git",
-                            "from_date": "2015-03-01"
+                            "gitpath": os.path.join(self.dir, 'data/git_log.txt'),
+                            "uri": "http://example.com/",
                         },
                         "category": "commit",
                         "archive": {},
@@ -125,7 +118,7 @@ class TestArthurServer(unittest.TestCase):
                         "task_id": "bugzilla_redhat",
                         "backend": "bugzilla",
                         "backend_args": {
-                            "url": "https://bugzilla.redhat.com/",
+                            "url": "https://bugzilla.example.com/",
                             "from_date": "2016-09-19"
                         },
                         "category": "issue",
@@ -162,9 +155,8 @@ class TestArthurServer(unittest.TestCase):
                         "task_id": "arthur.git",
                         "backend": "git",
                         "backend_args": {
-                            "gitpath": "/tmp/git/arthur.git/",
-                            "uri": "https://github.com/grimoirelab/arthur.git",
-                            "from_date": "2015-03-01"
+                            "gitpath": os.path.join(self.dir, 'data/git_log.txt'),
+                            "uri": "http://example.com/",
                         },
                         "category": "commit",
                         "archive": {},
@@ -176,7 +168,7 @@ class TestArthurServer(unittest.TestCase):
                         "task_id": "bugzilla_redhat",
                         "backend": "bugzilla",
                         "backend_args": {
-                            "url": "https://bugzilla.redhat.com/",
+                            "url": "https://bugzilla.example.com/",
                             "from_date": "2016-09-19"
                         },
                         "category": "issue",
@@ -223,36 +215,17 @@ class TestArthurServer(unittest.TestCase):
                         "task_id": "arthur.git",
                         "backend": "git",
                         "backend_args": {
-                            "gitpath": "/tmp/git/arthur.git/",
-                            "uri": "https://github.com/grimoirelab/arthur.git",
-                            "from_date": "2015-03-01"
+                            "gitpath": os.path.join(self.dir, 'data/git_log.txt'),
+                            "uri": "http://example.com/",
                         },
                         "category": "commit",
                         "archive": {},
                         "scheduler": {
                             "delay": 10
                         }
-                    },
-                    {
-                        "task_id": "bugzilla_redhat",
-                        "backend": "bugzilla",
-                        "backend_args": {
-                            "url": "https://bugzilla.redhat.com/",
-                            "from_date": "2016-09-19"
-                        },
-                        "category": "issue",
-                        "archive": {
-                            'archive_path': '/tmp/archive',
-                            'fetch_from_archive': True,
-                            'archived_after': "2010-10-10",
-                        },
-                        "scheduler": {
-                            "delay": 60
-                        }
                     }
                 ]
             }
-
             response = requests.post("http://127.0.0.1:8080/add",
                                      json=data, headers={'Content-Type': 'application/json'})
 
@@ -275,9 +248,8 @@ class TestArthurServer(unittest.TestCase):
                 'status': 'ENQUEUED',
                 'age': 1,
                 'backend_args': {
-                    'gitpath': '/tmp/git/arthur.git/',
-                    'uri': 'https://github.com/grimoirelab/arthur.git',
-                    'from_date': '2015-03-01T00:00:00+00:00'
+                    'gitpath': os.path.join(self.dir, 'data/git_log.txt'),
+                    'uri': 'http://example.com/',
                 },
                 'created_on': 1483228800.0,
                 'category': 'commit',
@@ -301,9 +273,9 @@ class TestArthurServer(unittest.TestCase):
             # TODO: mock job ids generator
             expected_job_result = {
                 'task_id': 'arthur.git',
-                'last_uuid': '59177f87d70376c2da332abebf941c00c0f71477',
-                'max_date': 1562152447.0,
-                'nitems': 201,
+                'last_uuid': '1375b60d3c23ac9b81da92523e4144abc4489d4c',
+                'max_date': 1392185439.0,
+                'nitems': 9,
                 'offset': None,
             }
 

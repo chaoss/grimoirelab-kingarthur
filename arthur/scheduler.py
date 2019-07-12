@@ -54,6 +54,9 @@ logger = logging.getLogger(__name__)
 # Poll scheduler after this seconds
 SCHED_POLLING = 0.5
 
+# Do not remove jobs and results from the database
+INFINITE_TTL = -1
+
 
 class _TaskScheduler(threading.Thread):
     """Private class to schedule tasks.
@@ -179,12 +182,14 @@ class _TaskScheduler(threading.Thread):
         self._queues[queue_id].enqueue(execute_perceval_job,
                                        job_id=job_id,
                                        timeout=TIMEOUT,
+                                       ttl=INFINITE_TTL,
+                                       result_ttl=INFINITE_TTL,
                                        **job_args)
         del self._tasks_events[task_id]
 
         task.status = TaskStatus.ENQUEUED
-        task.last_job = job_id
         task.age += 1
+        task.jobs.append(job_id)
 
         self._rwlock.writer_release()
 

@@ -257,7 +257,8 @@ class TestArthurServer(TestBaseRQ):
                 'scheduling_cfg': {
                     'delay': 10,
                     'max_retries': 3,
-                    'max_age': None
+                    'max_age': None,
+                    'queue': None
                 }
             }
 

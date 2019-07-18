@@ -371,15 +371,21 @@ class SchedulingTaskConfig(_TaskConfig):
     The `max_age` option defines the maximum number of a task can run
     in the scheduler. Set it to `None` to run the task indefinitely.
 
+    The 'queue' option defines the name of the queue where this
+    task will run. Set it to `None` to let the scheduler decide
+    what the best queue is.
+
     :param delay: seconds of delay
     :param max_retries: maximum number of job retries before failing
     :param max_age: maximum number of times the task can run in the scheduler
+    :param queue: name of the queue to run this task
     """
     def __init__(self, delay=WAIT_FOR_QUEUING, max_retries=MAX_JOB_RETRIES,
-                 max_age=None):
+                 max_age=None, queue=None):
         self.delay = delay
         self.max_retries = max_retries
         self.max_age = max_age
+        self.queue = queue
 
     @property
     def delay(self):
@@ -421,3 +427,18 @@ class SchedulingTaskConfig(_TaskConfig):
             elif value < 1:
                 raise ValueError("'max_age' must have a positive value; %s given" % str(value))
         self._max_age = value
+
+    @property
+    def queue(self):
+        """Name of the queue where the task will run.
+
+        When it is set to `None`, the scheduler will decide which queue to use.
+        """
+        return self._queue
+
+    @queue.setter
+    def queue(self, value):
+        if value is not None:
+            if not isinstance(value, str):
+                raise ValueError("'queue' must be a str; %s given" % str(type(value)))
+        self._queue = value

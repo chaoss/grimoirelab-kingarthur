@@ -276,8 +276,11 @@ class CompletedJobHandler:
 
     This callable will handle the given `JobEventType.COMPLETED`
     event re-scheduling the task related to the successful job.
-    Archive tasks will not be re-scheduled, setting the task
-    to `TaskStatus.COMPLETED`.
+
+    Those tasks reaching their maximum age (maximum number of
+    times the task was re-scheduled) will be set as
+    `TaskStatus.COMPLETED`. Archive tasks will not be re-scheduled,
+    either.
 
     Depending on whether new items where retrieved during the
     last execution, either backend parameters `next_from_date`
@@ -315,6 +318,15 @@ class CompletedJobHandler:
             logger.info("Job #%s (task: %s - archiving) finished successfully",
                         job_id, task_id)
             return True
+
+        if task.scheduling_cfg:
+            task_max_age = task.scheduling_cfg.max_age
+
+            if task_max_age and task.age >= task_max_age:
+                task.status = TaskStatus.COMPLETED
+                logger.info("Job #%s (task: %s) finished successfully",
+                            job_id, task_id)
+                return True
 
         if result.nitems > 0:
             task.backend_args['next_from_date'] = unixtime_to_datetime(result.max_date)

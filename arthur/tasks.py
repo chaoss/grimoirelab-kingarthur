@@ -368,12 +368,18 @@ class SchedulingTaskConfig(_TaskConfig):
     The `max_retries` option configures the maximum number of attempts
     a job can execute before failing.
 
+    The `max_age` option defines the maximum number of a task can run
+    in the scheduler. Set it to `None` to run the task indefinitely.
+
     :param delay: seconds of delay
     :param max_retries: maximum number of job retries before failing
+    :param max_age: maximum number of times the task can run in the scheduler
     """
-    def __init__(self, delay=WAIT_FOR_QUEUING, max_retries=MAX_JOB_RETRIES):
+    def __init__(self, delay=WAIT_FOR_QUEUING, max_retries=MAX_JOB_RETRIES,
+                 max_age=None):
         self.delay = delay
         self.max_retries = max_retries
+        self.max_age = max_age
 
     @property
     def delay(self):
@@ -398,3 +404,20 @@ class SchedulingTaskConfig(_TaskConfig):
         if not isinstance(value, int):
             raise ValueError("'max_retries' must be an int; %s given" % str(type(value)))
         self._max_retries = value
+
+    @property
+    def max_age(self):
+        """Maximum number of times this task can run in the scheduler.
+
+        When it is set to `None`, the task will run indefinitely.
+        """
+        return self._max_age
+
+    @max_age.setter
+    def max_age(self, value):
+        if value is not None:
+            if not isinstance(value, int):
+                raise ValueError("'max_age' must be an int; %s given" % str(type(value)))
+            elif value < 1:
+                raise ValueError("'max_age' must have a positive value; %s given" % str(value))
+        self._max_age = value

@@ -71,7 +71,8 @@ class TestTask(unittest.TestCase):
         # Test when archive and scheduler arguments are given
         archive = ArchivingTaskConfig('/tmp/archive', False,
                                       archived_after=None)
-        sched = SchedulingTaskConfig(delay=10, max_retries=2)
+        sched = SchedulingTaskConfig(delay=10, max_retries=2,
+                                     max_age=5)
 
         task = Task('mytask', 'mock_backend', 'category', args,
                     archiving_cfg=archive, scheduling_cfg=sched)
@@ -97,7 +98,8 @@ class TestTask(unittest.TestCase):
         category = 'mocked_category'
         archive = ArchivingTaskConfig('/tmp/archive', False,
                                       archived_after=None)
-        sched = SchedulingTaskConfig(delay=10, max_retries=2)
+        sched = SchedulingTaskConfig(delay=10, max_retries=2,
+                                     max_age=5)
         before = datetime.datetime.now().timestamp()
 
         task = Task('mytask', 'mock_backend', category, args,
@@ -122,7 +124,8 @@ class TestTask(unittest.TestCase):
             },
             'scheduling_cfg': {
                 'delay': 10,
-                'max_retries': 2
+                'max_retries': 2,
+                'max_age': 5
             }
         }
 
@@ -483,18 +486,60 @@ class TestSchedulingTaskConfig(unittest.TestCase):
 
         self.assertEqual(scheduling_cfg.max_retries, 3)
 
+    def test_set_max_age(self):
+        """Test if max_age property can be set"""
+
+        scheduling_cfg = SchedulingTaskConfig(max_age=3)
+        self.assertEqual(scheduling_cfg.max_age, 3)
+
+        scheduling_cfg.max_age = None
+        self.assertEqual(scheduling_cfg.max_age, None)
+
+    def test_set_invalid_max_age(self):
+        """Check if an exception is raised for invalid max_age values"""
+
+        with self.assertRaises(ValueError):
+            _ = SchedulingTaskConfig(max_age=2.0)
+
+        scheduling_cfg = SchedulingTaskConfig(max_age=3)
+
+        with self.assertRaises(ValueError):
+            scheduling_cfg.max_age = 0
+
+        with self.assertRaises(ValueError):
+            scheduling_cfg.max_age = -1
+
+        with self.assertRaises(ValueError):
+            scheduling_cfg.max_age = '5'
+
+        self.assertEqual(scheduling_cfg.max_age, 3)
+
     def test_from_dict(self):
         """Check if an object is created when its properties are given from a dict"""
 
         opts = {
             'delay': 1,
-            'max_retries': 3
+            'max_retries': 3,
+            'max_age': 5
         }
 
         scheduling_cfg = SchedulingTaskConfig.from_dict(opts)
         self.assertIsInstance(scheduling_cfg, SchedulingTaskConfig)
         self.assertEqual(scheduling_cfg.delay, 1)
         self.assertEqual(scheduling_cfg.max_retries, 3)
+        self.assertEqual(scheduling_cfg.max_age, 5)
+
+    def test_from_dict_max_age_none(self):
+        """Check if an object is created from a dict when max_age is None"""
+
+        # Test None options
+        opts = {
+            'max_age': None
+        }
+
+        scheduling_cfg = SchedulingTaskConfig.from_dict(opts)
+        self.assertIsInstance(scheduling_cfg, SchedulingTaskConfig)
+        self.assertEqual(scheduling_cfg.max_age, None)
 
     def test_from_dict_invalid_option(self):
         """Check if an exception is raised when an invalid option is given"""
@@ -502,6 +547,7 @@ class TestSchedulingTaskConfig(unittest.TestCase):
         opts = {
             'delay': 1,
             'max_retries': 3,
+            'max_age': None,
             'custom_param': 'myparam'
         }
 
@@ -512,12 +558,14 @@ class TestSchedulingTaskConfig(unittest.TestCase):
     def test_to_dict(self):
         """Check whether the object is converted into a dictionary"""
 
-        scheduling_cfg = SchedulingTaskConfig(delay=5, max_retries=1)
+        scheduling_cfg = SchedulingTaskConfig(delay=5, max_retries=1,
+                                              max_age=5)
         d = scheduling_cfg.to_dict()
 
         expected = {
             'delay': 5,
-            'max_retries': 1
+            'max_retries': 1,
+            'max_age': 5
         }
 
         self.assertDictEqual(d, expected)

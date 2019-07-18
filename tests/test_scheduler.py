@@ -181,6 +181,63 @@ class TestCompletedJobHandler(TestBaseRQ):
         self.assertEqual(handled, True)
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
 
+    def test_task_rescheduling_age(self):
+        """Check if the task is re-scheduled when maximum age is set"""
+
+        handler = CompletedJobHandler(self.task_scheduler)
+
+        scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=0, max_age=3)
+        task = self.registry.add('mytask', 'git', 'commit', {},
+                                 scheduling_cfg=scheduler_opts)
+        # Force the age to be lower than its limit
+        task.age = 2
+
+        result = JobResult(0, 'mytask', 'git', 'commit',
+                           'FFFFFFFF', 1392185439.0, 9)
+        event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
+
+        handled = handler(event)
+        self.assertEqual(handled, True)
+        self.assertEqual(task.status, TaskStatus.SCHEDULED)
+
+    def test_task_rescheduling_unlimited_age(self):
+        """Check if the task is re-scheduled when unlimited age is set"""
+
+        handler = CompletedJobHandler(self.task_scheduler)
+
+        scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=0, max_age=None)
+        task = self.registry.add('mytask', 'git', 'commit', {},
+                                 scheduling_cfg=scheduler_opts)
+        # Force the age to be large value
+        task.age = 1000000
+
+        result = JobResult(0, 'mytask', 'git', 'commit',
+                           'FFFFFFFF', 1392185439.0, 9)
+        event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
+
+        handled = handler(event)
+        self.assertEqual(handled, True)
+        self.assertEqual(task.status, TaskStatus.SCHEDULED)
+
+    def test_task_not_rescheduled_age_limit(self):
+        """Check if the task is not re-scheduled when age reaches its limit"""
+
+        handler = CompletedJobHandler(self.task_scheduler)
+
+        scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=0, max_age=3)
+        task = self.registry.add('mytask', 'git', 'commit', {},
+                                 scheduling_cfg=scheduler_opts)
+        # Force the age to its pre-defined limit
+        task.age = 3
+
+        result = JobResult(0, 'mytask', 'git', 'commit',
+                           'FFFFFFFF', 1392185439.0, 9)
+        event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
+
+        handled = handler(event)
+        self.assertEqual(handled, True)
+        self.assertEqual(task.status, TaskStatus.COMPLETED)
+
     def test_task_not_rescheduled_archive_task(self):
         """Check if archive tasks are not rescheduled"""
 

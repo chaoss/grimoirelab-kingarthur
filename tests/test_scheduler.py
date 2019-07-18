@@ -79,6 +79,40 @@ class TestScheduler(TestBaseRQ):
         self.assertEqual(result.max_date, 1392185439.0)
         self.assertEqual(result.nitems, 9)
 
+    def test_schedule_task_user_queue(self):
+        """Task should be added and executed in the user's queue"""
+
+        args = {
+            'uri': 'http://example.com/',
+            'gitpath': os.path.join(self.dir, 'data/git_log.txt')
+        }
+        category = 'commit'
+        archiving_opts = None
+        scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=0,
+                                              queue='myqueue')
+
+        registry = TaskRegistry()
+        task = registry.add('mytask', 'git', category, args,
+                            archiving_cfg=archiving_opts,
+                            scheduling_cfg=scheduler_opts)
+
+        schlr = Scheduler(self.conn, registry, async_mode=False)
+        schlr.schedule_task(task.task_id)
+        self.assertEqual(task.status, TaskStatus.SCHEDULED)
+        self.assertEqual(task.age, 0)
+
+        schlr.schedule()
+
+        self.assertEqual(task.age, 1)
+
+        job = schlr._scheduler._queues['myqueue'].fetch_job(task.jobs[0])
+        result = job.return_value
+
+        self.assertEqual(result.task_id, task.task_id)
+        self.assertEqual(result.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
+        self.assertEqual(result.max_date, 1392185439.0)
+        self.assertEqual(result.nitems, 9)
+
     def test_not_found_task(self):
         """Raises an error when the task to schedule does not exist"""
 

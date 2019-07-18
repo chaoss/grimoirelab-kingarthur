@@ -179,6 +179,11 @@ class _TaskScheduler(threading.Thread):
 
         queue_id = self._determine_queue(task)
 
+        if queue_id not in self._queues:
+            self._queues[queue_id] = rq.Queue(queue_id,
+                                              connection=self.conn,
+                                              is_async=self.async_mode)
+
         self._queues[queue_id].enqueue(execute_perceval_job,
                                        job_id=job_id,
                                        timeout=TIMEOUT,
@@ -219,9 +224,12 @@ class _TaskScheduler(threading.Thread):
 
     @staticmethod
     def _determine_queue(task):
+        scheduling_cfg = task.scheduling_cfg
         archiving_cfg = task.archiving_cfg
 
-        if archiving_cfg and archiving_cfg.fetch_from_archive:
+        if scheduling_cfg and scheduling_cfg.queue:
+            queue_id = scheduling_cfg.queue
+        elif archiving_cfg and archiving_cfg.fetch_from_archive:
             queue_id = Q_ARCHIVE_JOBS
         elif task.age > 0:
             queue_id = Q_UPDATING_JOBS

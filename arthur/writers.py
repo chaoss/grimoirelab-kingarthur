@@ -25,8 +25,12 @@ import json
 import time
 
 import requests
+import urllib3
 
 from .errors import BaseError
+
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 logger = logging.getLogger(__name__)
@@ -110,13 +114,13 @@ class ElasticItemsWriter:
             task_init = time.time()
 
             try:
-                response = requests.put(url, data=bulk, headers=HEADERS)
+                response = requests.put(url, data=bulk, headers=HEADERS, verify=False)
                 response.raise_for_status()
             except UnicodeEncodeError:
                 # Related to body.encode('iso-8859-1'). mbox data
                 logger.error("Encondig error ... converting bulk to iso-8859-1")
                 bulk = bulk.encode('iso-8859-1', 'ignore')
-                response = requests.put(url, data=bulk, headers=HEADERS)
+                response = requests.put(url, data=bulk, headers=HEADERS, verify=False)
                 response.raise_for_status()
 
             result = response.json()
@@ -135,14 +139,14 @@ class ElasticItemsWriter:
         """Configure the index to work with"""
 
         try:
-            r = requests.get(idx_url)
+            r = requests.get(idx_url, verify=False)
         except requests.exceptions.ConnectionError:
             cause = "Error connecting to Elastic Search (index: %s)" % idx_url
             raise ElasticSearchError(cause=cause)
 
         if r.status_code != 200:
             # The index does not exist
-            r = requests.put(idx_url)
+            r = requests.put(idx_url, verify=False)
 
             if r.status_code != 200:
                 logger.info("Can't create index %s (%s)", idx_url, r.status_code)
@@ -152,8 +156,8 @@ class ElasticItemsWriter:
             logger.info("Index %s created", idx_url)
             return True
         elif r.status_code == 200 and clean:
-            requests.delete(idx_url)
-            requests.put(idx_url)
+            requests.delete(idx_url, verify=False)
+            requests.put(idx_url, verify=False)
             logger.info("Index deleted and created (index: %s)", idx_url)
             return True
 
@@ -168,7 +172,7 @@ class ElasticItemsWriter:
 
         try:
             r = requests.put(mapping_url, data=mapping,
-                             headers=HEADERS)
+                             headers=HEADERS, verify=False)
         except requests.exceptions.ConnectionError:
             cause = "Error connecting to Elastic Search (index: %s, url: %s)" \
                 % (idx_url, mapping_url)

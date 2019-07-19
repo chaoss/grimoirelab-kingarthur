@@ -26,6 +26,7 @@ import unittest.mock
 
 import dateutil
 
+from arthur.common import MAX_JOB_RETRIES, WAIT_FOR_QUEUING
 from arthur.errors import AlreadyExistsError, NotFoundError
 from arthur.tasks import (ArchivingTaskConfig,
                           SchedulingTaskConfig,
@@ -99,7 +100,7 @@ class TestTask(unittest.TestCase):
         archive = ArchivingTaskConfig('/tmp/archive', False,
                                       archived_after=None)
         sched = SchedulingTaskConfig(delay=10, max_retries=2,
-                                     max_age=5)
+                                     max_age=5, queue='myqueue')
         before = datetime.datetime.now().timestamp()
 
         task = Task('mytask', 'mock_backend', category, args,
@@ -125,7 +126,8 @@ class TestTask(unittest.TestCase):
             'scheduling_cfg': {
                 'delay': 10,
                 'max_retries': 2,
-                'max_age': 5
+                'max_age': 5,
+                'queue': 'myqueue'
             }
         }
 
@@ -432,9 +434,18 @@ class TestSchedulingTaskConfig(unittest.TestCase):
     def test_init(self):
         """Test whether object properties are initialized"""
 
-        scheduling_cfg = SchedulingTaskConfig(delay=5, max_retries=1)
+        scheduling_cfg = SchedulingTaskConfig()
+        self.assertEqual(scheduling_cfg.delay, WAIT_FOR_QUEUING)
+        self.assertEqual(scheduling_cfg.max_retries, MAX_JOB_RETRIES)
+        self.assertEqual(scheduling_cfg.max_age, None)
+        self.assertEqual(scheduling_cfg.queue, None)
+
+        scheduling_cfg = SchedulingTaskConfig(delay=5, max_retries=1,
+                                              max_age=10, queue='myqueue')
         self.assertEqual(scheduling_cfg.delay, 5)
         self.assertEqual(scheduling_cfg.max_retries, 1)
+        self.assertEqual(scheduling_cfg.max_age, 10)
+        self.assertEqual(scheduling_cfg.queue, 'myqueue')
 
     def test_set_delay(self):
         """Test if delay property can be set"""
@@ -514,13 +525,39 @@ class TestSchedulingTaskConfig(unittest.TestCase):
 
         self.assertEqual(scheduling_cfg.max_age, 3)
 
+    def test_set_queue(self):
+        """Test if queue property can be set"""
+
+        scheduling_cfg = SchedulingTaskConfig(queue='myqueue')
+        self.assertEqual(scheduling_cfg.queue, 'myqueue')
+
+        scheduling_cfg.queue = None
+        self.assertEqual(scheduling_cfg.queue, None)
+
+    def test_set_invalid_queue(self):
+        """Check if an exception is raised for invalid queue values"""
+
+        with self.assertRaises(ValueError):
+            _ = SchedulingTaskConfig(queue=1.0)
+
+        scheduling_cfg = SchedulingTaskConfig(queue='myqueue')
+
+        with self.assertRaises(ValueError):
+            scheduling_cfg.queue = 0
+
+        with self.assertRaises(ValueError):
+            scheduling_cfg.queue = -1
+
+        self.assertEqual(scheduling_cfg.queue, 'myqueue')
+
     def test_from_dict(self):
         """Check if an object is created when its properties are given from a dict"""
 
         opts = {
             'delay': 1,
             'max_retries': 3,
-            'max_age': 5
+            'max_age': 5,
+            'queue': 'myqueue'
         }
 
         scheduling_cfg = SchedulingTaskConfig.from_dict(opts)
@@ -528,6 +565,7 @@ class TestSchedulingTaskConfig(unittest.TestCase):
         self.assertEqual(scheduling_cfg.delay, 1)
         self.assertEqual(scheduling_cfg.max_retries, 3)
         self.assertEqual(scheduling_cfg.max_age, 5)
+        self.assertEqual(scheduling_cfg.queue, 'myqueue')
 
     def test_from_dict_max_age_none(self):
         """Check if an object is created from a dict when max_age is None"""
@@ -540,6 +578,18 @@ class TestSchedulingTaskConfig(unittest.TestCase):
         scheduling_cfg = SchedulingTaskConfig.from_dict(opts)
         self.assertIsInstance(scheduling_cfg, SchedulingTaskConfig)
         self.assertEqual(scheduling_cfg.max_age, None)
+
+    def test_from_dict_queue_none(self):
+        """Check if an object is created from a dict when queue is None"""
+
+        # Test None options
+        opts = {
+            'queue': None
+        }
+
+        scheduling_cfg = SchedulingTaskConfig.from_dict(opts)
+        self.assertIsInstance(scheduling_cfg, SchedulingTaskConfig)
+        self.assertEqual(scheduling_cfg.queue, None)
 
     def test_from_dict_invalid_option(self):
         """Check if an exception is raised when an invalid option is given"""
@@ -559,13 +609,14 @@ class TestSchedulingTaskConfig(unittest.TestCase):
         """Check whether the object is converted into a dictionary"""
 
         scheduling_cfg = SchedulingTaskConfig(delay=5, max_retries=1,
-                                              max_age=5)
+                                              max_age=5, queue='myqueue')
         d = scheduling_cfg.to_dict()
 
         expected = {
             'delay': 5,
             'max_retries': 1,
-            'max_age': 5
+            'max_age': 5,
+            'queue': 'myqueue'
         }
 
         self.assertDictEqual(d, expected)

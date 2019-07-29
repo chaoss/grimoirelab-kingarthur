@@ -47,14 +47,15 @@ class ArthurWorker(rq.Worker):
     def pubsub_channel(self, value):
         self.__pubsub_channel = value
 
-    def perform_job(self, job, queue):
+    def perform_job(self, job, queue, heartbeat_ttl=None):
         """Custom method to execute a job and notify of its result
 
         :param job: Job object
         :param queue: the queue containing the object
+        :param heartbeat_ttl: time to live heartbeat
         """
         self._publish_job_event_when_started(job)
-        result = super().perform_job(job, queue)
+        result = super().perform_job(job, queue, heartbeat_ttl=heartbeat_ttl)
         self._publish_job_event_when_finished(job)
 
         return result

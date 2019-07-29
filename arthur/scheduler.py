@@ -186,7 +186,7 @@ class _TaskScheduler(threading.Thread):
 
         self._queues[queue_id].enqueue(execute_perceval_job,
                                        job_id=job_id,
-                                       timeout=TIMEOUT,
+                                       job_timeout=TIMEOUT,
                                        ttl=INFINITE_TTL,
                                        result_ttl=INFINITE_TTL,
                                        **job_args)

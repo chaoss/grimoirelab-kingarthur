@@ -26,6 +26,10 @@ import logging
 import pickle
 import rq
 
+import graal
+import graal.graal
+import graal.backends
+
 import perceval
 import perceval.backend
 import perceval.backends
@@ -123,7 +127,11 @@ class PercevalJob:
     """
     def __init__(self, job_id, task_id, backend, category, conn, qitems):
         try:
-            self._bklass = perceval.backend.find_backends(perceval.backends)[0][backend]
+            if category.startswith("code_"):
+                self._bklass = graal.graal.find_backends(graal.backends)[0][backend]
+            else:
+                self._bklass = perceval.backend.find_backends(perceval.backends)[0][backend]
+
         except KeyError:
             raise NotFoundError(element=backend)
 
@@ -243,6 +251,9 @@ class PercevalJob:
         :raises AttributeError: raised when any of the required
             parameters is not found
         """
+        if self.category.startswith("code_"):
+            return graal.graal.fetch(self._bklass, backend_args, self.category)
+
         if not archive_args or not archive_args['fetch_from_archive']:
             return perceval.backend.fetch(self._bklass, backend_args, self.category,
                                           manager=self.archive_manager)

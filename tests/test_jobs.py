@@ -25,6 +25,7 @@ import os
 import os.path
 import pickle
 import shutil
+import subprocess
 import tempfile
 import unittest
 
@@ -182,7 +183,7 @@ def setup_mock_redmine_server(max_failures=0):
         elif uri.startswith(REDMINE_USER_25_URL):
             body = user_25_body
         else:
-            raise
+            raise Exception
 
         http_requests.append(last_request)
 
@@ -309,6 +310,29 @@ class TestPercevalJob(TestBaseRQ):
         self.assertEqual(result.offset, None)
         self.assertEqual(result.nresumed, 0)
 
+        job = PercevalJob('arthur-job-1234567890', 'mytask', 'cocom', 'code_complexity',
+                          self.conn, 'items')
+
+        self.assertEqual(job.job_id, 'arthur-job-1234567890')
+        self.assertEqual(job.task_id, 'mytask')
+        self.assertEqual(job.backend, 'cocom')
+        self.assertEqual(job.category, 'code_complexity')
+        self.assertEqual(job.conn, self.conn)
+        self.assertEqual(job.qitems, 'items')
+        self.assertEqual(job.archive_manager, None)
+
+        result = job.result
+        self.assertIsInstance(job.result, JobResult)
+        self.assertEqual(result.job_id, 'arthur-job-1234567890')
+        self.assertEqual(result.task_id, 'mytask')
+        self.assertEqual(result.backend, 'cocom')
+        self.assertEqual(job.category, 'code_complexity')
+        self.assertEqual(result.last_uuid, None)
+        self.assertEqual(result.max_date, None)
+        self.assertEqual(result.nitems, 0)
+        self.assertEqual(result.offset, None)
+        self.assertEqual(result.nresumed, 0)
+
     def test_backend_not_found(self):
         """Test if it raises an exception when a backend is not found"""
 
@@ -359,6 +383,64 @@ class TestPercevalJob(TestBaseRQ):
                     '7debcf8a2f57f86663809c58b5c07a398be7674c',
                     '87783129c3f00d2c81a3a8e585eb86a47e39891a',
                     'bc57a9209f096a130dcc5ba7089a8663f758a703']
+
+        self.assertEqual(commits, expected)
+
+    def test_run_graal(self):
+        """Test run method using the Graal backend"""
+
+        tmp_path = tempfile.mkdtemp(prefix='graal_')
+        tmp_repo_path = os.path.join(tmp_path, 'repos')
+        os.mkdir(tmp_repo_path)
+
+        git_path = os.path.join(tmp_path, 'graaltest')
+
+        data_path = os.path.dirname(os.path.abspath(__file__))
+        data_path = os.path.join(data_path, 'data')
+
+        repo_name = 'graaltest'
+
+        fdout, _ = tempfile.mkstemp(dir=tmp_path)
+
+        zip_path = os.path.join(data_path, repo_name + '.zip')
+        subprocess.check_call(['unzip', '-qq', zip_path, '-d', tmp_repo_path])
+
+        origin_path = os.path.join(tmp_repo_path, repo_name)
+        subprocess.check_call(['git', 'clone', '-q', '--bare', origin_path, git_path],
+                              stderr=fdout)
+
+        job = PercevalJob('arthur-job-1234567890', 'mytask', 'coqua', 'code_quality',
+                          self.conn, 'items')
+        args = {
+            'uri': 'http://example.com/',
+            'git_path': os.path.join(self.dir, git_path),
+            'entrypoint': "perceval"
+        }
+        archive_args = {
+            'archive_path': self.tmp_path,
+            'fetch_from_archive': False
+        }
+
+        job.run(args, archive_args)
+
+        self.assertIsInstance(job.archive_manager, ArchiveManager)
+        result = job.result
+        self.assertIsInstance(job.result, JobResult)
+        self.assertEqual(result.job_id, 'arthur-job-1234567890')
+        self.assertEqual(result.task_id, 'mytask')
+        self.assertEqual(result.backend, 'coqua')
+        self.assertEqual(result.category, 'code_quality')
+        self.assertEqual(result.last_uuid, '5873807157a089297ffddd74b50a46910eb822a0')
+        self.assertEqual(result.max_date, 1526909120.0)
+        self.assertEqual(result.nitems, 1)
+        self.assertEqual(result.offset, None)
+        self.assertEqual(result.nresumed, 0)
+
+        commits = self.conn.lrange('items', 0, -1)
+        commits = [pickle.loads(c) for c in commits]
+        commits = [commit['data']['commit'] for commit in commits]
+
+        expected = ['10f5a02b553a90fde36a8f151653d995faa3818e']
 
         self.assertEqual(commits, expected)
 

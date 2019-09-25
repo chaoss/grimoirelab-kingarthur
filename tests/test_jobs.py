@@ -36,8 +36,7 @@ from arthur import __version__
 from arthur.errors import NotFoundError
 from arthur.jobs import (JobResult,
                          PercevalJob,
-                         execute_perceval_job,
-                         metadata)
+                         execute_perceval_job)
 from grimoirelab_toolkit.datetime import datetime_utcnow
 from perceval.archive import ArchiveManager
 
@@ -198,37 +197,6 @@ def setup_mock_redmine_server(max_failures=0):
     return http_requests
 
 
-class MockJob:
-    """Mock job class for testing purposes"""
-
-    def __init__(self, job_id):
-        self.job_id = job_id
-
-    @metadata
-    def execute(self):
-        for x in range(5):
-            item = {'item': x}
-            yield item
-
-
-class TestMetadata(unittest.TestCase):
-    """Unit tests for metadata decorator"""
-
-    def test_decorator(self):
-        """Check if the decorator works"""
-
-        job = MockJob(8)
-
-        items = [item for item in job.execute()]
-
-        for x in range(5):
-            item = items[x]
-
-            self.assertEqual(item['arthur_version'], __version__)
-            self.assertEqual(item['job_id'], 8)
-            self.assertEqual(item['item'], x)
-
-
 class TestJobResult(unittest.TestCase):
     """Unit tests for JobResult class"""
 
@@ -361,6 +329,29 @@ class TestPercevalJob(TestBaseRQ):
                     'bc57a9209f096a130dcc5ba7089a8663f758a703']
 
         self.assertEqual(commits, expected)
+
+    def test_metadata(self):
+        """Check if metadata parameters are correctly set"""
+
+        job = PercevalJob('arthur-job-1234567890', 'mytask', 'git', 'commit',
+                          self.conn, 'items')
+        args = {
+            'uri': 'http://example.com/',
+            'gitpath': os.path.join(self.dir, 'data/git_log.txt')
+        }
+        archive_args = {
+            'archive_path': self.tmp_path,
+            'fetch_from_archive': False
+        }
+
+        job.run(args, archive_args)
+
+        items = self.conn.lrange('items', 0, -1)
+        items = [pickle.loads(item) for item in items]
+
+        for item in items:
+            self.assertEqual(item['arthur_version'], __version__)
+            self.assertEqual(item['job_id'], 'arthur-job-1234567890')
 
     def test_run_not_found_parameters(self):
         """Check if it fails when a required backend parameter is not found"""

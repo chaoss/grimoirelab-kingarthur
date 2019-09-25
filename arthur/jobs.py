@@ -196,7 +196,11 @@ class PercevalJob:
                 args['offset'] = self.result.offset
             self._result.nresumed += 1
 
-        for item in self._execute(args, archive_args):
+        big = self._create_items_generator(args, archive_args)
+
+        for item in big.items:
+            item['arthur_version'] = __version__
+            item['job_id'] = self.job_id
             self.conn.rpush(self.qitems, pickle.dumps(item))
 
             self._result.nitems += 1
@@ -217,38 +221,31 @@ class PercevalJob:
 
         return self._bklass.has_resuming()
 
-    @metadata
-    def _execute(self, backend_args, archive_args):
-        """Execute a backend of Perceval.
+    def _create_items_generator(self, backend_args, archive_args):
+        """Create a Perceval items generator.
 
-        Run the backend of Perceval assigned to this job using the
-        given arguments. It will raise an `AttributeError` when any of
-        the required parameters to run the backend are not found.
-        Other exceptions related to the execution of the backend
-        will be raised too.
-
-        This method will return an iterator of the items fetched
-        by the backend. These items will include some metadata
-        related to this job.
-
-        It will also be possible to retrieve the items from the
-        archive setting to `True` the parameter `fetch_from_archive`.
+        This method will create a items generator using the
+        internal backend defined for this job and the given
+        parameters.
 
         :param backend_args: arguments to execute the backend
         :param archive_args: archive arguments
 
-        :returns: iterator of items fetched by the backend
-
-        :raises AttributeError: raised when any of the required
-            parameters is not found
+        :returns: a `BackendItemsGenerator` instance
         """
-        if not archive_args or not archive_args['fetch_from_archive']:
-            return perceval.backend.fetch(self._bklass, backend_args, self.category,
-                                          manager=self.archive_manager)
+        fetch_archive = archive_args and archive_args['fetch_from_archive']
+
+        if fetch_archive:
+            archived_after = archive_args.get('archived_after', None)
         else:
-            return perceval.backend.fetch_from_archive(self._bklass, backend_args,
-                                                       self.archive_manager, self.category,
-                                                       archive_args['archived_after'])
+            archived_after = None
+
+        return perceval.backend.BackendItemsGenerator(self._bklass,
+                                                      backend_args,
+                                                      self.category,
+                                                      manager=self.archive_manager,
+                                                      fetch_archive=fetch_archive,
+                                                      archived_after=archived_after)
 
 
 def execute_perceval_job(backend, backend_args, qitems, task_id, category,

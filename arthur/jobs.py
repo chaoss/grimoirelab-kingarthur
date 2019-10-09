@@ -30,9 +30,6 @@ import perceval.backend
 import perceval.backends
 import perceval.archive
 
-from grimoirelab_toolkit.datetime import (datetime_to_utc,
-                                          unixtime_to_datetime)
-
 from ._version import __version__
 from .errors import NotFoundError
 
@@ -43,42 +40,43 @@ logger = logging.getLogger(__name__)
 class JobResult:
     """Class to store the result of a Perceval job.
 
-    It stores useful data such as the taks_id, the UUID of the last
-    item generated or the number of items fetched by the backend.
+    It stores the summary of a Perceval job and other useful data
+    such as the task and job identifiers, the backend and the
+    category of the items generated.
 
     :param job_id: job identifier
-    :param task_id: identitifer of the task linked to this job
+    :param task_id: identifier of the task linked to this job
     :param backend: backend used to fetch the items
     :param category: category of the fetched items
-    :param last_uuid: UUID of the last item
-    :param max_date: maximum date fetched among items
-    :param nitems: number of items fetched by the backend
-    :param offset: maximum offset fetched among items
-    :param nresumed: number of time the job was resumed
     """
-    def __init__(self, job_id, task_id, backend, category, last_uuid,
-                 max_date, nitems, offset=None, nresumed=0):
+    def __init__(self, job_id, task_id, backend, category):
         self.job_id = job_id
         self.task_id = task_id
         self.backend = backend
         self.category = category
-        self.last_uuid = last_uuid
-        self.max_date = max_date
-        self.nitems = nitems
-        self.offset = offset
-        self.nresumed = nresumed
+        self.summary = None
 
     def to_dict(self):
         """Convert object to a dict"""
 
-        return {
+        result = {
             'job_id': self.job_id,
-            'task_id': self.task_id,
-            'last_uuid': self.last_uuid,
-            'max_date': self.max_date,
-            'nitems': self.nitems,
-            'offset': self.offset
+            'task_id': self.task_id
         }
+
+        if self.summary:
+            result['fetched'] = self.summary.fetched
+            result['skipped'] = self.summary.skipped
+            result['min_updated_on'] = self.summary.min_updated_on.timestamp()
+            result['max_updated_on'] = self.summary.max_updated_on.timestamp()
+            result['last_updated_on'] = self.summary.last_updated_on.timestamp()
+            result['last_uuid'] = self.summary.last_uuid
+            result['min_offset'] = self.summary.min_offset
+            result['max_offset'] = self.summary.max_offset
+            result['last_offset'] = self.summary.last_offset
+            result['extras'] = self.summary.extras
+
+        return result
 
 
 class PercevalJob:
@@ -90,12 +88,12 @@ class PercevalJob:
     accesing to the property `result` of this object.
 
     :param job_id: job identifier
-    :param task_id: identitifer of the task linked to this job
+    :param task_id: identifier of the task linked to this job
     :param backend: name of the backend to execute
     :param conn: connection with a Redis database
     :param qitems: name of the queue where items will be stored
 
-    :rasises NotFoundError: raised when the backend is not avaliable
+    :rasises NotFoundError: raised when the backend is not available
         in Perceval
     """
     def __init__(self, job_id, task_id, backend, category, conn, qitems):
@@ -109,15 +107,17 @@ class PercevalJob:
         self.backend = backend
         self.conn = conn
         self.qitems = qitems
-        self.retries = 0
         self.archive_manager = None
         self.category = category
-        self._result = JobResult(self.job_id, self.task_id, self.backend, self.category,
-                                 None, None, 0, offset=None,
-                                 nresumed=0)
+
+        self._big = None  # items generator
+        self._result = JobResult(self.job_id, self.task_id,
+                                 self.backend, self.category)
 
     @property
     def result(self):
+        if not self._result.summary and self._big and self._big.summary:
+            self._result.summary = self._big.summary
         return self._result
 
     def initialize_archive_manager(self, archive_path):
@@ -131,62 +131,36 @@ class PercevalJob:
         if archive_path:
             self.archive_manager = perceval.archive.ArchiveManager(archive_path)
 
-    def run(self, backend_args, archive_args=None, resume=False):
+    def run(self, backend_args, archive_args=None):
         """Run the backend with the given parameters.
 
         The method will run the backend assigned to this job,
         storing the fetched items in a Redis queue. The ongoing
         status of the job, can be accessed through the property
-        `result`. When `resume` is set, the job will start from
-        the last execution, overwriting 'from_date' and 'offset'
-        parameters, if needed.
+        `result`.
 
-        Setting to `True` the parameter `fetch_from_archive`, items can
-        be fetched from the archive assigned to this job.
+        When the parameter `fetch_from_archive` is set to `True`,
+        items will be fetched from the archive assigned to this job.
 
         Any exception during the execution of the process will
         be raised.
 
         :param backend_args: parameters used to un the backend
         :param archive_args: archive arguments
-        :param resume: fetch items starting where the last
-            execution stopped
         """
         args = backend_args.copy()
 
         if archive_args:
             self.initialize_archive_manager(archive_args['archive_path'])
 
-        if not resume:
-            max_date = backend_args.get('from_date', None)
-            offset = backend_args.get('offset', None)
+        self._result = JobResult(self.job_id, self.task_id,
+                                 self.backend, self.category)
 
-            if max_date:
-                max_date = datetime_to_utc(max_date).timestamp()
+        self._big = self._create_items_generator(args, archive_args)
 
-            self._result = JobResult(self.job_id, self.task_id, self.backend, self.category,
-                                     None, max_date, 0, offset=offset,
-                                     nresumed=0)
-        else:
-            if self.result.max_date:
-                args['from_date'] = unixtime_to_datetime(self.result.max_date)
-            if self.result.offset:
-                args['offset'] = self.result.offset
-            self._result.nresumed += 1
-
-        big = self._create_items_generator(args, archive_args)
-
-        for item in big.items:
+        for item in self._big.items:
             self._metadata(item)
             self.conn.rpush(self.qitems, pickle.dumps(item))
-
-            self._result.nitems += 1
-            self._result.last_uuid = item['uuid']
-
-            if not self.result.max_date or self.result.max_date < item['updated_on']:
-                self._result.max_date = item['updated_on']
-            if 'offset' in item:
-                self._result.offset = item['offset']
 
     def has_archiving(self):
         """Returns if the job supports items archiving"""
@@ -276,7 +250,7 @@ def execute_perceval_job(backend, backend_args, qitems, task_id, category,
         raise AttributeError("archive attributes set but archive is not supported")
 
     try:
-        job.run(backend_args, archive_args=archive_args, resume=False)
+        job.run(backend_args, archive_args=archive_args)
     except AttributeError as e:
         raise e
     except Exception as e:
@@ -289,7 +263,9 @@ def execute_perceval_job(backend, backend_args, qitems, task_id, category,
 
     result = job.result
 
-    logger.debug("Job #%s (task: %s) completed (%s) - %s items (%s) fetched",
-                 result.job_id, task_id, result.backend, str(result.nitems), result.category)
+    logger.debug("Job #%s (task: %s) completed (%s) - %s/%s items (%s) fetched",
+                 result.job_id, task_id, result.backend,
+                 str(result.summary.fetched), str(result.summary.skipped),
+                 result.category)
 
     return result

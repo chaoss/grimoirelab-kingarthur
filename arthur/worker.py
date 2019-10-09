@@ -28,8 +28,28 @@ import rq.job
 from .common import CH_PUBSUB
 from .events import JobEventType, JobEvent
 
-
+JOB_LOGGERS = ['arthur', 'perceval', 'rq']
 logger = logging.getLogger(__name__)
+
+
+class JobLogHandler(logging.StreamHandler):
+    """Handler class for the job logs"""
+
+    def __init__(self, job):
+        logging.StreamHandler.__init__(self)
+        self.job = job
+        self.job.meta['log'] = []
+        self.job.save_meta()
+
+    def emit(self, record):
+        log = {
+            'created': record.created,
+            'msg': self.format(record),
+            'module': record.module,
+            'level': self.level
+        }
+        self.job.meta['log'].append(log)
+        self.job.save_meta()
 
 
 class ArthurWorker(rq.Worker):
@@ -54,6 +74,7 @@ class ArthurWorker(rq.Worker):
         :param queue: the queue containing the object
         :param heartbeat_ttl: time to live heartbeat
         """
+        self.setup_job_loghandlers(job)
         self._publish_job_event_when_started(job)
         result = super().perform_job(job, queue, heartbeat_ttl=heartbeat_ttl)
         self._publish_job_event_when_finished(job)
@@ -96,3 +117,9 @@ class ArthurWorker(rq.Worker):
 
         msg = event.serialize()
         self.connection.publish(self.pubsub_channel, msg)
+
+    def setup_job_loghandlers(self, job):
+        meta_handler = JobLogHandler(job)
+        for logger_name in JOB_LOGGERS:
+            logger_job = logging.getLogger(logger_name)
+            logger_job.addHandler(meta_handler)

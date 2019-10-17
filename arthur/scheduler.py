@@ -484,8 +484,4 @@ def _build_job_arguments(task):
     archiving_cfg = task.archiving_cfg
     job_args['archive_args'] = archiving_cfg.to_dict() if archiving_cfg else None
 
-    # Scheduler parameters
-    sched_cfg = task.scheduling_cfg
-    job_args['max_retries'] = sched_cfg.max_retries if sched_cfg else MAX_JOB_RETRIES
-
     return job_args

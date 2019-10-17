@@ -106,6 +106,7 @@ class Task:
 
         self.status = TaskStatus.NEW
         self.age = 0
+        self.num_failures = 0
         self.jobs = []
         self.created_on = datetime_utcnow().timestamp()
         self.backend = backend
@@ -128,6 +129,7 @@ class Task:
             'task_id': self.task_id,
             'status': self.status.name,
             'age': self.age,
+            'num_failures': self.num_failures,
             'jobs': self.jobs,
             'created_on': self.created_on,
             'backend': self.backend,

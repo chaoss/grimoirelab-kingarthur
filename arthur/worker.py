@@ -103,7 +103,8 @@ class ArthurWorker(rq.Worker):
         elif job_status == rq.job.JobStatus.FAILED:
             event_type = JobEventType.FAILURE
             payload = {
-                'error': job.exc_info
+                'error': job.exc_info,
+                'result': job.meta.get('result', None)
             }
         else:
             logger.warning("Unexpected job status %s for finished job %s",

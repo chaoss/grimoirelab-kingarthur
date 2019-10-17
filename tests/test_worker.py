@@ -146,6 +146,7 @@ class TestArthurWorker(TestBaseRQ):
         self.assertEqual(event.task_id, 1)
         self.assertEqual(event.type, JobEventType.FAILURE)
         self.assertRegex(event.payload['error'], "Traceback")
+        self.assertEqual(event.payload['result'], None)
 
 
 class TestJobLogHandler(TestBaseRQ):

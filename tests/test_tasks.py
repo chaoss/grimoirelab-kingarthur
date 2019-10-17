@@ -138,6 +138,7 @@ class TestTask(unittest.TestCase):
             'task_id': 'mytask',
             'status': 'NEW',
             'age': 0,
+            'num_failures': 0,
             'jobs': ['job-0', 'job-1'],
             'backend': 'git',
             'backend_args': args,

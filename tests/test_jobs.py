@@ -562,7 +562,7 @@ class TestExecuteJob(TestBaseRQ):
 
         job = q.enqueue(execute_perceval_job,
                         backend='git', backend_args=backend_args, category='commit',
-                        archive_args=archive_args, max_retries=0,
+                        archive_args=archive_args,
                         qitems='items', task_id='mytask')
 
         result = job.return_value
@@ -596,10 +596,10 @@ class TestExecuteJob(TestBaseRQ):
             self.assertEqual(item[1], expected[x])
 
     @httpretty.activate
-    def test_retry_job(self):
-        """Test if the job will be succesful after some retries"""
+    def test_failed_job(self):
+        """Test if a failed job produce items an a partial result"""
 
-        http_requests = setup_mock_redmine_server(max_failures=2)
+        setup_mock_redmine_server(max_failures=2)
 
         backend_args = {
             'url': REDMINE_URL,
@@ -608,21 +608,27 @@ class TestExecuteJob(TestBaseRQ):
         }
 
         q = rq.Queue('queue', is_async=False)  # noqa: W606
-        job = q.enqueue(execute_perceval_job,
-                        backend='redmine', backend_args=backend_args,
-                        category='issue',
-                        qitems='items', task_id='mytask',
-                        max_retries=3)
 
-        result = job.return_value
+        with self.assertRaises(requests.exceptions.HTTPError):
+            _ = q.enqueue(execute_perceval_job,
+                          job_id='test_failed_job',
+                          backend='redmine', backend_args=backend_args,
+                          category='issue',
+                          qitems='items', task_id='mytask')
+
+        # The job failed but generated a partial result
+        job = rq.job.Job.fetch('test_failed_job', connection=self.conn)
+
+        result = job.meta['result']
+        self.assertIsInstance(result, JobResult)
         self.assertEqual(result.job_id, job.get_id())
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'redmine')
-        self.assertEqual(result.last_uuid, '4ab289ab60aee93a66e5490529799cf4a2b4d94c')
-        self.assertEqual(result.max_date, 1469607427.0)
-        self.assertEqual(result.nitems, 4)
+        self.assertEqual(result.last_uuid, '3c3d67925b108a37f88cc6663f7f7dd493fa818c')
+        self.assertEqual(result.max_date, 1323367117.0)
+        self.assertEqual(result.nitems, 3)
         self.assertEqual(result.offset, None)
-        self.assertEqual(result.nresumed, 2)
+        self.assertEqual(result.nresumed, 0)
 
         issues = self.conn.lrange('items', 0, -1)
         issues = [pickle.loads(i) for i in issues]
@@ -631,37 +637,13 @@ class TestExecuteJob(TestBaseRQ):
 
         expected = ['91a8349c2f6ebffcccc49409529c61cfd3825563',
                     'c4aeb9e77fec8e4679caa23d4012e7cc36ae8b98',
-                    '3c3d67925b108a37f88cc6663f7f7dd493fa818c',
-                    '4ab289ab60aee93a66e5490529799cf4a2b4d94c']
+                    '3c3d67925b108a37f88cc6663f7f7dd493fa818c']
 
         self.assertEqual(len(issues), len(expected))
 
         for x in range(len(expected)):
             item = issues[x]
-            self.assertEqual(item[0], result.job_id)
             self.assertEqual(item[1], expected[x])
-
-    @httpretty.activate
-    def test_max_retries_job_failure(self):
-        """Test if the job will fail after max_retries limit is reached"""
-
-        http_requests = setup_mock_redmine_server(max_failures=2)
-
-        args = {
-            'url': REDMINE_URL,
-            'api_token': 'AAAA',
-            'max_issues': 3
-        }
-
-        q = rq.Queue('queue', is_async=False)  # noqa: W606
-
-        with self.assertRaises(requests.exceptions.HTTPError):
-            job = q.enqueue(execute_perceval_job,
-                            backend='redmine', backend_args=args,
-                            category='issue',
-                            qitems='items', task_id='mytask',
-                            max_retries=1)
-            self.assertEqual(job.is_failed, True)
 
     def test_job_no_result(self):
         """Execute a Git backend job that will not produce any results"""

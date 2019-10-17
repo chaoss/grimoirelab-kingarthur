@@ -38,7 +38,6 @@ from .common import (CH_PUBSUB,
                      Q_CREATION_JOBS,
                      Q_UPDATING_JOBS,
                      Q_STORAGE_ITEMS,
-                     MAX_JOB_RETRIES,
                      WAIT_FOR_QUEUING,
                      TIMEOUT)
 from .errors import NotFoundError
@@ -321,6 +320,8 @@ class CompletedJobHandler:
                          task_id, event.uuid, job_id)
             return False
 
+        task.num_failures = 0
+
         if task.archiving_cfg and task.archiving_cfg.fetch_from_archive:
             task.status = TaskStatus.COMPLETED
             logger.info("Job #%s (task: %s - archiving) finished successfully",
@@ -355,7 +356,8 @@ class FailedJobHandler:
     """Handle failed job events.
 
     This callable will handle `JobEventType.FAILURE` events.
-    Related tasks will be set as `TaskStatus.FAILED`.
+    If the task can be resumed, it will be re-scheduled again,
+    otherwise, it will be set as `TaskStatus.FAILED`.
 
     Take into account that while an event is received, the task
     related to it could have been deleted but the notification
@@ -373,6 +375,7 @@ class FailedJobHandler:
 
     def __call__(self, event):
         error = event.payload['error']
+        result = event.payload['result']
         job_id = event.job_id
         task_id = event.task_id
 
@@ -383,10 +386,37 @@ class FailedJobHandler:
                          task_id, event.uuid, job_id)
             return False
 
-        task.status = TaskStatus.FAILED
+        task.num_failures += 1
 
-        logger.error("Job #%s (task: %s) failed; cancelled; error: %s",
+        logger.error("Job #%s (task: %s) failed; error: %s",
                      job_id, task_id, error)
+
+        if task.scheduling_cfg:
+            task_max_retries = task.scheduling_cfg.max_retries
+        else:
+            task_max_retries = 0
+
+        if not task.has_resuming():
+            task.status = TaskStatus.FAILED
+            logger.error("Job #%s (task: %s) unable to resume; cancelled",
+                         job_id, task_id)
+        elif task.num_failures >= task_max_retries:
+            task.status = TaskStatus.FAILED
+            logger.error("Job #%s (task: %s) max retries reached; cancelled",
+                         job_id, task_id)
+        else:
+            logger.error("Job #%s (task: %s) failed but will be resumed",
+                         job_id, task_id)
+
+            if result.nitems > 0:
+                task.backend_args['next_from_date'] = unixtime_to_datetime(result.max_date)
+
+                if result.offset:
+                    task.backend_args['next_offset'] = result.offset
+
+            delay = task.scheduling_cfg.delay if task.scheduling_cfg else WAIT_FOR_QUEUING
+
+            self.task_scheduler.schedule_task(task_id, delay=delay)
 
         return True
 

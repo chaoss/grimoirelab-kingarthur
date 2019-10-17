@@ -247,6 +247,7 @@ class TestArthurServer(TestBaseRQ):
                 'backend': 'git',
                 'status': 'ENQUEUED',
                 'age': 1,
+                'num_failures': 0,
                 'backend_args': {
                     'gitpath': os.path.join(self.dir, 'data/git_log.txt'),
                     'uri': 'http://example.com/',

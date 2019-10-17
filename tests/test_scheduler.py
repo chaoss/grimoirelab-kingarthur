@@ -328,6 +328,25 @@ class TestCompletedJobHandler(TestBaseRQ):
                          datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC))
         self.assertEqual(task.backend_args['next_offset'], 1000)
 
+    def test_task_reset_num_failures(self):
+        """Check if the number of failures is reset if the task is successful"""
+
+        handler = CompletedJobHandler(self.task_scheduler)
+
+        task = self.registry.add('mytask', 'git', 'commit', {})
+
+        # Force to a pre-defined number of failures
+        task.num_failures = 2
+
+        result = JobResult(0, 'mytask', 'git', 'commit',
+                           'FFFFFFFF', 1392185439.0, 9)
+        event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
+
+        handled = handler(event)
+        self.assertEqual(handled, True)
+        self.assertEqual(task.status, TaskStatus.SCHEDULED)
+        self.assertEqual(task.num_failures, 0)
+
     def test_ignore_orphan_event(self):
         """Check if an orphan event is ignored"""
 
@@ -362,22 +381,132 @@ class TestFailedJobHandler(TestBaseRQ):
 
         task = self.registry.add('mytask', 'git', 'commit', {})
 
+        result = JobResult(0, 'mytask', 'git', 'commit',
+                           'FFFFFFFF', 1392185439.0, 9)
         payload = {
-            'error': "Error"
+            'error': "Error",
+            'result': result
+        }
+        event = JobEvent(JobEventType.FAILURE, 0, 'mytask', payload)
+
+        # It won't be scheduled because max_retries is not set
+        handled = handler(event)
+        self.assertEqual(handled, True)
+        self.assertEqual(task.status, TaskStatus.FAILED)
+
+    def test_task_not_rescheduled_not_resume(self):
+        """Check if tasks unable to resume are not rescheduled"""
+
+        handler = FailedJobHandler(self.task_scheduler)
+
+        scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=3)
+        task = self.registry.add('mytask', 'gerrit', 'review', {},
+                                 scheduling_cfg=scheduler_opts)
+
+        result = JobResult(0, 'mytask', 'gerrit', 'review',
+                           'FFFFFFFF', 1392185439.0, 9)
+        payload = {
+            'error': "Error",
+            'result': result
         }
         event = JobEvent(JobEventType.FAILURE, 0, 'mytask', payload)
 
         handled = handler(event)
         self.assertEqual(handled, True)
         self.assertEqual(task.status, TaskStatus.FAILED)
+        self.assertEqual(task.num_failures, 1)
+
+    def test_failed_task_not_rescheduled_max_retries(self):
+        """Check if the task is not re-scheduled when num failures reaches its limit"""
+
+        handler = FailedJobHandler(self.task_scheduler)
+
+        scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=3)
+        task = self.registry.add('mytask', 'git', 'commit', {},
+                                 scheduling_cfg=scheduler_opts)
+
+        # Force to a pre-defined number of failures
+        task.num_failures = 2
+
+        result = JobResult(0, 'mytask', 'git', 'commit',
+                           'FFFFFFFF', 1392185439.0, 9)
+        payload = {
+            'error': "Error",
+            'result': result
+        }
+        event = JobEvent(JobEventType.FAILURE, 0, 'mytask', payload)
+
+        handled = handler(event)
+        self.assertEqual(handled, True)
+        self.assertEqual(task.status, TaskStatus.FAILED)
+        self.assertEqual(task.num_failures, 3)
+
+    def test_failed_task_rescheduled_with_next_from_date(self):
+        """Check if failed tasks are rescheduled updating next_from_date"""
+
+        handler = FailedJobHandler(self.task_scheduler)
+
+        scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=3)
+        task = self.registry.add('mytask', 'git', 'commit', {},
+                                 scheduling_cfg=scheduler_opts)
+
+        result = JobResult(0, 'mytask', 'git', 'commit',
+                           'FFFFFFFF', 1392185439.0, 9)
+        payload = {
+            'error': "Error",
+            'result': result
+        }
+        event = JobEvent(JobEventType.FAILURE, 0, 'mytask', payload)
+
+        handled = handler(event)
+        self.assertEqual(handled, True)
+        self.assertEqual(task.status, TaskStatus.SCHEDULED)
+
+        # The field is updated to the last date received
+        # within the result
+        self.assertEqual(task.backend_args['next_from_date'],
+                         datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC))
+        self.assertEqual(task.num_failures, 1)
+
+    def test_failed_task_rescheduled_with_next_offset(self):
+        """Check if failed tasks are rescheduled updating next_offset"""
+
+        handler = FailedJobHandler(self.task_scheduler)
+
+        scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=3)
+        task = self.registry.add('mytask', 'git', 'commit', {},
+                                 scheduling_cfg=scheduler_opts)
+
+        result = JobResult(0, 'mytask', 'git', 'commit',
+                           'FFFFFFFF', 1392185439.0, 9,
+                           offset=1000)
+        payload = {
+            'error': "Error",
+            'result': result
+        }
+        event = JobEvent(JobEventType.FAILURE, 0, 'mytask', payload)
+
+        handled = handler(event)
+        self.assertEqual(handled, True)
+        self.assertEqual(task.status, TaskStatus.SCHEDULED)
+
+        # Both fields are updated to the last value received
+        # within the result
+        self.assertEqual(task.backend_args['next_from_date'],
+                         datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC))
+        self.assertEqual(task.backend_args['next_offset'], 1000)
+        self.assertEqual(task.num_failures, 1)
 
     def test_ignore_orphan_event(self):
         """Check if an orphan event is ignored"""
 
         handler = FailedJobHandler(self.task_scheduler)
 
+        result = JobResult(0, 'mytask', 'git', 'commit',
+                           'FFFFFFFF', 1392185439.0, 9)
         payload = {
-            'error': "Error"
+            'error': "Error",
+            'result': result
         }
         event = JobEvent(JobEventType.FAILURE, 0, 'mytask', payload)
 

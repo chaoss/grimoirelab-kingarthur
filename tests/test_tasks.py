@@ -56,14 +56,14 @@ class TestTask(unittest.TestCase):
             'component': 'test'
         }
 
-        task = Task('mytask', 'mock_backend', 'category', args)
+        task = Task('mytask', 'git', 'commit', args)
 
         self.assertEqual(task.task_id, 'mytask')
         self.assertEqual(task.status, TaskStatus.NEW)
         self.assertEqual(task.age, 0)
         self.assertListEqual(task.jobs, [])
-        self.assertEqual(task.backend, 'mock_backend')
-        self.assertEqual(task.category, 'category')
+        self.assertEqual(task.backend, 'git')
+        self.assertEqual(task.category, 'commit')
         self.assertDictEqual(task.backend_args, args)
         self.assertEqual(task.archiving_cfg, None)
         self.assertEqual(task.scheduling_cfg, None)
@@ -75,19 +75,43 @@ class TestTask(unittest.TestCase):
         sched = SchedulingTaskConfig(delay=10, max_retries=2,
                                      max_age=5)
 
-        task = Task('mytask', 'mock_backend', 'category', args,
+        task = Task('mytask', 'git', 'commit', args,
                     archiving_cfg=archive, scheduling_cfg=sched)
 
         self.assertEqual(task.task_id, 'mytask')
         self.assertEqual(task.status, TaskStatus.NEW)
         self.assertEqual(task.age, 0)
         self.assertListEqual(task.jobs, [])
-        self.assertEqual(task.backend, 'mock_backend')
-        self.assertEqual(task.category, 'category')
+        self.assertEqual(task.backend, 'git')
+        self.assertEqual(task.category, 'commit')
         self.assertDictEqual(task.backend_args, args)
         self.assertEqual(task.archiving_cfg, archive)
         self.assertEqual(task.scheduling_cfg, sched)
         self.assertEqual(task.created_on, 1483228800.0)
+
+    def test_has_resuming(self):
+        """Test if a task property returns it might be resumed or not"""
+
+        task = Task('git_task', 'git', 'commit', {},
+                    archiving_cfg=None, scheduling_cfg=None)
+        self.assertEqual(task.has_resuming(), True)
+
+        task = Task('gerrit_task', 'gerrit', 'review', {},
+                    archiving_cfg=None, scheduling_cfg=None)
+        self.assertEqual(task.has_resuming(), False)
+
+    def test_backend_not_found(self):
+        """Test if it raises an exception when a backend is not found"""
+
+        archive = ArchivingTaskConfig('/tmp/archive', False,
+                                      archived_after=None)
+        sched = SchedulingTaskConfig(delay=10, max_retries=2,
+                                     max_age=5)
+
+        with self.assertRaises(NotFoundError) as e:
+            _ = Task('mytask', 'mock_backend', 'mock_item', {},
+                     archiving_cfg=archive, scheduling_cfg=sched)
+            self.assertEqual(e.exception.element, 'mock_backend')
 
     def test_to_dict(self):
         """Check whether the object is converted into a dict"""
@@ -96,14 +120,14 @@ class TestTask(unittest.TestCase):
             'from_date': '1970-01-01',
             'component': 'test'
         }
-        category = 'mocked_category'
+        category = 'commit'
         archive = ArchivingTaskConfig('/tmp/archive', False,
                                       archived_after=None)
         sched = SchedulingTaskConfig(delay=10, max_retries=2,
                                      max_age=5, queue='myqueue')
         before = datetime.datetime.now().timestamp()
 
-        task = Task('mytask', 'mock_backend', category, args,
+        task = Task('mytask', 'git', category, args,
                     archiving_cfg=archive, scheduling_cfg=sched)
         task.jobs.append('job-0')
         task.jobs.append('job-1')
@@ -114,8 +138,9 @@ class TestTask(unittest.TestCase):
             'task_id': 'mytask',
             'status': 'NEW',
             'age': 0,
+            'num_failures': 0,
             'jobs': ['job-0', 'job-1'],
-            'backend': 'mock_backend',
+            'backend': 'git',
             'backend_args': args,
             'category': category,
             'archiving_cfg': {
@@ -160,7 +185,7 @@ class TestTaskRegistry(unittest.TestCase):
 
         registry = TaskRegistry()
         before = datetime.datetime.now().timestamp()
-        new_task = registry.add('mytask', 'mock_backend', 'category', args)
+        new_task = registry.add('mytask', 'git', 'commit', args)
 
         tasks = registry.tasks
         self.assertEqual(len(tasks), 1)
@@ -172,15 +197,15 @@ class TestTaskRegistry(unittest.TestCase):
         self.assertEqual(task.status, TaskStatus.NEW)
         self.assertEqual(task.age, 0)
         self.assertListEqual(task.jobs, [])
-        self.assertEqual(task.category, 'category')
-        self.assertEqual(task.backend, 'mock_backend')
+        self.assertEqual(task.category, 'commit')
+        self.assertEqual(task.backend, 'git')
         self.assertDictEqual(task.backend_args, args)
         self.assertEqual(task.archiving_cfg, None)
         self.assertEqual(task.scheduling_cfg, None)
         self.assertGreater(task.created_on, before)
 
         before = datetime.datetime.now().timestamp()
-        _ = registry.add('atask', 'mock_backend', 'category', args,
+        _ = registry.add('atask', 'git', 'commit', args,
                          archiving_cfg=archive, scheduling_cfg=sched)
 
         tasks = registry.tasks
@@ -192,8 +217,8 @@ class TestTaskRegistry(unittest.TestCase):
         self.assertEqual(task0.status, TaskStatus.NEW)
         self.assertEqual(task.age, 0)
         self.assertListEqual(task.jobs, [])
-        self.assertEqual(task0.backend, 'mock_backend')
-        self.assertEqual(task0.category, 'category')
+        self.assertEqual(task0.backend, 'git')
+        self.assertEqual(task0.category, 'commit')
         self.assertDictEqual(task0.backend_args, args)
         self.assertEqual(task0.archiving_cfg, archive)
         self.assertEqual(task0.scheduling_cfg, sched)
@@ -207,10 +232,10 @@ class TestTaskRegistry(unittest.TestCase):
         """Check if it raises an exception when an exisiting task is added again"""
 
         registry = TaskRegistry()
-        registry.add('mytask', 'mock_backend', 'category', {})
+        registry.add('mytask', 'git', 'commit', {})
 
         with self.assertRaises(AlreadyExistsError):
-            registry.add('mytask', 'new_backend', 'category', {})
+            registry.add('mytask', 'new_backend', 'commit', {})
 
         # Only one tasks is on the registry
         tasks = registry.tasks
@@ -218,8 +243,8 @@ class TestTaskRegistry(unittest.TestCase):
 
         task = tasks[0]
         self.assertEqual(task.task_id, 'mytask')
-        self.assertEqual(task.backend, 'mock_backend')
-        self.assertEqual(task.category, 'category')
+        self.assertEqual(task.backend, 'git')
+        self.assertEqual(task.category, 'commit')
         self.assertDictEqual(task.backend_args, {})
 
     def test_remove_task(self):
@@ -231,9 +256,9 @@ class TestTaskRegistry(unittest.TestCase):
         }
 
         registry = TaskRegistry()
-        registry.add('mytask', 'mock_backend', 'mocked_category', args)
-        registry.add('newtask', 'to_remove', 'mocked_category', None)
-        registry.add('atask', 'test_backend', 'mocked_category', None)
+        registry.add('mytask', 'git', 'commit', args)
+        registry.add('newtask', 'bugzilla', 'issue', None)
+        registry.add('atask', 'git', 'commit', None)
 
         tasks = registry.tasks
         self.assertEqual(len(tasks), 3)
@@ -253,7 +278,7 @@ class TestTaskRegistry(unittest.TestCase):
         with self.assertRaises(NotFoundError):
             registry.remove('mytask')
 
-        registry.add('task', 'mock_backend', "mock_category", {})
+        registry.add('task', 'git', "mock_category", {})
 
         with self.assertRaises(NotFoundError):
             registry.remove('mytask')
@@ -269,16 +294,16 @@ class TestTaskRegistry(unittest.TestCase):
         }
 
         registry = TaskRegistry()
-        registry.add('mytask', 'mock_backend', 'category', args)
-        registry.add('newtask', 'to_remove', 'category', None)
-        registry.add('atask', 'test_backend', 'category', None)
+        registry.add('mytask', 'git', 'commit', args)
+        registry.add('newtask', 'bugzilla', 'issue', None)
+        registry.add('atask', 'git', 'commit', None)
 
         task = registry.get('atask')
         self.assertIsInstance(task, Task)
         self.assertEqual(task.task_id, 'atask')
         self.assertEqual(task.status, TaskStatus.NEW)
-        self.assertEqual(task.category, 'category')
-        self.assertEqual(task.backend, 'test_backend')
+        self.assertEqual(task.category, 'commit')
+        self.assertEqual(task.backend, 'git')
         self.assertEqual(task.backend_args, None)
 
     def test_get_task_not_found(self):
@@ -289,7 +314,7 @@ class TestTaskRegistry(unittest.TestCase):
         with self.assertRaises(NotFoundError):
             registry.get('mytask')
 
-        registry.add('newtask', 'mock_backend', 'mocked_category', {})
+        registry.add('newtask', 'git', 'mocked_category', {})
 
         with self.assertRaises(NotFoundError):
             registry.get('mytask')

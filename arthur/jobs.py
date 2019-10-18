@@ -35,7 +35,6 @@ from grimoirelab_toolkit.datetime import (datetime_to_utc,
                                           unixtime_to_datetime)
 
 from ._version import __version__
-from .common import MAX_JOB_RETRIES
 from .errors import NotFoundError
 
 
@@ -253,7 +252,7 @@ class PercevalJob:
 
 
 def execute_perceval_job(backend, backend_args, qitems, task_id, category,
-                         archive_args=None, max_retries=MAX_JOB_RETRIES):
+                         archive_args=None):
     """Execute a Perceval job on RQ.
 
     The items fetched during the process will be stored in a
@@ -261,19 +260,17 @@ def execute_perceval_job(backend, backend_args, qitems, task_id, category,
 
     Setting the parameter `archive_path`, raw data will be stored
     with the archive manager. The contents from the archive can
-    be retrieved setting the pameter `fetch_from_archive` to `True`,
+    be retrieved setting the parameter `fetch_from_archive` to `True`,
     too. Take into account this behaviour will be only available
     when the backend supports the use of the archive. If archiving
     is not supported, an `AttributeError` exception will be raised.
 
     :param backend: backend to execute
-    :param bakend_args: dict of arguments for running the backend
+    :param backend_args: dict of arguments for running the backend
     :param qitems: name of the RQ queue used to store the items
     :param task_id: identifier of the task linked to this job
     :param category: category of the items to retrieve
     :param archive_args: archive arguments
-    :param max_retries: maximum number of attempts this job can execute
-        before failing
 
     :returns: a `JobResult` instance
 
@@ -292,31 +289,17 @@ def execute_perceval_job(backend, backend_args, qitems, task_id, category,
     if not job.has_archiving() and archive_args:
         raise AttributeError("archive attributes set but archive is not supported")
 
-    run_job = True
-    resume = False
-    failures = 0
-
-    while run_job:
-        try:
-            job.run(backend_args, archive_args=archive_args, resume=resume)
-        except AttributeError as e:
-            raise e
-        except Exception as e:
-            logger.debug("Error running job %s (%s) - %s",
-                         job.job_id, backend, str(e))
-            failures += 1
-
-            if not job.has_resuming() or failures >= max_retries:
-                logger.error("Cancelling job #%s (task: %s) (%s)",
-                             job.job_id, task_id, backend)
-                raise e
-
-            logger.warning("Resuming job #%s (task: %s) (%s) due to a failure (n %s, max %s)",
-                           job.job_id, task_id, backend, failures, max_retries)
-            resume = True
-        else:
-            # No failure, do not retry
-            run_job = False
+    try:
+        job.run(backend_args, archive_args=archive_args, resume=False)
+    except AttributeError as e:
+        raise e
+    except Exception as e:
+        rq_job = rq.get_current_job()
+        rq_job.meta['result'] = job.result
+        rq_job.save_meta()
+        logger.debug("Error running job %s (%s) - %s",
+                     job.job_id, backend, str(e))
+        raise e
 
     result = job.result
 

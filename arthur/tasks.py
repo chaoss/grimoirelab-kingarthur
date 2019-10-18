@@ -31,6 +31,8 @@ from grimoirelab_toolkit.datetime import (InvalidDateError,
                                           str_to_datetime)
 from grimoirelab_toolkit.introspect import find_class_properties
 
+import perceval.backend
+import perceval.backends
 
 from .common import MAX_JOB_RETRIES, WAIT_FOR_QUEUING
 from .errors import AlreadyExistsError, NotFoundError
@@ -85,16 +87,26 @@ class Task:
 
     :param task_id: identifier of this task
     :param backend: backend used to fetch data from the repository
-    :param category: category of the items to fecth
+    :param category: category of the items to fetch
     :param backend_args: dict of arguments required to run the backend
     :param archiving_cfg: archiving config for this task, if needed
     :param scheduling_cfg: scheduling config for this task, if needed
+
+    :raises NotFoundError: when the given backend is not available
     """
     def __init__(self, task_id, backend, category, backend_args,
                  archiving_cfg=None, scheduling_cfg=None):
+        try:
+            bklass = perceval.backend.find_backends(perceval.backends)[0][backend]
+        except KeyError:
+            raise NotFoundError(element=backend)
+
         self._task_id = task_id
+        self._has_resuming = bklass.has_resuming()
+
         self.status = TaskStatus.NEW
         self.age = 0
+        self.num_failures = 0
         self.jobs = []
         self.created_on = datetime_utcnow().timestamp()
         self.backend = backend
@@ -107,11 +119,17 @@ class Task:
     def task_id(self):
         return self._task_id
 
+    def has_resuming(self):
+        """Returns if the task can be resumed when it fails"""
+
+        return self._has_resuming
+
     def to_dict(self):
         return {
             'task_id': self.task_id,
             'status': self.status.name,
             'age': self.age,
+            'num_failures': self.num_failures,
             'jobs': self.jobs,
             'created_on': self.created_on,
             'backend': self.backend,

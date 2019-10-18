@@ -80,8 +80,8 @@ class TestArthur(unittest.TestCase):
         """Check when a task has no archive params"""
 
         task_id = "arthur.task"
-        backend = "backend"
-        category = "mock_category"
+        backend = "git"
+        category = "commit"
         backend_params = {"a": "a", "b": "b"}
 
         app = Arthur(self.conn, async_mode=False)
@@ -105,8 +105,8 @@ class TestArthur(unittest.TestCase):
         """Check when a task has an empty archive"""
 
         task_id = "arthur.task"
-        backend = "backend"
-        category = "mock_category"
+        backend = "git"
+        category = "commit"
         backend_params = {"a": "a", "b": "b"}
         archive_params = None
 
@@ -131,7 +131,7 @@ class TestArthur(unittest.TestCase):
         """Check whether an exception is thrown when an unknown parameter is in the archive params"""
 
         task_id = "arthur.task"
-        backend = "backend"
+        backend = "git"
         category = None
         backend_params = {"a": "a", "b": "b"}
         archive_params = {"unknown": 1, "fetch_from_archive": True, "archived_after": "2010-10-10"}
@@ -145,8 +145,8 @@ class TestArthur(unittest.TestCase):
         """Check whether a default archive path is added when not defined in the archive params"""
 
         task_id = "arthur.task"
-        backend = "backend"
-        category = "mock_category"
+        backend = "git"
+        category = "commit"
         backend_params = {"a": "a", "b": "b"}
         archive_params = {
             'fetch_from_archive': True,
@@ -169,7 +169,7 @@ class TestArthur(unittest.TestCase):
         """Check whether an exception is thrown when fetch_from_archive parameter is not properly set"""
 
         task_id = "arthur.task"
-        backend = "backend"
+        backend = "git"
         category = None
         backend_params = {"a": "a", "b": "b"}
         archive_params = {"fetch_from_archive": 100, "archived_after": "2010-10-10"}
@@ -187,7 +187,7 @@ class TestArthur(unittest.TestCase):
         """Check whether the archived_after parameter is not set when fetch_from_archive is false"""
 
         task_id = "arthur.task"
-        backend = "backend"
+        backend = "git"
         category = None
         backend_params = {"a": "a", "b": "b"}
         archive_params = {"fetch_from_archive": False, "archived_after": "X"}
@@ -204,7 +204,7 @@ class TestArthur(unittest.TestCase):
         """Check whether an exception is thrown when archived_after parameter is not properly set"""
 
         task_id = "arthur.task"
-        backend = "backend"
+        backend = "git"
         category = None
         backend_params = {"a": "a", "b": "b"}
         archive_params = {"fetch_from_archive": True, "archived_after": "X"}
@@ -218,7 +218,7 @@ class TestArthur(unittest.TestCase):
         """Check whether tasks are added"""
 
         task_id = "arthur.task"
-        backend = "backend"
+        backend = "git"
         category = 'acme-product'
         backend_params = {"a": "a", "b": "b"}
         archive_args = {
@@ -263,7 +263,7 @@ class TestArthur(unittest.TestCase):
         """Check whether an exception is thrown when an unknown parameter is in the sched params"""
 
         task_id = "arthur.task"
-        backend = "backend"
+        backend = "git"
         category = None
         backend_params = {"a": "a", "b": "b"}
         sched_params = {
@@ -281,7 +281,7 @@ class TestArthur(unittest.TestCase):
         """Check whether an exception is thrown when delay parameter is not properly set"""
 
         task_id = "arthur.task"
-        backend = "backend"
+        backend = "git"
         category = None
         backend_params = {"a": "a", "b": "b"}
         sched_params = {"delay": "1", "max_retries": 10}
@@ -295,7 +295,7 @@ class TestArthur(unittest.TestCase):
         """Check whether an exception is thrown when max_retries parameter is not properly set"""
 
         task_id = "arthur.task"
-        backend = "backend"
+        backend = "git"
         category = None
         backend_params = {"a": "a", "b": "b"}
         sched_params = {"delay": 1, "max_retries": "c"}
@@ -310,7 +310,7 @@ class TestArthur(unittest.TestCase):
 
         app = Arthur(self.conn, async_mode=False)
 
-        app.add_task("arthur.task", "backend", "category", {"a": "a", "b": "b"})
+        app.add_task("arthur.task", "git", "commit", {"a": "a", "b": "b"})
 
         with self.assertRaises(AlreadyExistsError):
             app.add_task("arthur.task", "backend", "category", {"a": "a", "b": "b"})
@@ -319,8 +319,8 @@ class TestArthur(unittest.TestCase):
         """Check whether an exception is thrown when the task id is missing"""
 
         task_id = None
-        backend = "backend"
-        category = "mock_category"
+        backend = "git"
+        category = "commit"
         backend_params = {"a": "a", "b": "b"}
 
         app = Arthur(self.conn, async_mode=False)
@@ -337,7 +337,7 @@ class TestArthur(unittest.TestCase):
 
         task_id = "arthur.task"
         backend = None
-        category = "mock_category"
+        category = "commit"
         backend_params = {"a": "a", "b": "b"}
 
         app = Arthur(self.conn, async_mode=False)
@@ -353,7 +353,7 @@ class TestArthur(unittest.TestCase):
         """Check whether an exception is thrown when the backend category is missing"""
 
         task_id = "arthur.task"
-        backend = "backend"
+        backend = "git"
         category = None
         backend_params = {"a": "a", "b": "b"}
 
@@ -370,8 +370,8 @@ class TestArthur(unittest.TestCase):
         """Check whether an exception is thrown when the backend args is not a dict"""
 
         task_id = "arthur.task"
-        backend = "backend"
-        category = "mock_item"
+        backend = "git"
+        category = "commit"
         backend_params = "wrong_params"
 
         app = Arthur(self.conn, async_mode=False)
@@ -385,8 +385,8 @@ class TestArthur(unittest.TestCase):
         task_1 = "arthur.task-1"
         task_2 = "arthur.task-2"
 
-        task_params = {"backend": "backend",
-                       "category": "category",
+        task_params = {"backend": "git",
+                       "category": "commit",
                        "backend_params": {"a": "a", "b": "b"}}
 
         app = Arthur(self.conn, async_mode=False)

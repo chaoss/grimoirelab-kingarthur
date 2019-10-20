@@ -31,13 +31,13 @@ import unittest
 import httpretty
 import requests
 import rq
+from dateutil.tz import UTC
 
 from arthur import __version__
 from arthur.errors import NotFoundError
 from arthur.jobs import (JobResult,
                          PercevalJob,
-                         execute_perceval_job,
-                         metadata)
+                         execute_perceval_job)
 from grimoirelab_toolkit.datetime import datetime_utcnow
 from perceval.archive import ArchiveManager
 
@@ -198,74 +198,28 @@ def setup_mock_redmine_server(max_failures=0):
     return http_requests
 
 
-class MockJob:
-    """Mock job class for testing purposes"""
-
-    def __init__(self, job_id):
-        self.job_id = job_id
-
-    @metadata
-    def execute(self):
-        for x in range(5):
-            item = {'item': x}
-            yield item
-
-
-class TestMetadata(unittest.TestCase):
-    """Unit tests for metadata decorator"""
-
-    def test_decorator(self):
-        """Check if the decorator works"""
-
-        job = MockJob(8)
-
-        items = [item for item in job.execute()]
-
-        for x in range(5):
-            item = items[x]
-
-            self.assertEqual(item['arthur_version'], __version__)
-            self.assertEqual(item['job_id'], 8)
-            self.assertEqual(item['item'], x)
-
-
 class TestJobResult(unittest.TestCase):
     """Unit tests for JobResult class"""
 
     def test_job_result_init(self):
-        result = JobResult('arthur-job-1234567890', 'mytask', 'mock_backend', 'category',
-                           'ABCDEFGHIJK', 1344965413.0, 58)
+        result = JobResult('arthur-job-1234567890', 'mytask',
+                           'mock_backend', 'category')
 
         self.assertEqual(result.job_id, 'arthur-job-1234567890')
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'mock_backend')
         self.assertEqual(result.category, 'category')
-        self.assertEqual(result.last_uuid, 'ABCDEFGHIJK')
-        self.assertEqual(result.max_date, 1344965413.0)
-        self.assertEqual(result.nitems, 58)
-        self.assertEqual(result.offset, None)
-        self.assertEqual(result.nresumed, 0)
-
-        result = JobResult('arthur-job-1234567890', 'mytask', 'mock_backend', 'category',
-                           'ABCDEFGHIJK', 1344965413.0, 58,
-                           offset=128, nresumed=10)
-
-        self.assertEqual(result.offset, 128)
-        self.assertEqual(result.nresumed, 10)
+        self.assertEqual(result.summary, None)
 
     def test_to_dict(self):
         """Test whether a JobResult object is converted to a dict"""
 
-        result = JobResult('arthur-job-1234567890', 'mytask', 'mock_backend', 'category',
-                           'ABCDEFGHIJK', 1344965413.0, 58)
+        result = JobResult('arthur-job-1234567890', 'mytask',
+                           'mock_backend', 'category')
 
         expected = {
             'job_id': 'arthur-job-1234567890',
-            'task_id': 'mytask',
-            'last_uuid': 'ABCDEFGHIJK',
-            'max_date': 1344965413.0,
-            'nitems': 58,
-            'offset': None,
+            'task_id': 'mytask'
         }
 
         d = result.to_dict()
@@ -303,11 +257,7 @@ class TestPercevalJob(TestBaseRQ):
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'git')
         self.assertEqual(job.category, 'commit')
-        self.assertEqual(result.last_uuid, None)
-        self.assertEqual(result.max_date, None)
-        self.assertEqual(result.nitems, 0)
-        self.assertEqual(result.offset, None)
-        self.assertEqual(result.nresumed, 0)
+        self.assertEqual(result.summary, None)
 
     def test_backend_not_found(self):
         """Test if it raises an exception when a backend is not found"""
@@ -340,11 +290,13 @@ class TestPercevalJob(TestBaseRQ):
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'git')
         self.assertEqual(result.category, 'commit')
-        self.assertEqual(result.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
-        self.assertEqual(result.max_date, 1392185439.0)
-        self.assertEqual(result.nitems, 9)
-        self.assertEqual(result.offset, None)
-        self.assertEqual(result.nresumed, 0)
+        self.assertEqual(result.summary.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
+        self.assertEqual(result.summary.max_updated_on,
+                         datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC))
+        self.assertEqual(result.summary.last_updated_on,
+                         datetime.datetime(2012, 8, 14, 17, 30, 13, tzinfo=UTC))
+        self.assertEqual(result.summary.fetched, 9)
+        self.assertEqual(result.summary.last_offset, None)
 
         commits = self.conn.lrange('items', 0, -1)
         commits = [pickle.loads(c) for c in commits]
@@ -361,6 +313,29 @@ class TestPercevalJob(TestBaseRQ):
                     'bc57a9209f096a130dcc5ba7089a8663f758a703']
 
         self.assertEqual(commits, expected)
+
+    def test_metadata(self):
+        """Check if metadata parameters are correctly set"""
+
+        job = PercevalJob('arthur-job-1234567890', 'mytask', 'git', 'commit',
+                          self.conn, 'items')
+        args = {
+            'uri': 'http://example.com/',
+            'gitpath': os.path.join(self.dir, 'data/git_log.txt')
+        }
+        archive_args = {
+            'archive_path': self.tmp_path,
+            'fetch_from_archive': False
+        }
+
+        job.run(args, archive_args)
+
+        items = self.conn.lrange('items', 0, -1)
+        items = [pickle.loads(item) for item in items]
+
+        for item in items:
+            self.assertEqual(item['arthur_version'], __version__)
+            self.assertEqual(item['job_id'], 'arthur-job-1234567890')
 
     def test_run_not_found_parameters(self):
         """Check if it fails when a required backend parameter is not found"""
@@ -419,11 +394,13 @@ class TestPercevalJob(TestBaseRQ):
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'bugzilla')
         self.assertEqual(result.category, 'issue')
-        self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
-        self.assertEqual(result.max_date, 1439404330.0)
-        self.assertEqual(result.nitems, 7)
-        self.assertEqual(result.offset, None)
-        self.assertEqual(result.nresumed, 0)
+        self.assertEqual(result.summary.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
+        self.assertEqual(result.summary.max_updated_on,
+                         datetime.datetime(2011, 12, 8, 17, 58, 37, tzinfo=UTC))
+        self.assertEqual(result.summary.last_updated_on,
+                         datetime.datetime(2011, 12, 8, 17, 58, 37, tzinfo=UTC))
+        self.assertEqual(result.summary.total, 7)
+        self.assertEqual(result.summary.offset, None)
 
         self.assertEqual(len(http_requests), 13)
         self.assertListEqual(bugs, expected)
@@ -448,74 +425,16 @@ class TestPercevalJob(TestBaseRQ):
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'bugzilla')
         self.assertEqual(result.category, 'issue')
-        self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
-        self.assertEqual(result.max_date, 1439404330.0)
-        self.assertEqual(result.nitems, 7)
-        self.assertEqual(result.offset, None)
-        self.assertEqual(result.nresumed, 0)
-
+        self.assertEqual(result.summary.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
+        self.assertEqual(result.summary.max_updated_on,
+                         datetime.datetime(2011, 12, 8, 17, 58, 37, tzinfo=UTC))
+        self.assertEqual(result.summary.last_updated_on,
+                         datetime.datetime(2011, 12, 8, 17, 58, 37, tzinfo=UTC))
+        self.assertEqual(result.summary.total, 7)
+        self.assertEqual(result.summary.offset, None)
         self.assertEqual(len(http_requests), 13)
 
         self.assertListEqual(archived_bugs, bugs)
-
-    @httpretty.activate
-    def test_resuming(self):
-        """Test if it resumes when a failure is reached"""
-
-        http_requests = setup_mock_redmine_server(max_failures=1)
-
-        args = {
-            'url': REDMINE_URL,
-            'api_token': 'AAAA',
-            'max_issues': 3
-        }
-
-        job = PercevalJob('arthur-job-1234567890', 'mytask', 'redmine', 'issue',
-                          self.conn, 'items')
-
-        with self.assertRaises(requests.exceptions.HTTPError):
-            job.run(args)
-
-        result = job.result
-        self.assertEqual(result.job_id, 'arthur-job-1234567890')
-        self.assertEqual(result.task_id, 'mytask')
-        self.assertEqual(result.backend, 'redmine')
-        self.assertEqual(result.category, 'issue')
-        self.assertEqual(result.last_uuid, '3c3d67925b108a37f88cc6663f7f7dd493fa818c')
-        self.assertEqual(result.max_date, 1323367117.0)
-        self.assertEqual(result.nitems, 3)
-        self.assertEqual(result.offset, None)
-        self.assertEqual(result.nresumed, 0)
-
-        issues = self.conn.lrange('items', 0, -1)
-        issues = [pickle.loads(i) for i in issues]
-        issues = [i['uuid'] for i in issues]
-        self.conn.ltrim('items', 1, 0)
-
-        expected = ['91a8349c2f6ebffcccc49409529c61cfd3825563',
-                    'c4aeb9e77fec8e4679caa23d4012e7cc36ae8b98',
-                    '3c3d67925b108a37f88cc6663f7f7dd493fa818c']
-        self.assertEqual(issues, expected)
-
-        job.run(args, resume=True)
-
-        result = job.result
-        self.assertEqual(result.job_id, 'arthur-job-1234567890')
-        self.assertEqual(result.task_id, 'mytask')
-        self.assertEqual(result.backend, 'redmine')
-        self.assertEqual(result.last_uuid, '4ab289ab60aee93a66e5490529799cf4a2b4d94c')
-        self.assertEqual(result.max_date, 1469607427.0)
-        self.assertEqual(result.nitems, 4)
-        self.assertEqual(result.offset, None)
-        self.assertEqual(result.nresumed, 1)
-
-        issues = self.conn.lrange('items', 0, -1)
-        issues = [pickle.loads(i) for i in issues]
-        issues = [i['uuid'] for i in issues]
-        self.conn.ltrim('items', 1, 0)
-
-        expected = ['4ab289ab60aee93a66e5490529799cf4a2b4d94c']
-        self.assertEqual(issues, expected)
 
     def test_initialize_archive_manager(self):
         """Test if the archive is initialized"""
@@ -570,11 +489,13 @@ class TestExecuteJob(TestBaseRQ):
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'git')
         self.assertEqual(result.category, 'commit')
-        self.assertEqual(result.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
-        self.assertEqual(result.max_date, 1392185439.0)
-        self.assertEqual(result.nitems, 9)
-        self.assertEqual(result.offset, None)
-        self.assertEqual(result.nresumed, 0)
+        self.assertEqual(result.summary.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
+        self.assertEqual(result.summary.max_updated_on,
+                         datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC))
+        self.assertEqual(result.summary.last_updated_on,
+                         datetime.datetime(2012, 8, 14, 17, 30, 13, tzinfo=UTC))
+        self.assertEqual(result.summary.total, 9)
+        self.assertEqual(result.summary.max_offset, None)
 
         commits = self.conn.lrange('items', 0, -1)
         commits = [pickle.loads(c) for c in commits]
@@ -624,11 +545,13 @@ class TestExecuteJob(TestBaseRQ):
         self.assertEqual(result.job_id, job.get_id())
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'redmine')
-        self.assertEqual(result.last_uuid, '3c3d67925b108a37f88cc6663f7f7dd493fa818c')
-        self.assertEqual(result.max_date, 1323367117.0)
-        self.assertEqual(result.nitems, 3)
-        self.assertEqual(result.offset, None)
-        self.assertEqual(result.nresumed, 0)
+        self.assertEqual(result.summary.last_uuid, '3c3d67925b108a37f88cc6663f7f7dd493fa818c')
+        self.assertEqual(result.summary.max_updated_on,
+                         datetime.datetime(2011, 12, 8, 17, 58, 37, tzinfo=UTC))
+        self.assertEqual(result.summary.last_updated_on,
+                         datetime.datetime(2011, 12, 8, 17, 58, 37, tzinfo=UTC))
+        self.assertEqual(result.summary.total, 3)
+        self.assertEqual(result.summary.max_offset, None)
 
         issues = self.conn.lrange('items', 0, -1)
         issues = [pickle.loads(i) for i in issues]
@@ -665,11 +588,11 @@ class TestExecuteJob(TestBaseRQ):
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'git')
         self.assertEqual(result.category, 'commit')
-        self.assertEqual(result.last_uuid, None)
-        self.assertEqual(result.max_date, 1577840461.0)
-        self.assertEqual(result.nitems, 0)
-        self.assertEqual(result.offset, None)
-        self.assertEqual(result.nresumed, 0)
+        self.assertEqual(result.summary.last_uuid, None)
+        self.assertEqual(result.summary.max_updated_on, None)
+        self.assertEqual(result.summary.last_updated_on, None)
+        self.assertEqual(result.summary.total, 0)
+        self.assertEqual(result.summary.max_offset, None)
 
         commits = self.conn.lrange('items', 0, -1)
         commits = [pickle.loads(c) for c in commits]
@@ -718,10 +641,12 @@ class TestExecuteJob(TestBaseRQ):
         self.assertEqual(result.job_id, job.get_id())
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'bugzilla')
-        self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
-        self.assertEqual(result.max_date, 1439404330.0)
-        self.assertEqual(result.nitems, 7)
-        self.assertEqual(result.nresumed, 0)
+        self.assertEqual(result.summary.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
+        self.assertEqual(result.summary.max_updated_on,
+                         datetime.datetime(2015, 8, 12, 18, 32, 10, tzinfo=UTC))
+        self.assertEqual(result.summary.last_updated_on,
+                         datetime.datetime(2015, 8, 12, 18, 32, 10, tzinfo=UTC))
+        self.assertEqual(result.summary.total, 7)
 
         self.assertEqual(len(http_requests), 13)
         self.assertListEqual(bugs, expected)
@@ -745,10 +670,12 @@ class TestExecuteJob(TestBaseRQ):
         self.assertEqual(result.job_id, job.get_id())
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'bugzilla')
-        self.assertEqual(result.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
-        self.assertEqual(result.max_date, 1439404330.0)
-        self.assertEqual(result.nitems, 7)
-        self.assertEqual(result.nresumed, 0)
+        self.assertEqual(result.summary.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
+        self.assertEqual(result.summary.max_updated_on,
+                         datetime.datetime(2015, 8, 12, 18, 32, 10, tzinfo=UTC))
+        self.assertEqual(result.summary.last_updated_on,
+                         datetime.datetime(2015, 8, 12, 18, 32, 10, tzinfo=UTC))
+        self.assertEqual(result.summary.total, 7)
 
         self.assertEqual(len(http_requests), 13)
 

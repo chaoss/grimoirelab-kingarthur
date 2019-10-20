@@ -31,8 +31,6 @@ import uuid
 import rq
 import rq.job
 
-from grimoirelab_toolkit.datetime import unixtime_to_datetime
-
 from .common import (CH_PUBSUB,
                      Q_ARCHIVE_JOBS,
                      Q_CREATION_JOBS,
@@ -337,11 +335,11 @@ class CompletedJobHandler:
                             job_id, task_id)
                 return True
 
-        if result.nitems > 0:
-            task.backend_args['next_from_date'] = unixtime_to_datetime(result.max_date)
+        if result.summary.fetched > 0:
+            task.backend_args['next_from_date'] = result.summary.max_updated_on
 
-            if result.offset:
-                task.backend_args['next_offset'] = result.offset
+            if result.summary.max_offset:
+                task.backend_args['next_offset'] = result.summary.max_offset
 
         delay = task.scheduling_cfg.delay if task.scheduling_cfg else WAIT_FOR_QUEUING
 
@@ -408,11 +406,11 @@ class FailedJobHandler:
             logger.error("Job #%s (task: %s) failed but will be resumed",
                          job_id, task_id)
 
-            if result.nitems > 0:
-                task.backend_args['next_from_date'] = unixtime_to_datetime(result.max_date)
+            if result.summary.fetched > 0:
+                task.backend_args['next_from_date'] = result.summary.max_updated_on
 
-                if result.offset:
-                    task.backend_args['next_offset'] = result.offset
+                if result.summary.max_offset:
+                    task.backend_args['next_offset'] = result.summary.max_offset
 
             delay = task.scheduling_cfg.delay if task.scheduling_cfg else WAIT_FOR_QUEUING
 

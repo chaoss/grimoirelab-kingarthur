@@ -275,10 +275,16 @@ class TestArthurServer(TestBaseRQ):
             # TODO: mock job ids generator
             expected_job_result = {
                 'task_id': 'arthur.git',
+                'fetched': 9,
+                'skipped': 0,
+                'min_updated_on': 1344965413.0,
+                'max_updated_on': 1392185439.0,
+                'last_updated_on': 1344965413.0,
                 'last_uuid': '1375b60d3c23ac9b81da92523e4144abc4489d4c',
-                'max_date': 1392185439.0,
-                'nitems': 9,
-                'offset': None,
+                'min_offset': None,
+                'max_offset': None,
+                'last_offset': None,
+                'extras': None
             }
 
             job_result = job['result']

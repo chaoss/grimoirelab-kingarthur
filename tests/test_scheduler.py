@@ -26,6 +26,8 @@ import unittest
 
 from dateutil.tz import UTC
 
+from perceval.backend import Summary
+
 from arthur.common import Q_CREATION_JOBS
 from arthur.errors import NotFoundError
 from arthur.events import JobEventType, JobEvent
@@ -75,9 +77,10 @@ class TestScheduler(TestBaseRQ):
         result = job.return_value
 
         self.assertEqual(result.task_id, task.task_id)
-        self.assertEqual(result.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
-        self.assertEqual(result.max_date, 1392185439.0)
-        self.assertEqual(result.nitems, 9)
+        self.assertEqual(result.summary.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
+        self.assertEqual(result.summary.max_updated_on,
+                         datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC))
+        self.assertEqual(result.summary.total, 9)
 
     def test_schedule_task_user_queue(self):
         """Task should be added and executed in the user's queue"""
@@ -109,9 +112,10 @@ class TestScheduler(TestBaseRQ):
         result = job.return_value
 
         self.assertEqual(result.task_id, task.task_id)
-        self.assertEqual(result.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
-        self.assertEqual(result.max_date, 1392185439.0)
-        self.assertEqual(result.nitems, 9)
+        self.assertEqual(result.summary.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
+        self.assertEqual(result.summary.max_updated_on,
+                         datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC))
+        self.assertEqual(result.summary.total, 9)
 
     def test_not_found_task(self):
         """Raises an error when the task to schedule does not exist"""
@@ -207,8 +211,15 @@ class TestCompletedJobHandler(TestBaseRQ):
         handler = CompletedJobHandler(self.task_scheduler)
 
         task = self.registry.add('mytask', 'git', 'commit', {})
-        result = JobResult(0, 'mytask', 'git', 'commit',
-                           'FFFFFFFF', 1392185439.0, 9)
+
+        result = JobResult(0, 'mytask', 'git', 'commit')
+
+        summary = Summary()
+        summary.fetched = 10
+        summary.last_updated_on = datetime.datetime(2010, 1, 1, 1, 0, 0, tzinfo=UTC)
+        summary.max_updated_on = datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC)
+        result.summary = summary
+
         event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
 
         handled = handler(event)
@@ -226,8 +237,14 @@ class TestCompletedJobHandler(TestBaseRQ):
         # Force the age to be lower than its limit
         task.age = 2
 
-        result = JobResult(0, 'mytask', 'git', 'commit',
-                           'FFFFFFFF', 1392185439.0, 9)
+        result = JobResult(0, 'mytask', 'git', 'commit')
+
+        summary = Summary()
+        summary.fetched = 10
+        summary.last_updated_on = datetime.datetime(2010, 1, 1, 1, 0, 0, tzinfo=UTC)
+        summary.max_updated_on = datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC)
+        result.summary = summary
+
         event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
 
         handled = handler(event)
@@ -245,8 +262,14 @@ class TestCompletedJobHandler(TestBaseRQ):
         # Force the age to be large value
         task.age = 1000000
 
-        result = JobResult(0, 'mytask', 'git', 'commit',
-                           'FFFFFFFF', 1392185439.0, 9)
+        result = JobResult(0, 'mytask', 'git', 'commit')
+
+        summary = Summary()
+        summary.fetched = 10
+        summary.last_updated_on = datetime.datetime(2010, 1, 1, 1, 0, 0, tzinfo=UTC)
+        summary.max_updated_on = datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC)
+        result.summary = summary
+
         event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
 
         handled = handler(event)
@@ -264,8 +287,14 @@ class TestCompletedJobHandler(TestBaseRQ):
         # Force the age to its pre-defined limit
         task.age = 3
 
-        result = JobResult(0, 'mytask', 'git', 'commit',
-                           'FFFFFFFF', 1392185439.0, 9)
+        result = JobResult(0, 'mytask', 'git', 'commit')
+
+        summary = Summary()
+        summary.fetched = 10
+        summary.last_updated_on = datetime.datetime(2010, 1, 1, 1, 0, 0, tzinfo=UTC)
+        summary.max_updated_on = datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC)
+        result.summary = summary
+
         event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
 
         handled = handler(event)
@@ -280,8 +309,15 @@ class TestCompletedJobHandler(TestBaseRQ):
         archiving_cfg = ArchivingTaskConfig('/tmp/archive', True)
         task = self.registry.add('mytask', 'git', 'commit', {},
                                  archiving_cfg=archiving_cfg)
-        result = JobResult(0, 'mytask', 'git', 'commit',
-                           'FFFFFFFF', 1392185439.0, 9)
+
+        result = JobResult(0, 'mytask', 'git', 'commit')
+
+        summary = Summary()
+        summary.fetched = 10
+        summary.last_updated_on = datetime.datetime(2010, 1, 1, 1, 0, 0, tzinfo=UTC)
+        summary.max_updated_on = datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC)
+        result.summary = summary
+
         event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
 
         handled = handler(event)
@@ -294,15 +330,21 @@ class TestCompletedJobHandler(TestBaseRQ):
         handler = CompletedJobHandler(self.task_scheduler)
 
         task = self.registry.add('mytask', 'git', 'commit', {})
-        result = JobResult(0, 'mytask', 'git', 'commit',
-                           'FFFFFFFF', 1392185439.0, 9)
+        result = JobResult(0, 'mytask', 'git', 'commit')
+
+        summary = Summary()
+        summary.fetched = 10
+        summary.last_updated_on = datetime.datetime(2010, 1, 1, 1, 0, 0, tzinfo=UTC)
+        summary.max_updated_on = datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC)
+        result.summary = summary
+
         event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
 
         handled = handler(event)
         self.assertEqual(handled, True)
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
 
-        # The field is updated to the last date received
+        # The field is updated to the max date received
         # within the result
         self.assertEqual(task.backend_args['next_from_date'],
                          datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC))
@@ -313,20 +355,51 @@ class TestCompletedJobHandler(TestBaseRQ):
         handler = CompletedJobHandler(self.task_scheduler)
 
         task = self.registry.add('mytask', 'git', 'commit', {})
-        result = JobResult(0, 'mytask', 'git', 'commit',
-                           'FFFFFFFF', 1392185439.0, 9,
-                           offset=1000)
+        result = JobResult(0, 'mytask', 'git', 'commit')
+
+        summary = Summary()
+        summary.fetched = 10
+        summary.last_updated_on = datetime.datetime(2010, 1, 1, 1, 0, 0, tzinfo=UTC)
+        summary.max_updated_on = datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC)
+        summary.last_offset = 800
+        summary.max_offset = 1000
+        result.summary = summary
+
         event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
 
         handled = handler(event)
         self.assertEqual(handled, True)
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
 
-        # Both fields are updated to the last value received
+        # Both fields are updated to the max value received
         # within the result
         self.assertEqual(task.backend_args['next_from_date'],
                          datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC))
         self.assertEqual(task.backend_args['next_offset'], 1000)
+
+    def test_task_rescheduled_no_new_items(self):
+        """Check if tasks are rescheduled when no items where generated before"""
+
+        handler = CompletedJobHandler(self.task_scheduler)
+
+        task = self.registry.add('mytask', 'git', 'commit', {})
+        result = JobResult(0, 'mytask', 'git', 'commit')
+
+        summary = Summary()
+        summary.fetched = 0
+        summary.max_updated_on = None
+        summary.max_offset = None
+        result.summary = summary
+
+        event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
+
+        handled = handler(event)
+        self.assertEqual(handled, True)
+        self.assertEqual(task.status, TaskStatus.SCHEDULED)
+
+        # Both fields are not updated
+        self.assertNotIn('next_from_date', task.backend_args)
+        self.assertNotIn('next_offset', task.backend_args)
 
     def test_task_reset_num_failures(self):
         """Check if the number of failures is reset if the task is successful"""
@@ -338,8 +411,14 @@ class TestCompletedJobHandler(TestBaseRQ):
         # Force to a pre-defined number of failures
         task.num_failures = 2
 
-        result = JobResult(0, 'mytask', 'git', 'commit',
-                           'FFFFFFFF', 1392185439.0, 9)
+        result = JobResult(0, 'mytask', 'git', 'commit')
+
+        summary = Summary()
+        summary.fetched = 10
+        summary.last_updated_on = datetime.datetime(2010, 1, 1, 1, 0, 0, tzinfo=UTC)
+        summary.max_updated_on = datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC)
+        result.summary = summary
+
         event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
 
         handled = handler(event)
@@ -352,8 +431,7 @@ class TestCompletedJobHandler(TestBaseRQ):
 
         handler = CompletedJobHandler(self.task_scheduler)
 
-        result = JobResult(0, 'mytask', 'git', 'commit',
-                           'FFFFFFFF', 1392185439.0, 9)
+        result = JobResult(0, 'mytask', 'git', 'commit')
         event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
 
         handled = handler(event)
@@ -381,8 +459,14 @@ class TestFailedJobHandler(TestBaseRQ):
 
         task = self.registry.add('mytask', 'git', 'commit', {})
 
-        result = JobResult(0, 'mytask', 'git', 'commit',
-                           'FFFFFFFF', 1392185439.0, 9)
+        result = JobResult(0, 'mytask', 'git', 'commit')
+
+        summary = Summary()
+        summary.fetched = 2
+        summary.last_updated_on = datetime.datetime(2010, 1, 1, 1, 0, 0, tzinfo=UTC)
+        summary.max_updated_on = datetime.datetime(2010, 1, 1, 1, 0, 0, tzinfo=UTC)
+        result.summary = summary
+
         payload = {
             'error': "Error",
             'result': result
@@ -403,8 +487,14 @@ class TestFailedJobHandler(TestBaseRQ):
         task = self.registry.add('mytask', 'gerrit', 'review', {},
                                  scheduling_cfg=scheduler_opts)
 
-        result = JobResult(0, 'mytask', 'gerrit', 'review',
-                           'FFFFFFFF', 1392185439.0, 9)
+        result = JobResult(0, 'mytask', 'gerrit', 'review')
+
+        summary = Summary()
+        summary.fetched = 2
+        summary.last_updated_on = datetime.datetime(2010, 1, 1, 1, 0, 0, tzinfo=UTC)
+        summary.max_updated_on = datetime.datetime(2010, 1, 1, 1, 0, 0, tzinfo=UTC)
+        result.summary = summary
+
         payload = {
             'error': "Error",
             'result': result
@@ -428,8 +518,14 @@ class TestFailedJobHandler(TestBaseRQ):
         # Force to a pre-defined number of failures
         task.num_failures = 2
 
-        result = JobResult(0, 'mytask', 'git', 'commit',
-                           'FFFFFFFF', 1392185439.0, 9)
+        result = JobResult(0, 'mytask', 'git', 'commit')
+
+        summary = Summary()
+        summary.fetched = 2
+        summary.last_updated_on = datetime.datetime(2010, 1, 1, 1, 0, 0, tzinfo=UTC)
+        summary.max_updated_on = datetime.datetime(2010, 1, 1, 1, 0, 0, tzinfo=UTC)
+        result.summary = summary
+
         payload = {
             'error': "Error",
             'result': result
@@ -450,8 +546,14 @@ class TestFailedJobHandler(TestBaseRQ):
         task = self.registry.add('mytask', 'git', 'commit', {},
                                  scheduling_cfg=scheduler_opts)
 
-        result = JobResult(0, 'mytask', 'git', 'commit',
-                           'FFFFFFFF', 1392185439.0, 9)
+        result = JobResult(0, 'mytask', 'git', 'commit')
+
+        summary = Summary()
+        summary.fetched = 2
+        summary.last_updated_on = datetime.datetime(2010, 1, 1, 1, 0, 0, tzinfo=UTC)
+        summary.max_updated_on = datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC)
+        result.summary = summary
+
         payload = {
             'error': "Error",
             'result': result
@@ -462,7 +564,7 @@ class TestFailedJobHandler(TestBaseRQ):
         self.assertEqual(handled, True)
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
 
-        # The field is updated to the last date received
+        # The field is updated to the max date received
         # within the result
         self.assertEqual(task.backend_args['next_from_date'],
                          datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC))
@@ -477,9 +579,16 @@ class TestFailedJobHandler(TestBaseRQ):
         task = self.registry.add('mytask', 'git', 'commit', {},
                                  scheduling_cfg=scheduler_opts)
 
-        result = JobResult(0, 'mytask', 'git', 'commit',
-                           'FFFFFFFF', 1392185439.0, 9,
-                           offset=1000)
+        result = JobResult(0, 'mytask', 'git', 'commit')
+
+        summary = Summary()
+        summary.fetched = 2
+        summary.last_updated_on = datetime.datetime(2010, 1, 1, 1, 0, 0, tzinfo=UTC)
+        summary.max_updated_on = datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC)
+        summary.last_offset = 800
+        summary.max_offset = 1000
+        result.summary = summary
+
         payload = {
             'error': "Error",
             'result': result
@@ -490,20 +599,51 @@ class TestFailedJobHandler(TestBaseRQ):
         self.assertEqual(handled, True)
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
 
-        # Both fields are updated to the last value received
+        # Both fields are updated to the max value received
         # within the result
         self.assertEqual(task.backend_args['next_from_date'],
                          datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC))
         self.assertEqual(task.backend_args['next_offset'], 1000)
         self.assertEqual(task.num_failures, 1)
 
+    def test_failed_task_rescheduled_no_new_items(self):
+        """Check if tasks are rescheduled when no items where generated before"""
+
+        handler = FailedJobHandler(self.task_scheduler)
+
+        scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=3)
+        task = self.registry.add('mytask', 'git', 'commit', {},
+                                 scheduling_cfg=scheduler_opts)
+
+        result = JobResult(0, 'mytask', 'git', 'commit')
+
+        summary = Summary()
+        summary.fetched = 0
+        summary.max_updated_on = None
+        summary.max_offset = None
+        result.summary = summary
+
+        payload = {
+            'error': "Error",
+            'result': result
+        }
+        event = JobEvent(JobEventType.FAILURE, 0, 'mytask', payload)
+
+        handled = handler(event)
+        self.assertEqual(handled, True)
+        self.assertEqual(task.status, TaskStatus.SCHEDULED)
+
+        # Both fields are not updated
+        self.assertNotIn('next_from_date', task.backend_args)
+        self.assertNotIn('next_offset', task.backend_args)
+
     def test_ignore_orphan_event(self):
         """Check if an orphan event is ignored"""
 
         handler = FailedJobHandler(self.task_scheduler)
 
-        result = JobResult(0, 'mytask', 'git', 'commit',
-                           'FFFFFFFF', 1392185439.0, 9)
+        result = JobResult(0, 'mytask', 'git', 'commit')
+
         payload = {
             'error': "Error",
             'result': result

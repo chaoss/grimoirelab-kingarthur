@@ -79,6 +79,8 @@ def main():
     configure_logging(args.log_path, args.debug, run_daemon)
 
     logging.info("King Arthur is on command.")
+    if not run_daemon:
+        logging.info("Log path is ignored, logs will be redirected to stderr.")
 
     conn = connect_to_redis(args.database)
 

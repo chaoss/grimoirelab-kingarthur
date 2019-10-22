@@ -24,9 +24,9 @@ ARCHIVES_DEFAULT_PATH = '~/.arthur/archives/'
 
 CH_PUBSUB = 'ch_arthur'
 
-Q_ARCHIVE_JOBS = 'archive'
-Q_CREATION_JOBS = 'create'
-Q_UPDATING_JOBS = 'update'
+Q_ARCHIVE_JOBS = 'archive_jobs'
+Q_CREATION_JOBS = 'initial_fetch_jobs'
+Q_UPDATING_JOBS = 'incremental_fetch_jobs'
 Q_STORAGE_ITEMS = 'items'
 
 TIMEOUT = 3600 * 24

@@ -32,6 +32,7 @@ import requests
 import rq
 
 from arthur.server import ArthurServer
+from arthur.common import Q_CREATION_JOBS
 
 from base import TestBaseRQ
 
@@ -372,7 +373,7 @@ class TestArthurServer(TestBaseRQ):
             self.assertEqual(job['job_id'], job_task_result['job_id'])
             self.assertEqual(job['job_status'], 'finished')
             self.assertEqual(job['timeout'], 86400)
-            self.assertEqual(job['origin'], 'create')
+            self.assertEqual(job['origin'], Q_CREATION_JOBS)
             self.assertEqual(job['result'], job_task_result)
             self.assertEqual(job['log'], mock_logs)
 

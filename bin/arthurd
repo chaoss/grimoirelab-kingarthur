@@ -74,8 +74,9 @@ ARTHURD_DEBUG_LOG_FORMAT = "[%(asctime)s - %(name)s - %(levelname)s] - %(message
 def main():
 
     args = parse_args()
+    run_daemon = not args.no_daemon
 
-    configure_logging(args.log_path, args.debug)
+    configure_logging(args.log_path, args.debug, run_daemon)
 
     logging.info("King Arthur is on command.")
 
@@ -93,8 +94,6 @@ def main():
                        async_mode=args.sync_mode,
                        pubsub_channel=args.pubsub_channel,
                        writer=writer)
-
-    run_daemon = not args.no_daemon
 
     if run_daemon:
         logging.info("King Arthur running in daemon mode.")
@@ -238,7 +237,7 @@ def create_config_arguments_parser():
     return parser
 
 
-def configure_logging(log_path, debug=False):
+def configure_logging(log_path, debug=False, run_daemon=True):
     """Configure Arthur daemon logging.
 
     The function configures the log messages produced by Arthur
@@ -248,24 +247,36 @@ def configure_logging(log_path, debug=False):
 
     :param log_path: path where logs will be stored
     :param debug: set the debug mode
+    :param run_daemon: run Arthun in daemon mode
     """
     cherrypy.config.update({'log.screen': False})
 
-    if not os.path.exists(log_path):
-        os.makedirs(log_path)
+    if run_daemon:
+        if not os.path.exists(log_path):
+            os.makedirs(log_path)
 
-    logfile = os.path.join(log_path, 'arthur.log')
-
-    if not debug:
-        logging.basicConfig(filename=logfile,
-                            level=logging.INFO,
-                            format=ARTHURD_LOG_FORMAT)
-        logging.getLogger('requests').setLevel(logging.WARNING)
-        logging.getLogger('urrlib3').setLevel(logging.WARNING)
+        logfile = os.path.join(log_path, 'arthur.log')
+        if not debug:
+            logging.basicConfig(filename=logfile,
+                                level=logging.INFO,
+                                format=ARTHURD_LOG_FORMAT)
+            logging.getLogger('requests').setLevel(logging.WARNING)
+            logging.getLogger('urrlib3').setLevel(logging.WARNING)
+        else:
+            logging.basicConfig(filename=logfile,
+                                level=logging.DEBUG,
+                                format=ARTHURD_DEBUG_LOG_FORMAT)
     else:
-        logging.basicConfig(filename=logfile,
-                            level=logging.DEBUG,
-                            format=ARTHURD_DEBUG_LOG_FORMAT)
+        if not debug:
+            logging.basicConfig(stream=sys.stderr,
+                                level=logging.INFO,
+                                format=ARTHURD_LOG_FORMAT)
+            logging.getLogger('requests').setLevel(logging.WARNING)
+            logging.getLogger('urrlib3').setLevel(logging.WARNING)
+        else:
+            logging.basicConfig(stream=sys.stderr,
+                                level=logging.DEBUG,
+                                format=ARTHURD_DEBUG_LOG_FORMAT)
 
 
 def connect_to_redis(db_url):

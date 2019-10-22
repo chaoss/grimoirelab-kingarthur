@@ -96,7 +96,6 @@ setup(name="kingarthur",
       tests_require=['httpretty==0.8.6', 'fakeredis'],
       test_suite='tests',
       scripts=[
-          'bin/arthur',
           'bin/arthurd',
           'bin/arthurw'
       ],

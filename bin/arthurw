@@ -22,6 +22,7 @@
 
 import argparse
 import logging
+import os.path
 import sys
 
 import redis
@@ -54,9 +55,8 @@ optional arguments:
   --pubsub-channel      name of redis pubsub channel on which to publish updates
 """
 
-# Logging formats
-ARTHURW_LOG_FORMAT = "[%(asctime)s] - %(message)s"
-ARTHURW_DEBUG_LOG_FORMAT = "[%(asctime)s - %(name)s - %(levelname)s] - %(message)s"
+# Logging format
+ARTHURW_LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 
 def main():
@@ -69,7 +69,7 @@ def main():
     queues = args.queues or [Q_ARCHIVE_JOBS, Q_CREATION_JOBS, Q_UPDATING_JOBS]
     burst = args.burst
 
-    configure_logging(args.debug)
+    configure_logging(args.log_path, args.debug)
 
     try:
         queues = [rq.Queue(queue, connection=conn) for queue in queues]
@@ -91,7 +91,7 @@ def parse_args():
                                      add_help=False)
 
     parser.add_argument('-?', '--help', action='help',
-                       help=argparse.SUPPRESS)
+                        help=argparse.SUPPRESS)
     parser.add_argument('-g', '--debug', dest='debug',
                         action='store_true',
                         help=argparse.SUPPRESS)
@@ -101,6 +101,9 @@ def parse_args():
     parser.add_argument('-b', '--burst', dest='burst',
                         action='store_true',
                         help=argparse.SUPPRESS)
+    parser.add_argument('--log-path', dest='log_path',
+                        default=os.path.expanduser('~/.arthur/logs/'),
+                        help=argparse.SUPPRESS)
     parser.add_argument('queues', nargs='*',
                         help=argparse.SUPPRESS)
     parser.add_argument('--pubsub-channel', dest='pubsub_channel',
@@ -109,7 +112,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def configure_logging(debug=False):
+def configure_logging(log_path, debug=False):
     """Configure Arthur's worker logging.
 
     The function configures the log messages produced by Arthur
@@ -122,14 +125,22 @@ def configure_logging(debug=False):
     """
     logger = logging.getLogger()
 
+    if not os.path.exists(log_path):
+        os.makedirs(log_path)
+
+    logfile = os.path.join(log_path, 'arthur.log')
+    formatter = logging.Formatter(fmt=ARTHURW_LOG_FORMAT)
+
     if not debug:
-        logger.setLevel(logging.INFO)
-        formatter = logging.Formatter(fmt=ARTHURW_LOG_FORMAT)
+        logging.basicConfig(filename=logfile,
+                            level=logging.INFO,
+                            format=ARTHURW_LOG_FORMAT)
         logging.getLogger('requests').setLevel(logging.WARNING)
         logging.getLogger('urrlib3').setLevel(logging.WARNING)
     else:
-        logger.setLevel(logging.DEBUG)
-        formatter = logging.Formatter(fmt=ARTHURW_DEBUG_LOG_FORMAT)
+        logging.basicConfig(filename=logfile,
+                            level=logging.DEBUG,
+                            format=ARTHURW_LOG_FORMAT)
 
     handler = rq.utils.ColorizingStreamHandler()
     handler.setFormatter(formatter)

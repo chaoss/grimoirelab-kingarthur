@@ -249,8 +249,8 @@ def execute_perceval_job(backend, backend_args, qitems, task_id, job_number,
     job = PercevalJob(rq_job.id, job_number, task_id, backend, category,
                       rq_job.connection, qitems)
 
-    logger.debug("Running job #%s (task: %s) (%s) (cat:%s)",
-                 job.job_id, task_id, backend, category)
+    logger.debug("[%s] Running job #%s (task: %s) (cat:%s)",
+                 backend, job.job_id, task_id, category)
 
     if not job.has_archiving() and archive_args:
         raise AttributeError("archive attributes set but archive is not supported")
@@ -263,15 +263,14 @@ def execute_perceval_job(backend, backend_args, qitems, task_id, job_number,
         rq_job = rq.get_current_job()
         rq_job.meta['result'] = job.result
         rq_job.save_meta()
-        logger.debug("Error running job %s (%s) - %s",
-                     job.job_id, backend, str(e))
+        logger.error("[%s] Error running job %s - %s",
+                     backend, job.job_id, str(e))
         raise e
 
     result = job.result
 
-    logger.debug("Job #%s (task: %s) completed (%s) - %s/%s items (%s) fetched",
-                 result.job_id, task_id, result.backend,
-                 str(result.summary.fetched), str(result.summary.skipped),
-                 result.category)
+    logger.debug("[%s] Job #%s (task: %s) completed - %s/%s items (%s) fetched",
+                 backend, result.job_id, task_id, str(result.summary.fetched),
+                 str(result.summary.skipped), result.category)
 
     return result

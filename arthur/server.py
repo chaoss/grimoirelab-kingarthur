@@ -97,7 +97,7 @@ class ArthurServer(Arthur):
                 archive_args = task_data.get('archive', None)
                 sched_args = task_data.get('scheduler', None)
             except KeyError as ex:
-                logger.error("Task badly formed")
+                logger.error("[%s] Task badly formed", task_data.backend)
                 raise ex
 
             from_date = backend_args.get('from_date', None)
@@ -154,9 +154,9 @@ class ArthurServer(Arthur):
     def task(self, task_id):
         """Get info about a task"""
 
-        logger.debug("API 'task' method called for task %s", task_id)
-
         task = self._tasks.get(task_id)
+
+        logger.debug("[%s] API 'task' method called for task %s", task.backend, task_id)
 
         jobs = []
 
@@ -181,7 +181,7 @@ class ArthurServer(Arthur):
         task_dict = task.to_dict()
         task_dict['jobs'] = jobs
 
-        logger.debug("Task %s data generated", task_id)
+        logger.debug("[%s] Task %s data generated", task.backend, task_id)
 
         return task_dict
 

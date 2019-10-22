@@ -155,21 +155,21 @@ class JobEventsListener(threading.Thread):
         pubsub = self.conn.pubsub()
         pubsub.subscribe(self.events_channel)
 
-        logger.debug("Listening on channel %s", self.events_channel)
+        logger.debug("[%s] Listening in the channel", self.events_channel)
 
         # Redis 'listen' method is a blocking call
         for msg in pubsub.listen():
-            logger.debug("New message received of type %s", str(msg['type']))
+            logger.debug("[%s] New message received of type %s", self.events_channel, str(msg['type']))
 
             if msg['type'] != 'message':
-                logger.debug("Ignoring job message")
+                logger.debug("[%s] Ignoring job message", self.events_channel)
                 continue
 
             event = JobEvent.deserialize(msg['data'])
 
             self._dispatch_event(event)
 
-        logger.debug("End listening on channel %s", self.events_channel)
+        logger.debug("[%s] End listening on channel", self.events_channel)
 
     def _dispatch_event(self, event):
         """Dispatches the job event to the right handler."""
@@ -177,7 +177,7 @@ class JobEventsListener(threading.Thread):
         handler = self.handlers.get(event.type, None)
 
         if handler:
-            logger.debug("Calling handler for job #%s", event.job_id)
+            logger.debug("[%s] Calling handler for job #%s", self.events_channel, event.job_id)
             handler(event)
         else:
-            logger.debug("No handler defined for %s", event.type.name)
+            logger.debug("[%s] No handler defined for %s", self.events_channel, event.type.name)

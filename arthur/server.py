@@ -184,3 +184,35 @@ class ArthurServer(Arthur):
         logger.debug("Task %s data generated", task_id)
 
         return task_dict
+
+    @cherrypy.expose
+    @cherrypy.tools.json_out(handler=json_encoder)
+    def job(self, job_id):
+        """Get info about a job"""
+
+        logger.debug("API 'job' method called for job %s", job_id)
+
+        job_rq = rq.job.Job.fetch(job_id, connection=self.conn)
+        result = job_rq.result
+
+        job_result = result.to_dict() if isinstance(result, JobResult) else None
+
+        job_log = job_rq.meta.get('log', None)
+
+        job = {
+            'job_id': job_rq.id,
+            'job_status': job_rq.get_status(),
+            'job_description': job_rq.description,
+            'created_at': job_rq.created_at,
+            'enqueued_at': job_rq.enqueued_at,
+            'started_at': job_rq.started_at,
+            'ended_at': job_rq.ended_at,
+            'timeout': job_rq.timeout,
+            'origin': job_rq.origin,
+            'result': job_result,
+            'log': job_log
+        }
+
+        logger.debug("Job %s data generated", job_id)
+
+        return job

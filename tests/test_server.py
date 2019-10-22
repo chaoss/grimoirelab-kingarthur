@@ -29,6 +29,7 @@ import unittest.mock
 import cherrypy
 import dateutil
 import requests
+import rq
 
 from arthur.server import ArthurServer
 
@@ -291,6 +292,89 @@ class TestArthurServer(TestBaseRQ):
             job_result.pop('job_id')
 
             self.assertEqual(job_result, expected_job_result)
+
+    @unittest.mock.patch('arthur.tasks.datetime_utcnow')
+    def test_job(self, mock_utcnow):
+        """Check whether job data is retrieved"""
+
+        mock_utcnow.return_value = datetime.datetime(2017, 1, 1,
+                                                     tzinfo=dateutil.tz.tzutc())
+
+        with run_server(self.conn) as server:
+            data = {
+                "tasks": [
+                    {
+                        "task_id": "arthur.git",
+                        "backend": "git",
+                        "backend_args": {
+                            "gitpath": os.path.join(self.dir, 'data/git_log.txt'),
+                            "uri": "http://example.com",
+                        },
+                        "category": "commit",
+                        "archive": {},
+                        "scheduler": {
+                            "delay": 10
+                        }
+                    }
+                ]
+            }
+            response = requests.post("http://127.0.0.1:8080/add",
+                                     json=data, headers={'Content-Type': 'application/json'})
+
+            self.assertTrue(response.status_code, 200)
+            self.assertTrue(len(server._tasks.tasks), 2)
+
+            # Run the tasks
+            server.start()
+
+            response = requests.post("http://127.0.0.1:8080/task/arthur.git",
+                                     json=data, headers={'Content-Type': 'application/json'})
+            self.assertTrue(response.status_code, 200)
+
+            task = json.loads(response.content.decode('utf8').replace("'", '"'))
+            jobs = task.pop('jobs')
+
+            # Check jobs data
+            job_task = jobs[0]
+            self.assertEqual(job_task['task_id'], 'arthur.git')
+            self.assertEqual(job_task['job_status'], 'finished')
+
+            job_task_result = job_task['result']
+
+            # Save log in the meta field of the job because workers don't run in sync mode/testing mode, so logs are
+            # not stored into the job
+            mock_logs = list()
+            first_log = {
+                'created': mock_utcnow.return_value.timestamp(),
+                'msg': "First log",
+                'module': "foo",
+                'level': 0
+            }
+            last_log = {
+                'created': mock_utcnow.return_value.timestamp(),
+                'msg': "Last log",
+                'module': "foo",
+                'level': 0
+            }
+            mock_logs.append(first_log)
+            mock_logs.append(last_log)
+
+            job_rq = rq.job.Job.fetch(job_task_result['job_id'], connection=self.conn)
+            job_rq.meta['log'] = mock_logs
+            job_rq.save_meta()
+
+            response = requests.post("http://127.0.0.1:8080/job/{}".format(job_task_result['job_id']),
+                                     json=data, headers={'Content-Type': 'application/json'})
+            self.assertTrue(response.status_code, 200)
+
+            job = json.loads(response.content.decode('utf8'))
+
+            self.assertEqual(job['job_id'], job_task_result['job_id'])
+            self.assertEqual(job['job_status'], 'finished')
+            self.assertEqual(job['timeout'], 86400)
+            self.assertEqual(job['origin'], 'create')
+            self.assertEqual(job['result'], job_task_result)
+            self.assertEqual(job['log'], mock_logs)
 
 
 if __name__ == "__main__":

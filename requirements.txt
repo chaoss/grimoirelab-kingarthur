@@ -1,7 +1,7 @@
-python-dateutil>=2.6.0
+python-dateutil>=2.8.0
 redis==3.0.0
 rq==1.0.0
-cheroot==5.8.3
-cherrypy>=8.1, <=11.0.0
+cheroot>=8.2.1
+cherrypy>=17.4.2
 -e git+https://github.com/chaoss/grimoirelab-toolkit/#egg=grimoirelab-toolkit
 -e git+https://github.com/chaoss/grimoirelab-perceval.git/#egg=perceval

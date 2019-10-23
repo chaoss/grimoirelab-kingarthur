@@ -142,6 +142,7 @@ class _TaskScheduler(threading.Thread):
 
         self._tasks_events[task_id] = event
         task.status = TaskStatus.SCHEDULED
+        self.registry.update(task_id, task)
 
         self._rwlock.writer_release()
 
@@ -198,6 +199,7 @@ class _TaskScheduler(threading.Thread):
         task.status = TaskStatus.ENQUEUED
         task.age += 1
         task.set_job(job_id, job_number)
+        self.registry.update(task_id, task)
 
         self._rwlock.writer_release()
 
@@ -280,6 +282,7 @@ class StartedJobHandler:
             return False
 
         task.status = TaskStatus.RUNNING
+        self.task_scheduler.registry.update(task_id, task)
 
         return True
 
@@ -330,6 +333,7 @@ class CompletedJobHandler:
 
         if task.archiving_cfg and task.archiving_cfg.fetch_from_archive:
             task.status = TaskStatus.COMPLETED
+            self.task_scheduler.registry.update(task_id, task)
             logger.info("Job #%s (task: %s - archiving) finished successfully",
                         job_id, task_id)
             return True
@@ -339,6 +343,7 @@ class CompletedJobHandler:
 
             if task_max_age and task.age >= task_max_age:
                 task.status = TaskStatus.COMPLETED
+                self.task_scheduler.registry.update(task_id, task)
                 logger.info("Job #%s (task: %s) finished successfully",
                             job_id, task_id)
                 return True
@@ -349,6 +354,7 @@ class CompletedJobHandler:
             if result.summary.max_offset:
                 task.backend_args['next_offset'] = result.summary.max_offset
 
+        self.task_scheduler.registry.update(task_id, task)
         delay = task.scheduling_cfg.delay if task.scheduling_cfg else WAIT_FOR_QUEUING
 
         self.task_scheduler.schedule_task(task_id, delay=delay)
@@ -404,10 +410,12 @@ class FailedJobHandler:
 
         if not task.has_resuming():
             task.status = TaskStatus.FAILED
+            self.task_scheduler.registry.update(task_id, task)
             logger.error("Job #%s (task: %s) unable to resume; cancelled",
                          job_id, task_id)
         elif task.num_failures >= task_max_retries:
             task.status = TaskStatus.FAILED
+            self.task_scheduler.registry.update(task_id, task)
             logger.error("Job #%s (task: %s) max retries reached; cancelled",
                          job_id, task_id)
         else:
@@ -420,6 +428,7 @@ class FailedJobHandler:
                 if result.summary.max_offset:
                     task.backend_args['next_offset'] = result.summary.max_offset
 
+            self.task_scheduler.registry.update(task_id, task)
             delay = task.scheduling_cfg.delay if task.scheduling_cfg else WAIT_FOR_QUEUING
 
             self.task_scheduler.schedule_task(task_id, delay=delay)

@@ -77,6 +77,7 @@ class TestScheduler(TestBaseRQ):
         result = job.return_value
 
         self.assertEqual(result.task_id, task.task_id)
+        self.assertEqual(result.job_number, 1)
         self.assertEqual(result.summary.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
         self.assertEqual(result.summary.max_updated_on,
                          datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC))
@@ -112,10 +113,54 @@ class TestScheduler(TestBaseRQ):
         result = job.return_value
 
         self.assertEqual(result.task_id, task.task_id)
+        self.assertEqual(result.job_number, 1)
         self.assertEqual(result.summary.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
         self.assertEqual(result.summary.max_updated_on,
                          datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC))
         self.assertEqual(result.summary.total, 9)
+
+    def test_set_job_number(self):
+        """Check if the job number is set correctly when a new job is enqueued"""
+
+        args = {
+            'uri': 'http://example.com/',
+            'gitpath': os.path.join(self.dir, 'data/git_log.txt')
+        }
+        category = 'commit'
+        archiving_opts = None
+        scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=0,
+                                              queue='myqueue')
+
+        registry = TaskRegistry()
+        task = registry.add('mytask', 'git', category, args,
+                            archiving_cfg=archiving_opts,
+                            scheduling_cfg=scheduler_opts)
+
+        schlr = Scheduler(self.conn, registry, async_mode=False)
+        schlr.schedule_task(task.task_id)
+        self.assertEqual(task.status, TaskStatus.SCHEDULED)
+        self.assertEqual(task.age, 0)
+
+        # Modify the list of jobs to pretend this is not the first
+        # time running this task. Job number will be calculated
+        # adding one to the length of jobs.
+        task.jobs = ['A', 'B', 'C']
+
+        schlr = Scheduler(self.conn, registry, async_mode=False)
+        schlr.schedule_task(task.task_id)
+        self.assertEqual(task.status, TaskStatus.SCHEDULED)
+        self.assertEqual(task.age, 0)
+
+        schlr.schedule()
+
+        self.assertEqual(task.age, 1)
+
+        # Get the last job run and check the result
+        job = schlr._scheduler._queues['myqueue'].fetch_job(task.jobs[3])
+        result = job.return_value
+
+        self.assertEqual(result.task_id, task.task_id)
+        self.assertEqual(result.job_number, 4)
 
     def test_not_found_task(self):
         """Raises an error when the task to schedule does not exist"""
@@ -212,7 +257,7 @@ class TestCompletedJobHandler(TestBaseRQ):
 
         task = self.registry.add('mytask', 'git', 'commit', {})
 
-        result = JobResult(0, 'mytask', 'git', 'commit')
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
         summary = Summary()
         summary.fetched = 10
@@ -237,7 +282,7 @@ class TestCompletedJobHandler(TestBaseRQ):
         # Force the age to be lower than its limit
         task.age = 2
 
-        result = JobResult(0, 'mytask', 'git', 'commit')
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
         summary = Summary()
         summary.fetched = 10
@@ -262,7 +307,7 @@ class TestCompletedJobHandler(TestBaseRQ):
         # Force the age to be large value
         task.age = 1000000
 
-        result = JobResult(0, 'mytask', 'git', 'commit')
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
         summary = Summary()
         summary.fetched = 10
@@ -287,7 +332,7 @@ class TestCompletedJobHandler(TestBaseRQ):
         # Force the age to its pre-defined limit
         task.age = 3
 
-        result = JobResult(0, 'mytask', 'git', 'commit')
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
         summary = Summary()
         summary.fetched = 10
@@ -310,7 +355,7 @@ class TestCompletedJobHandler(TestBaseRQ):
         task = self.registry.add('mytask', 'git', 'commit', {},
                                  archiving_cfg=archiving_cfg)
 
-        result = JobResult(0, 'mytask', 'git', 'commit')
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
         summary = Summary()
         summary.fetched = 10
@@ -330,7 +375,7 @@ class TestCompletedJobHandler(TestBaseRQ):
         handler = CompletedJobHandler(self.task_scheduler)
 
         task = self.registry.add('mytask', 'git', 'commit', {})
-        result = JobResult(0, 'mytask', 'git', 'commit')
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
         summary = Summary()
         summary.fetched = 10
@@ -355,7 +400,7 @@ class TestCompletedJobHandler(TestBaseRQ):
         handler = CompletedJobHandler(self.task_scheduler)
 
         task = self.registry.add('mytask', 'git', 'commit', {})
-        result = JobResult(0, 'mytask', 'git', 'commit')
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
         summary = Summary()
         summary.fetched = 10
@@ -383,7 +428,7 @@ class TestCompletedJobHandler(TestBaseRQ):
         handler = CompletedJobHandler(self.task_scheduler)
 
         task = self.registry.add('mytask', 'git', 'commit', {})
-        result = JobResult(0, 'mytask', 'git', 'commit')
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
         summary = Summary()
         summary.fetched = 0
@@ -411,7 +456,7 @@ class TestCompletedJobHandler(TestBaseRQ):
         # Force to a pre-defined number of failures
         task.num_failures = 2
 
-        result = JobResult(0, 'mytask', 'git', 'commit')
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
         summary = Summary()
         summary.fetched = 10
@@ -431,7 +476,7 @@ class TestCompletedJobHandler(TestBaseRQ):
 
         handler = CompletedJobHandler(self.task_scheduler)
 
-        result = JobResult(0, 'mytask', 'git', 'commit')
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
         event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
 
         handled = handler(event)
@@ -459,7 +504,7 @@ class TestFailedJobHandler(TestBaseRQ):
 
         task = self.registry.add('mytask', 'git', 'commit', {})
 
-        result = JobResult(0, 'mytask', 'git', 'commit')
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
         summary = Summary()
         summary.fetched = 2
@@ -487,7 +532,7 @@ class TestFailedJobHandler(TestBaseRQ):
         task = self.registry.add('mytask', 'gerrit', 'review', {},
                                  scheduling_cfg=scheduler_opts)
 
-        result = JobResult(0, 'mytask', 'gerrit', 'review')
+        result = JobResult(0, 1, 'mytask', 'gerrit', 'review')
 
         summary = Summary()
         summary.fetched = 2
@@ -518,7 +563,7 @@ class TestFailedJobHandler(TestBaseRQ):
         # Force to a pre-defined number of failures
         task.num_failures = 2
 
-        result = JobResult(0, 'mytask', 'git', 'commit')
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
         summary = Summary()
         summary.fetched = 2
@@ -546,7 +591,7 @@ class TestFailedJobHandler(TestBaseRQ):
         task = self.registry.add('mytask', 'git', 'commit', {},
                                  scheduling_cfg=scheduler_opts)
 
-        result = JobResult(0, 'mytask', 'git', 'commit')
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
         summary = Summary()
         summary.fetched = 2
@@ -579,7 +624,7 @@ class TestFailedJobHandler(TestBaseRQ):
         task = self.registry.add('mytask', 'git', 'commit', {},
                                  scheduling_cfg=scheduler_opts)
 
-        result = JobResult(0, 'mytask', 'git', 'commit')
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
         summary = Summary()
         summary.fetched = 2
@@ -615,7 +660,7 @@ class TestFailedJobHandler(TestBaseRQ):
         task = self.registry.add('mytask', 'git', 'commit', {},
                                  scheduling_cfg=scheduler_opts)
 
-        result = JobResult(0, 'mytask', 'git', 'commit')
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
         summary = Summary()
         summary.fetched = 0
@@ -642,7 +687,7 @@ class TestFailedJobHandler(TestBaseRQ):
 
         handler = FailedJobHandler(self.task_scheduler)
 
-        result = JobResult(0, 'mytask', 'git', 'commit')
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
         payload = {
             'error': "Error",

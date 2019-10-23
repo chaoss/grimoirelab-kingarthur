@@ -172,6 +172,7 @@ class _TaskScheduler(threading.Thread):
             return
 
         job_id = self._generate_job_id(task_id)
+        job_number = len(task.jobs) + 1
         job_args = _build_job_arguments(task)
 
         queue_id = self._determine_queue(task)
@@ -183,6 +184,7 @@ class _TaskScheduler(threading.Thread):
 
         self._queues[queue_id].enqueue(execute_perceval_job,
                                        job_id=job_id,
+                                       job_number=job_number,
                                        job_timeout=TIMEOUT,
                                        ttl=INFINITE_TTL,
                                        result_ttl=INFINITE_TTL,

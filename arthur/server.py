@@ -201,6 +201,7 @@ class ArthurServer(Arthur):
 
         job = {
             'job_id': job_rq.id,
+            'job_number': result.job_number,
             'job_status': job_rq.get_status(),
             'job_description': job_rq.description,
             'created_at': job_rq.created_at,

@@ -275,6 +275,7 @@ class TestArthurServer(TestBaseRQ):
 
             # TODO: mock job ids generator
             expected_job_result = {
+                'job_number': 1,
                 'task_id': 'arthur.git',
                 'fetched': 9,
                 'skipped': 0,
@@ -370,6 +371,7 @@ class TestArthurServer(TestBaseRQ):
             job = json.loads(response.content.decode('utf8'))
 
             self.assertEqual(job['job_id'], job_task_result['job_id'])
+            self.assertEqual(job['job_number'], 1)
             self.assertEqual(job['job_status'], 'finished')
             self.assertEqual(job['timeout'], 86400)
             self.assertEqual(job['origin'], 'create')

@@ -202,10 +202,11 @@ class TestJobResult(unittest.TestCase):
     """Unit tests for JobResult class"""
 
     def test_job_result_init(self):
-        result = JobResult('arthur-job-1234567890', 'mytask',
+        result = JobResult('arthur-job-1234567890', 8, 'mytask',
                            'mock_backend', 'category')
 
         self.assertEqual(result.job_id, 'arthur-job-1234567890')
+        self.assertEqual(result.job_number, 8)
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'mock_backend')
         self.assertEqual(result.category, 'category')
@@ -214,11 +215,12 @@ class TestJobResult(unittest.TestCase):
     def test_to_dict(self):
         """Test whether a JobResult object is converted to a dict"""
 
-        result = JobResult('arthur-job-1234567890', 'mytask',
+        result = JobResult('arthur-job-1234567890', 8, 'mytask',
                            'mock_backend', 'category')
 
         expected = {
             'job_id': 'arthur-job-1234567890',
+            'job_number': 8,
             'task_id': 'mytask'
         }
 
@@ -240,10 +242,11 @@ class TestPercevalJob(TestBaseRQ):
     def test_init(self):
         """Test the initialization of the object"""
 
-        job = PercevalJob('arthur-job-1234567890', 'mytask', 'git', 'commit',
+        job = PercevalJob('arthur-job-1234567890', 8, 'mytask', 'git', 'commit',
                           self.conn, 'items')
 
         self.assertEqual(job.job_id, 'arthur-job-1234567890')
+        self.assertEqual(job.job_number, 8)
         self.assertEqual(job.task_id, 'mytask')
         self.assertEqual(job.backend, 'git')
         self.assertEqual(job.category, 'commit')
@@ -254,6 +257,7 @@ class TestPercevalJob(TestBaseRQ):
         result = job.result
         self.assertIsInstance(job.result, JobResult)
         self.assertEqual(result.job_id, 'arthur-job-1234567890')
+        self.assertEqual(job.job_number, 8)
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'git')
         self.assertEqual(job.category, 'commit')
@@ -263,14 +267,16 @@ class TestPercevalJob(TestBaseRQ):
         """Test if it raises an exception when a backend is not found"""
 
         with self.assertRaises(NotFoundError) as e:
-            _ = PercevalJob('arthur-job-1234567890', 'mytask', 'mock_backend', 'acme-category',
+            _ = PercevalJob('arthur-job-1234567890', 8, 'mytask',
+                            'mock_backend', 'acme-category',
                             self.conn, 'items')
             self.assertEqual(e.exception.element, 'mock_backend')
 
     def test_run(self):
         """Test run method using the Git backend"""
 
-        job = PercevalJob('arthur-job-1234567890', 'mytask', 'git', 'commit',
+        job = PercevalJob('arthur-job-1234567890', 8, 'mytask',
+                          'git', 'commit',
                           self.conn, 'items')
         args = {
             'uri': 'http://example.com/',
@@ -287,6 +293,7 @@ class TestPercevalJob(TestBaseRQ):
         result = job.result
         self.assertIsInstance(job.result, JobResult)
         self.assertEqual(result.job_id, 'arthur-job-1234567890')
+        self.assertEqual(result.job_number, 8)
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'git')
         self.assertEqual(result.category, 'commit')
@@ -317,7 +324,8 @@ class TestPercevalJob(TestBaseRQ):
     def test_metadata(self):
         """Check if metadata parameters are correctly set"""
 
-        job = PercevalJob('arthur-job-1234567890', 'mytask', 'git', 'commit',
+        job = PercevalJob('arthur-job-1234567890', 8, 'mytask',
+                          'git', 'commit',
                           self.conn, 'items')
         args = {
             'uri': 'http://example.com/',
@@ -340,7 +348,8 @@ class TestPercevalJob(TestBaseRQ):
     def test_run_not_found_parameters(self):
         """Check if it fails when a required backend parameter is not found"""
 
-        job = PercevalJob('arthur-job-1234567890', 'mytask', 'git', 'commit',
+        job = PercevalJob('arthur-job-1234567890', 8, 'mytask',
+                          'git', 'commit',
                           self.conn, 'items')
         args = {
             'uri': 'http://example.com/'
@@ -379,7 +388,8 @@ class TestPercevalJob(TestBaseRQ):
             'fetch_from_archive': False
         }
 
-        job = PercevalJob('arthur-job-1234567890', 'mytask', 'bugzilla', 'issue',
+        job = PercevalJob('arthur-job-1234567890', 8, 'mytask',
+                          'bugzilla', 'issue',
                           self.conn, 'items')
         job.run(args, archive_args=archive_args)
 
@@ -391,6 +401,7 @@ class TestPercevalJob(TestBaseRQ):
         result = job.result
         self.assertIsInstance(job.archive_manager, ArchiveManager)
         self.assertEqual(result.job_id, job.job_id)
+        self.assertEqual(result.job_number, job.job_number)
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'bugzilla')
         self.assertEqual(result.category, 'issue')
@@ -439,7 +450,8 @@ class TestPercevalJob(TestBaseRQ):
     def test_initialize_archive_manager(self):
         """Test if the archive is initialized"""
 
-        job = PercevalJob('arthur-job-1234567890', 'mytask', 'git', 'commit',
+        job = PercevalJob('arthur-job-1234567890', 8, 'mytask',
+                          'git', 'commit',
                           self.conn, 'items')
 
         self.assertIsNone(job.archive_manager)
@@ -447,7 +459,8 @@ class TestPercevalJob(TestBaseRQ):
     def test_invalid_path_for_archive(self):
         """Test whether it raises an exception when the archive path is invalid"""
 
-        job = PercevalJob('arthur-job-1234567890', 'mytaks', 'git', 'commit',
+        job = PercevalJob('arthur-job-1234567890', 8, 'mytaks',
+                          'git', 'commit',
                           self.conn, 'items')
 
         job.initialize_archive_manager(None)
@@ -482,10 +495,11 @@ class TestExecuteJob(TestBaseRQ):
         job = q.enqueue(execute_perceval_job,
                         backend='git', backend_args=backend_args, category='commit',
                         archive_args=archive_args,
-                        qitems='items', task_id='mytask')
+                        qitems='items', task_id='mytask', job_number=8)
 
         result = job.return_value
         self.assertEqual(result.job_id, job.get_id())
+        self.assertEqual(result.job_number, 8)
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'git')
         self.assertEqual(result.category, 'commit')
@@ -535,7 +549,8 @@ class TestExecuteJob(TestBaseRQ):
                           job_id='test_failed_job',
                           backend='redmine', backend_args=backend_args,
                           category='issue',
-                          qitems='items', task_id='mytask')
+                          qitems='items',
+                          task_id='mytask', job_number=8)
 
         # The job failed but generated a partial result
         job = rq.job.Job.fetch('test_failed_job', connection=self.conn)
@@ -543,6 +558,7 @@ class TestExecuteJob(TestBaseRQ):
         result = job.meta['result']
         self.assertIsInstance(result, JobResult)
         self.assertEqual(result.job_id, job.get_id())
+        self.assertEqual(result.job_number, 8)
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'redmine')
         self.assertEqual(result.summary.last_uuid, '3c3d67925b108a37f88cc6663f7f7dd493fa818c')
@@ -581,10 +597,12 @@ class TestExecuteJob(TestBaseRQ):
         job = q.enqueue(execute_perceval_job,
                         backend='git', backend_args=backend_args,
                         category='commit',
-                        qitems='items', task_id='mytask')
+                        qitems='items',
+                        task_id='mytask', job_number=8)
 
         result = job.return_value
         self.assertEqual(result.job_id, job.get_id())
+        self.assertEqual(result.job_number, 8)
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'git')
         self.assertEqual(result.category, 'commit')
@@ -629,7 +647,7 @@ class TestExecuteJob(TestBaseRQ):
 
         job = q.enqueue(execute_perceval_job,
                         backend='bugzilla', backend_args=backend_args, category='bug',
-                        qitems='items', task_id='mytask',
+                        qitems='items', task_id='mytask', job_number=8,
                         archive_args=archive_args)
 
         bugs = self.conn.lrange('items', 0, -1)
@@ -639,6 +657,7 @@ class TestExecuteJob(TestBaseRQ):
 
         result = job.return_value
         self.assertEqual(result.job_id, job.get_id())
+        self.assertEqual(result.job_number, 8)
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'bugzilla')
         self.assertEqual(result.summary.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
@@ -658,7 +677,8 @@ class TestExecuteJob(TestBaseRQ):
         archive_args['fetch_from_archive'] = True
         job = q.enqueue(execute_perceval_job,
                         backend='bugzilla', backend_args=backend_args,
-                        qitems='items', task_id='mytask', category='bug',
+                        qitems='items', task_id='mytask', job_number=8,
+                        category='bug',
                         archive_args=archive_args)
 
         archived_bugs = self.conn.lrange('items', 0, -1)
@@ -668,6 +688,7 @@ class TestExecuteJob(TestBaseRQ):
 
         result = job.return_value
         self.assertEqual(result.job_id, job.get_id())
+        self.assertEqual(result.job_number, 8)
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'bugzilla')
         self.assertEqual(result.summary.last_uuid, 'b4009442d38f4241a4e22e3e61b7cd8ef5ced35c')
@@ -699,7 +720,7 @@ class TestExecuteJob(TestBaseRQ):
             _ = q.enqueue(execute_perceval_job,
                           backend='git', backend_args=backend_args,
                           category='commit',
-                          qitems='items', task_id='mytask',
+                          qitems='items', task_id='mytask', job_number=8,
                           archive_args=archive_args)
 
 

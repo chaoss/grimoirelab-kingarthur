@@ -254,6 +254,32 @@ class TaskRegistry:
 
         return task
 
+    def update(self, task_id, task):
+        """Update a task in the registry.
+
+        Update a task stored in the registry using its task identifier. When
+        the task does not exist, a `NotFoundError` exception will be
+        raised.
+
+        :param task_id: task identifier
+        :param task: task object
+
+        :returns: a task object
+
+        :raises NotFoundError: raised when the requested task is not
+            found on the registry
+        """
+        self._rwlock.reader_acquire()
+
+        if task_id not in [k.decode("utf-8") for k in self.conn.keys()]:
+            self._rwlock.reader_release()
+            raise NotFoundError(element=str(task_id))
+
+        self.conn.set(task_id, pickle.dumps(task))
+        self._rwlock.reader_release()
+
+        logger.debug("Task %s updated", str(task_id))
+
     @property
     def tasks(self):
         """Get the list of tasks"""

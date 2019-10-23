@@ -351,6 +351,62 @@ class TestTaskRegistry(TestBaseRQ):
         with self.assertRaises(NotFoundError):
             registry.get('mytask')
 
+    def test_update_task(self):
+        """Test to update tasks in the registry"""
+
+        args = {
+            'from_date': '1970-01-01',
+            'component': 'test'
+        }
+
+        registry = TaskRegistry(self.conn)
+        before = datetime.datetime.now().timestamp()
+        _ = registry.add('mytask', 'git', 'commit', args)
+
+        tasks = registry.tasks
+        self.assertEqual(len(tasks), 1)
+
+        task = tasks[0]
+        self.assertIsInstance(task, Task)
+        self.assertEqual(task.task_id, 'mytask')
+        self.assertEqual(task.status, TaskStatus.NEW)
+        self.assertEqual(task.age, 0)
+        self.assertListEqual(task.jobs, [])
+        self.assertEqual(task.category, 'commit')
+        self.assertEqual(task.backend, 'git')
+        self.assertDictEqual(task.backend_args, args)
+        self.assertEqual(task.archiving_cfg, None)
+        self.assertEqual(task.scheduling_cfg, None)
+        self.assertGreater(task.created_on, before)
+
+        task.status = TaskStatus.COMPLETED
+        task.age = 1
+        registry.update('mytask', task)
+
+        tasks = registry.tasks
+        self.assertEqual(len(tasks), 1)
+
+        task = tasks[0]
+        self.assertIsInstance(task, Task)
+        self.assertEqual(task.task_id, 'mytask')
+        self.assertEqual(task.status, TaskStatus.COMPLETED)
+        self.assertEqual(task.age, 1)
+        self.assertListEqual(task.jobs, [])
+        self.assertEqual(task.category, 'commit')
+        self.assertEqual(task.backend, 'git')
+        self.assertDictEqual(task.backend_args, args)
+        self.assertEqual(task.archiving_cfg, None)
+        self.assertEqual(task.scheduling_cfg, None)
+        self.assertGreater(task.created_on, before)
+
+    def test_update_task_not_found(self):
+        """Check whether it raises an exception when a task is not found"""
+
+        registry = TaskRegistry(self.conn)
+
+        with self.assertRaises(NotFoundError):
+            registry.update('mytask', None)
+
 
 class TestArchivingTaskConfig(unittest.TestCase):
     """Unit tests for ArchivingTaskConfig"""

@@ -202,10 +202,10 @@ class TestJobResult(unittest.TestCase):
     """Unit tests for JobResult class"""
 
     def test_job_result_init(self):
-        result = JobResult('arthur-job-1234567890', 8, 'mytask',
+        result = JobResult('1234567890', 8, 'mytask',
                            'mock_backend', 'category')
 
-        self.assertEqual(result.job_id, 'arthur-job-1234567890')
+        self.assertEqual(result.job_id, '1234567890')
         self.assertEqual(result.job_number, 8)
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'mock_backend')
@@ -215,11 +215,11 @@ class TestJobResult(unittest.TestCase):
     def test_to_dict(self):
         """Test whether a JobResult object is converted to a dict"""
 
-        result = JobResult('arthur-job-1234567890', 8, 'mytask',
+        result = JobResult('1234567890', 8, 'mytask',
                            'mock_backend', 'category')
 
         expected = {
-            'job_id': 'arthur-job-1234567890',
+            'job_id': '1234567890',
             'job_number': 8,
             'task_id': 'mytask'
         }
@@ -242,10 +242,10 @@ class TestPercevalJob(TestBaseRQ):
     def test_init(self):
         """Test the initialization of the object"""
 
-        job = PercevalJob('arthur-job-1234567890', 8, 'mytask', 'git', 'commit',
+        job = PercevalJob('1234567890', 8, 'mytask', 'git', 'commit',
                           self.conn, 'items')
 
-        self.assertEqual(job.job_id, 'arthur-job-1234567890')
+        self.assertEqual(job.job_id, '1234567890')
         self.assertEqual(job.job_number, 8)
         self.assertEqual(job.task_id, 'mytask')
         self.assertEqual(job.backend, 'git')
@@ -256,7 +256,7 @@ class TestPercevalJob(TestBaseRQ):
 
         result = job.result
         self.assertIsInstance(job.result, JobResult)
-        self.assertEqual(result.job_id, 'arthur-job-1234567890')
+        self.assertEqual(result.job_id, '1234567890')
         self.assertEqual(job.job_number, 8)
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'git')
@@ -267,7 +267,7 @@ class TestPercevalJob(TestBaseRQ):
         """Test if it raises an exception when a backend is not found"""
 
         with self.assertRaises(NotFoundError) as e:
-            _ = PercevalJob('arthur-job-1234567890', 8, 'mytask',
+            _ = PercevalJob('1234567890', 8, 'mytask',
                             'mock_backend', 'acme-category',
                             self.conn, 'items')
             self.assertEqual(e.exception.element, 'mock_backend')
@@ -275,7 +275,7 @@ class TestPercevalJob(TestBaseRQ):
     def test_run(self):
         """Test run method using the Git backend"""
 
-        job = PercevalJob('arthur-job-1234567890', 8, 'mytask',
+        job = PercevalJob('1234567890', 8, 'mytask',
                           'git', 'commit',
                           self.conn, 'items')
         args = {
@@ -292,7 +292,7 @@ class TestPercevalJob(TestBaseRQ):
         self.assertIsInstance(job.archive_manager, ArchiveManager)
         result = job.result
         self.assertIsInstance(job.result, JobResult)
-        self.assertEqual(result.job_id, 'arthur-job-1234567890')
+        self.assertEqual(result.job_id, '1234567890')
         self.assertEqual(result.job_number, 8)
         self.assertEqual(result.task_id, 'mytask')
         self.assertEqual(result.backend, 'git')
@@ -324,7 +324,7 @@ class TestPercevalJob(TestBaseRQ):
     def test_metadata(self):
         """Check if metadata parameters are correctly set"""
 
-        job = PercevalJob('arthur-job-1234567890', 8, 'mytask',
+        job = PercevalJob('1234567890', 8, 'mytask',
                           'git', 'commit',
                           self.conn, 'items')
         args = {
@@ -343,12 +343,12 @@ class TestPercevalJob(TestBaseRQ):
 
         for item in items:
             self.assertEqual(item['arthur_version'], __version__)
-            self.assertEqual(item['job_id'], 'arthur-job-1234567890')
+            self.assertEqual(item['job_id'], '1234567890')
 
     def test_run_not_found_parameters(self):
         """Check if it fails when a required backend parameter is not found"""
 
-        job = PercevalJob('arthur-job-1234567890', 8, 'mytask',
+        job = PercevalJob('1234567890', 8, 'mytask',
                           'git', 'commit',
                           self.conn, 'items')
         args = {
@@ -388,7 +388,7 @@ class TestPercevalJob(TestBaseRQ):
             'fetch_from_archive': False
         }
 
-        job = PercevalJob('arthur-job-1234567890', 8, 'mytask',
+        job = PercevalJob('1234567890', 8, 'mytask',
                           'bugzilla', 'issue',
                           self.conn, 'items')
         job.run(args, archive_args=archive_args)
@@ -419,7 +419,7 @@ class TestPercevalJob(TestBaseRQ):
         # Now, we get the bugs from the archive.
         # The contents should be the same and there won't be
         # any new request to the server
-        job_archive = PercevalJob('arthur-job-1234567890-bis', 'mytask', 'bugzilla', 'issue',
+        job_archive = PercevalJob('1234567890-bis', 'mytask', 'bugzilla', 'issue',
                                   self.conn, 'items')
 
         archive_args['fetch_from_archive'] = True
@@ -450,7 +450,7 @@ class TestPercevalJob(TestBaseRQ):
     def test_initialize_archive_manager(self):
         """Test if the archive is initialized"""
 
-        job = PercevalJob('arthur-job-1234567890', 8, 'mytask',
+        job = PercevalJob('1234567890', 8, 'mytask',
                           'git', 'commit',
                           self.conn, 'items')
 
@@ -459,7 +459,7 @@ class TestPercevalJob(TestBaseRQ):
     def test_invalid_path_for_archive(self):
         """Test whether it raises an exception when the archive path is invalid"""
 
-        job = PercevalJob('arthur-job-1234567890', 8, 'mytaks',
+        job = PercevalJob('1234567890', 8, 'mytaks',
                           'git', 'commit',
                           self.conn, 'items')
 

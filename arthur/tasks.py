@@ -25,6 +25,7 @@ import datetime
 import enum
 import logging
 import re
+import pickle
 
 from grimoirelab_toolkit.datetime import (InvalidDateError,
                                           datetime_to_utc,
@@ -162,11 +163,13 @@ class TaskRegistry:
     identifier.
 
     The registry ensures mutual exclusion among threads using a
-    reading-writting lock (`RWLock` on `utils` module).
+    reading-writing lock (`RWLock` on `utils` module).
+
+    :param conn: connection Object to Redis
     """
-    def __init__(self):
+    def __init__(self, conn):
+        self.conn = conn
         self._rwlock = RWLock()
-        self._tasks = {}
 
     def add(self, task_id, backend, category, backend_args,
             archiving_cfg=None, scheduling_cfg=None):
@@ -190,14 +193,14 @@ class TaskRegistry:
         """
         self._rwlock.writer_acquire()
 
-        if task_id in self._tasks:
+        if task_id in [k.decode("utf-8") for k in self.conn.keys()]:
             self._rwlock.writer_release()
             raise AlreadyExistsError(element=str(task_id))
 
         task = Task(task_id, backend, category, backend_args,
                     archiving_cfg=archiving_cfg,
                     scheduling_cfg=scheduling_cfg)
-        self._tasks[task_id] = task
+        self.conn.set(task_id, pickle.dumps(task))
 
         self._rwlock.writer_release()
 
@@ -217,13 +220,12 @@ class TaskRegistry:
         :raises NotFoundError: raised when the given task identifier
             is not found on the registry
         """
-        try:
-            self._rwlock.writer_acquire()
-            del self._tasks[task_id]
-        except KeyError:
+        self._rwlock.writer_acquire()
+        res = self.conn.delete(task_id)
+        self._rwlock.writer_release()
+
+        if res == 0:
             raise NotFoundError(element=str(task_id))
-        finally:
-            self._rwlock.writer_release()
 
         logger.debug("Task %s removed from the registry", str(task_id))
 
@@ -243,8 +245,9 @@ class TaskRegistry:
         """
         try:
             self._rwlock.reader_acquire()
-            task = self._tasks[task_id]
-        except KeyError:
+            task_dump = self.conn.get(task_id)
+            task = pickle.loads(task_dump)
+        except TypeError:
             raise NotFoundError(element=str(task_id))
         finally:
             self._rwlock.reader_release()
@@ -256,11 +259,17 @@ class TaskRegistry:
         """Get the list of tasks"""
 
         self._rwlock.reader_acquire()
-        tl = [v for v in self._tasks.values()]
-        tl.sort(key=lambda x: x.task_id)
+        tasks = []
+        keys = [k.decode("utf-8") for k in self.conn.keys()]
+        keys.sort()
+
+        for k in keys:
+            task_dump = self.conn.get(k)
+            tasks.append(pickle.loads(task_dump))
+
         self._rwlock.reader_release()
 
-        return tl
+        return tasks
 
 
 class _TaskConfig:

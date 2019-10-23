@@ -49,7 +49,7 @@ class Arthur:
         rq.push_connection(self.conn)
 
         self.archive_path = base_archive_path
-        self._tasks = TaskRegistry()
+        self._tasks = TaskRegistry(self.conn)
         self._scheduler = Scheduler(self.conn, self._tasks,
                                     pubsub_channel=pubsub_channel,
                                     async_mode=async_mode)

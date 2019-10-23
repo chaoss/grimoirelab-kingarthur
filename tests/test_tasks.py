@@ -35,6 +35,7 @@ from arthur.tasks import (ArchivingTaskConfig,
                           TaskRegistry,
                           TaskStatus)
 
+from base import TestBaseRQ
 
 INVALID_ARCHIVE_PATH_ERROR = "'archive_path' must be a str"
 INVALID_ARCHIVED_AFTER_ERROR = "'archived_after' must be either a str or a datetime"
@@ -190,13 +191,13 @@ class TestTask(unittest.TestCase):
         self.assertDictEqual(d, expected)
 
 
-class TestTaskRegistry(unittest.TestCase):
+class TestTaskRegistry(TestBaseRQ):
     """Unit tests for TaskRegistry"""
 
     def test_empty_registry(self):
         """Check empty registry on init"""
 
-        registry = TaskRegistry()
+        registry = TaskRegistry(self.conn)
         tasks = registry.tasks
 
         self.assertListEqual(tasks, [])
@@ -212,16 +213,15 @@ class TestTaskRegistry(unittest.TestCase):
                                       archived_after=None)
         sched = SchedulingTaskConfig(delay=10, max_retries=2)
 
-        registry = TaskRegistry()
+        registry = TaskRegistry(self.conn)
         before = datetime.datetime.now().timestamp()
-        new_task = registry.add('mytask', 'git', 'commit', args)
+        _ = registry.add('mytask', 'git', 'commit', args)
 
         tasks = registry.tasks
         self.assertEqual(len(tasks), 1)
 
         task = tasks[0]
         self.assertIsInstance(task, Task)
-        self.assertEqual(task, new_task)
         self.assertEqual(task.task_id, 'mytask')
         self.assertEqual(task.status, TaskStatus.NEW)
         self.assertEqual(task.age, 0)
@@ -249,8 +249,11 @@ class TestTaskRegistry(unittest.TestCase):
         self.assertEqual(task0.backend, 'git')
         self.assertEqual(task0.category, 'commit')
         self.assertDictEqual(task0.backend_args, args)
-        self.assertEqual(task0.archiving_cfg, archive)
-        self.assertEqual(task0.scheduling_cfg, sched)
+        self.assertEqual(task0.archiving_cfg.archive_path, archive.archive_path)
+        self.assertEqual(task0.archiving_cfg.archived_after, archive.archived_after)
+        self.assertEqual(task0.archiving_cfg.fetch_from_archive, archive.fetch_from_archive)
+        self.assertEqual(task0.scheduling_cfg.delay, sched.delay)
+        self.assertEqual(task0.scheduling_cfg.max_retries, sched.max_retries)
         self.assertGreater(task0.created_on, before)
 
         task1 = tasks[1]
@@ -260,7 +263,7 @@ class TestTaskRegistry(unittest.TestCase):
     def test_add_existing_task(self):
         """Check if it raises an exception when an exisiting task is added again"""
 
-        registry = TaskRegistry()
+        registry = TaskRegistry(self.conn)
         registry.add('mytask', 'git', 'commit', {})
 
         with self.assertRaises(AlreadyExistsError):
@@ -284,7 +287,7 @@ class TestTaskRegistry(unittest.TestCase):
             'component': 'test'
         }
 
-        registry = TaskRegistry()
+        registry = TaskRegistry(self.conn)
         registry.add('mytask', 'git', 'commit', args)
         registry.add('newtask', 'bugzilla', 'issue', None)
         registry.add('atask', 'git', 'commit', None)
@@ -302,7 +305,7 @@ class TestTaskRegistry(unittest.TestCase):
     def test_remove_not_found(self):
         """Check whether it raises an exception when a task is not found"""
 
-        registry = TaskRegistry()
+        registry = TaskRegistry(self.conn)
 
         with self.assertRaises(NotFoundError):
             registry.remove('mytask')
@@ -322,7 +325,7 @@ class TestTaskRegistry(unittest.TestCase):
             'component': 'test'
         }
 
-        registry = TaskRegistry()
+        registry = TaskRegistry(self.conn)
         registry.add('mytask', 'git', 'commit', args)
         registry.add('newtask', 'bugzilla', 'issue', None)
         registry.add('atask', 'git', 'commit', None)
@@ -338,7 +341,7 @@ class TestTaskRegistry(unittest.TestCase):
     def test_get_task_not_found(self):
         """Check whether it raises an exception when a task is not found"""
 
-        registry = TaskRegistry()
+        registry = TaskRegistry(self.conn)
 
         with self.assertRaises(NotFoundError):
             registry.get('mytask')

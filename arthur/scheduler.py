@@ -171,7 +171,7 @@ class _TaskScheduler(threading.Thread):
             del self._tasks_events[task_id]
             return
 
-        job_id = self._generate_job_id(task_id)
+        job_id = self._generate_job_id()
         job_number = len(task.jobs) + 1
         job_args = _build_job_arguments(task)
 
@@ -237,8 +237,8 @@ class _TaskScheduler(threading.Thread):
         return queue_id
 
     @staticmethod
-    def _generate_job_id(task_id):
-        job_id = '-'.join(['arthur', str(task_id), str(uuid.uuid4())])
+    def _generate_job_id():
+        job_id = str(uuid.uuid4())
         return job_id
 
 

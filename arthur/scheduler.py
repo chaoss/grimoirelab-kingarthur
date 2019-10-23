@@ -182,13 +182,15 @@ class _TaskScheduler(threading.Thread):
                                               connection=self.conn,
                                               is_async=self.async_mode)
 
-        self._queues[queue_id].enqueue(execute_perceval_job,
-                                       job_id=job_id,
-                                       job_number=job_number,
-                                       job_timeout=TIMEOUT,
-                                       ttl=INFINITE_TTL,
-                                       result_ttl=INFINITE_TTL,
-                                       **job_args)
+        job_enqueued = self._queues[queue_id].enqueue(execute_perceval_job,
+                                                      job_id=job_id,
+                                                      job_number=job_number,
+                                                      job_timeout=TIMEOUT,
+                                                      ttl=INFINITE_TTL,
+                                                      result_ttl=INFINITE_TTL,
+                                                      **job_args)
+        job_enqueued.meta['job_number'] = job_number
+        job_enqueued.save_meta()
         del self._tasks_events[task_id]
 
         task.status = TaskStatus.ENQUEUED

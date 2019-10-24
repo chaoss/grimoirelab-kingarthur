@@ -119,7 +119,7 @@ class _TaskScheduler(threading.Thread):
             logger.critical(traceback.format_exc())
 
     def schedule(self):
-        """Start scheduling tasks in loop."""""
+        """Start scheduling tasks in loop."""
 
         while True:
             self._delayer.run(blocking=False)

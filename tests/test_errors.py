@@ -36,7 +36,7 @@ class MockErrorArgs(errors.BaseError):
 
 class TestBaseError(unittest.TestCase):
 
-    def test_subblass_with_no_args(self):
+    def test_subclass_with_no_args(self):
         """Check subclasses that do not require arguments.
 
         Arguments passed to the constructor should be ignored.

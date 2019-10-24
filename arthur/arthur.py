@@ -63,7 +63,7 @@ class Arthur:
 
         :param task_id: id of the task
         :param backend: name of the backend
-        :param category: category of the items to fecth
+        :param category: category of the items to fetch
         :param backend_args: args needed to initialize the backend
         :param archive_args: args needed to initialize the archive
         :param sched_args: scheduling args for this task
@@ -95,7 +95,7 @@ class Arthur:
         """
         try:
             self._scheduler.cancel_task(task_id)
-        except NotFoundError as e:
+        except NotFoundError:
             logger.info("Cannot cancel %s task because it does not exist.",
                         task_id)
             return False

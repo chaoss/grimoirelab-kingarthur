@@ -299,7 +299,7 @@ class TestTaskRegistry(TestBaseRQ):
         self.assertGreater(task0.created_on, task1.created_on)
 
     def test_add_existing_task(self):
-        """Check if it raises an exception when an exisiting task is added again"""
+        """Check if it raises an exception when an existing task is added again"""
 
         registry = TaskRegistry(self.conn)
         registry.add('mytask', 'git', 'commit', {})

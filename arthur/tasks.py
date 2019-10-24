@@ -219,7 +219,7 @@ class TaskRegistry:
     def remove(self, task_id):
         """Remove a task from the registry.
 
-        To remove it, pass its identifier with `taks_id` parameter.
+        To remove it, pass its identifier with `task_id` parameter.
         When the identifier is not found, a `NotFoundError` exception
         is raised.
 

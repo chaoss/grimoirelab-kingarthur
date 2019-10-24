@@ -272,9 +272,6 @@ class TaskRegistry:
         :param task_id: task identifier
         :param task: task object
 
-        :raises NotFoundError: raised when the requested task is not
-            found on the registry
-
         :returns: a task object
         """
         self._rwlock.reader_acquire()
@@ -282,7 +279,7 @@ class TaskRegistry:
         self._rwlock.reader_release()
 
         if not found:
-            raise NotFoundError(element=str(task_id))
+            logger.warning("Task %s not found, adding it", str(task_id))
 
         self._rwlock.writer_acquire()
         self.conn.set(task_id, pickle.dumps(task))

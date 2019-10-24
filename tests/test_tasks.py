@@ -33,7 +33,8 @@ from arthur.tasks import (ArchivingTaskConfig,
                           Task,
                           JobData,
                           TaskRegistry,
-                          TaskStatus)
+                          TaskStatus,
+                          logger)
 
 from base import TestBaseRQ
 
@@ -420,8 +421,9 @@ class TestTaskRegistry(TestBaseRQ):
 
         registry = TaskRegistry(self.conn)
 
-        with self.assertRaises(NotFoundError):
+        with self.assertLogs(logger, level='WARNING') as cm:
             registry.update('mytask', None)
+            self.assertEqual(cm.output[0], 'WARNING:arthur.tasks:Task mytask not found, adding it')
 
 
 class TestArchivingTaskConfig(unittest.TestCase):

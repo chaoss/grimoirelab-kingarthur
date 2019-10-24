@@ -27,6 +27,8 @@ import logging
 import re
 import pickle
 
+from redis.exceptions import RedisError
+
 from grimoirelab_toolkit.datetime import (InvalidDateError,
                                           datetime_to_utc,
                                           datetime_utcnow,
@@ -196,25 +198,27 @@ class TaskRegistry:
         :returns: the new task added to the registry
 
         :raises AlreadyExistsError: raised when the given task identifier
-            exists on the registry
+            already exists in the registry
         """
         self._rwlock.writer_acquire()
-        task_key = self._task_key(task_id)
-        found = self.conn.exists(task_key)
+        try:
+            task_key = self._task_key(task_id)
+            found = self.conn.exists(task_key)
 
-        if found:
+            if found:
+                raise AlreadyExistsError(element=str(task_id))
+
+            task = Task(task_id, backend, category, backend_args,
+                        archiving_cfg=archiving_cfg,
+                        scheduling_cfg=scheduling_cfg)
+            self.conn.set(task_key, pickle.dumps(task))
+
+            logger.debug("Task %s added to the registry", str(task_id))
+            return task
+        except RedisError as e:
+            logger.error("Task %s not added: %s", str(task_id), str(e))
+        finally:
             self._rwlock.writer_release()
-            raise AlreadyExistsError(element=str(task_id))
-
-        task = Task(task_id, backend, category, backend_args,
-                    archiving_cfg=archiving_cfg,
-                    scheduling_cfg=scheduling_cfg)
-        self.conn.set(task_key, pickle.dumps(task))
-        self._rwlock.writer_release()
-
-        logger.debug("Task %s added to the registry", str(task_id))
-
-        return task
 
     def remove(self, task_id):
         """Remove a task from the registry.
@@ -226,20 +230,23 @@ class TaskRegistry:
         :param task_id: identifier of the task to remove
 
         :raises NotFoundError: raised when the given task identifier
-            is not found on the registry
+            is not found in the registry
         """
         self._rwlock.writer_acquire()
-        task_key = self._task_key(task_id)
-        found = self.conn.exists(task_key)
+        try:
+            task_key = self._task_key(task_id)
+            found = self.conn.exists(task_key)
 
-        if not found:
+            if not found:
+                raise NotFoundError(element=str(task_id))
+
+            self.conn.delete(task_key)
+
+            logger.debug("Task %s removed from the registry", str(task_id))
+        except RedisError as e:
+            logger.error("Task %s not removed: %s", str(task_id), str(e))
+        finally:
             self._rwlock.writer_release()
-            raise NotFoundError(element=str(task_id))
-
-        self.conn.delete(task_key)
-        self._rwlock.writer_release()
-
-        logger.debug("Task %s removed from the registry", str(task_id))
 
     def get(self, task_id):
         """Get a task from the registry.
@@ -253,21 +260,24 @@ class TaskRegistry:
         :returns: a task object
 
         :raises NotFoundError: raised when the requested task is not
-            found on the registry
+            found in the registry
         """
         self._rwlock.reader_acquire()
-        task_key = self._task_key(task_id)
-        found = self.conn.exists(task_key)
+        try:
+            task_key = self._task_key(task_id)
+            found = self.conn.exists(task_key)
 
-        if not found:
+            if not found:
+                raise NotFoundError(element=str(task_id))
+
+            task_dump = self.conn.get(task_key)
+            task = pickle.loads(task_dump)
+
+            return task
+        except RedisError as e:
+            logger.error("Task %s not retrieved: %s", str(task_id), str(e))
+        finally:
             self._rwlock.reader_release()
-            raise NotFoundError(element=str(task_id))
-
-        task_dump = self.conn.get(task_key)
-        task = pickle.loads(task_dump)
-        self._rwlock.reader_release()
-
-        return task
 
     def update(self, task_id, task):
         """Update a task in the registry.
@@ -282,40 +292,47 @@ class TaskRegistry:
         :returns: a task object
         """
         self._rwlock.writer_acquire()
-        task_key = self._task_key(task_id)
-        found = self.conn.exists(task_key)
+        try:
+            task_key = self._task_key(task_id)
+            found = self.conn.exists(task_key)
 
-        if not found:
-            logger.warning("Task %s not found, adding it", str(task_id))
+            if not found:
+                logger.warning("Task %s not found, adding it", str(task_id))
 
-        self.conn.set(task_key, pickle.dumps(task))
-        self._rwlock.writer_release()
+            self.conn.set(task_key, pickle.dumps(task))
 
-        logger.debug("Task %s updated", str(task_id))
+            logger.debug("Task %s updated", str(task_id))
+        except RedisError as e:
+            logger.error("Task %s not updated: %s", str(task_id), str(e))
+        finally:
+            self._rwlock.writer_release()
 
     @property
     def tasks(self):
         """Get the list of tasks"""
 
         self._rwlock.reader_acquire()
-        tasks = []
-        keys = []
+        try:
+            tasks = []
+            keys = []
 
-        match_prefix = "{}*".format(TASK_PREFIX)
-        total, found = self.conn.scan(match=match_prefix)
-        keys.extend([f.decode("utf-8") for f in found])
-        while total != 0:
-            total, found = self.conn.scan(cursor=total, match=match_prefix)
+            match_prefix = "{}*".format(TASK_PREFIX)
+            total, found = self.conn.scan(match=match_prefix)
             keys.extend([f.decode("utf-8") for f in found])
+            while total != 0:
+                total, found = self.conn.scan(cursor=total, match=match_prefix)
+                keys.extend([f.decode("utf-8") for f in found])
 
-        keys.sort()
-        for k in keys:
-            task_dump = self.conn.get(k)
-            tasks.append(pickle.loads(task_dump))
+            keys.sort()
+            for k in keys:
+                task_dump = self.conn.get(k)
+                tasks.append(pickle.loads(task_dump))
 
-        self._rwlock.reader_release()
-
-        return tasks
+            return tasks
+        except RedisError as e:
+            logger.error("Tasks not listed: %s", str(e))
+        finally:
+            self._rwlock.reader_release()
 
 
 class _TaskConfig:

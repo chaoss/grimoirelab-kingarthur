@@ -25,6 +25,7 @@ import unittest
 import unittest.mock
 
 import dateutil
+from redis.exceptions import RedisError
 
 from arthur.common import MAX_JOB_RETRIES, WAIT_FOR_QUEUING
 from arthur.errors import AlreadyExistsError, NotFoundError
@@ -219,6 +220,20 @@ class TestTaskRegistry(TestBaseRQ):
         for t in tasks:
             self.assertIn(t.task_id, expected)
 
+    @unittest.mock.patch('redis.StrictRedis.scan')
+    def test_tasks_redis_error(self, mock_redis_set):
+        """Test whether the lock is released in case of a Redis error and a log message is shown"""
+
+        mock_redis_set.side_effect = RedisError
+
+        registry = TaskRegistry(self.conn)
+        registry.add('mytask', 'git', 'commit', {})
+        self.assertGreater(registry._rwlock._readers_mutex._value, 0)
+        with self.assertLogs(logger) as cm:
+            _ = registry.tasks
+            self.assertGreater(registry._rwlock._readers_mutex._value, 0)
+            self.assertEqual(cm.output[0], 'ERROR:arthur.tasks:Tasks not listed: ')
+
     def test_matched_tasks(self):
         """Test to list tasks in the registry when other data is stored in Redis"""
 
@@ -317,6 +332,19 @@ class TestTaskRegistry(TestBaseRQ):
         self.assertEqual(task.category, 'commit')
         self.assertDictEqual(task.backend_args, {})
 
+    @unittest.mock.patch('redis.StrictRedis.set')
+    def test_add_task_redis_error(self, mock_redis_cmd):
+        """Test whether the lock is released in case of a Redis error and a log message is shown"""
+
+        mock_redis_cmd.side_effect = RedisError
+
+        registry = TaskRegistry(self.conn)
+        self.assertGreater(registry._rwlock._access_mutex._value, 0)
+        with self.assertLogs(logger) as cm:
+            registry.add('mytask', 'git', 'commit', {})
+            self.assertGreater(registry._rwlock._access_mutex._value, 0)
+            self.assertEqual(cm.output[0], 'ERROR:arthur.tasks:Task mytask not added: ')
+
     def test_remove_task(self):
         """Test to remove a task from the registry"""
 
@@ -355,6 +383,20 @@ class TestTaskRegistry(TestBaseRQ):
 
         self.assertEqual(len(registry.tasks), 1)
 
+    @unittest.mock.patch('redis.StrictRedis.delete')
+    def test_remove_task_redis_error(self, mock_redis_cmd):
+        """Test whether the lock is released in case of a Redis error and a log message is shown"""
+
+        mock_redis_cmd.side_effect = RedisError
+
+        registry = TaskRegistry(self.conn)
+        registry.add('mytask', 'git', 'commit', {})
+        self.assertGreater(registry._rwlock._access_mutex._value, 0)
+        with self.assertLogs(logger) as cm:
+            registry.remove('mytask')
+            self.assertGreater(registry._rwlock._access_mutex._value, 0)
+            self.assertEqual(cm.output[0], 'ERROR:arthur.tasks:Task mytask not removed: ')
+
     def test_get_task(self):
         """Test to get a task from the registry"""
 
@@ -388,6 +430,20 @@ class TestTaskRegistry(TestBaseRQ):
 
         with self.assertRaises(NotFoundError):
             registry.get('mytask')
+
+    @unittest.mock.patch('redis.StrictRedis.get')
+    def test_get_task_redis_error(self, mock_redis_cmd):
+        """Test whether the lock is released in case of a Redis error and a log message is shown"""
+
+        mock_redis_cmd.side_effect = RedisError
+
+        registry = TaskRegistry(self.conn)
+        registry.add('mytask', 'git', 'commit', {})
+        self.assertGreater(registry._rwlock._access_mutex._value, 0)
+        with self.assertLogs(logger) as cm:
+            registry.get('mytask')
+            self.assertGreater(registry._rwlock._access_mutex._value, 0)
+            self.assertEqual(cm.output[0], 'ERROR:arthur.tasks:Task mytask not retrieved: ')
 
     def test_update_task(self):
         """Test to update tasks in the registry"""
@@ -445,6 +501,20 @@ class TestTaskRegistry(TestBaseRQ):
         with self.assertLogs(logger, level='WARNING') as cm:
             registry.update('mytask', None)
             self.assertEqual(cm.output[0], 'WARNING:arthur.tasks:Task mytask not found, adding it')
+
+    @unittest.mock.patch('redis.StrictRedis.exists')
+    def test_update_task_redis_error(self, mock_redis_cmd):
+        """Test whether the lock is released in case of a Redis error and a log message is shown"""
+
+        mock_redis_cmd.side_effect = RedisError
+
+        registry = TaskRegistry(self.conn)
+        registry.add('mytask', 'git', 'commit', {})
+        self.assertGreater(registry._rwlock._access_mutex._value, 0)
+        with self.assertLogs(logger) as cm:
+            registry.update('mytask', None)
+            self.assertGreater(registry._rwlock._access_mutex._value, 0)
+            self.assertEqual(cm.output[0], 'ERROR:arthur.tasks:Task mytask not updated: ')
 
 
 class TestArchivingTaskConfig(unittest.TestCase):

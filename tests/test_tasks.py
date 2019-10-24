@@ -219,6 +219,27 @@ class TestTaskRegistry(TestBaseRQ):
         for t in tasks:
             self.assertIn(t.task_id, expected)
 
+    def test_matched_tasks(self):
+        """Test to list tasks in the registry when other data is stored in Redis"""
+
+        registry = TaskRegistry(self.conn)
+
+        self.conn.set("key1", 'value')
+        self.conn.set("key2", 1)
+        self.conn.set("key3", b'x')
+
+        expected = []
+        for i in range(0, 20):
+            task_id = 'mytask{}'.format(i)
+            expected.append(task_id)
+            registry.add(task_id, 'git', 'commit', {})
+
+        tasks = registry.tasks
+        self.assertEqual(len(tasks), 20)
+
+        for t in tasks:
+            self.assertIn(t.task_id, expected)
+
     def test_add_task(self):
         """Test to add tasks to the registry"""
 

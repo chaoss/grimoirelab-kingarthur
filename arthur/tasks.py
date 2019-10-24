@@ -44,6 +44,9 @@ from .utils import RWLock
 logger = logging.getLogger(__name__)
 
 
+TASK_PREFIX = 'arthur:task:'
+
+
 @enum.unique
 class TaskStatus(enum.Enum):
     """Task life cycle statuses.
@@ -171,6 +174,10 @@ class TaskRegistry:
         self.conn = conn
         self._rwlock = RWLock()
 
+    @staticmethod
+    def _task_key(task_id):
+        return '{}:{}'.format(TASK_PREFIX, task_id)
+
     def add(self, task_id, backend, category, backend_args,
             archiving_cfg=None, scheduling_cfg=None):
         """Add a task to the registry.
@@ -191,18 +198,18 @@ class TaskRegistry:
         :raises AlreadyExistsError: raised when the given task identifier
             exists on the registry
         """
-        self._rwlock.reader_acquire()
-        found = self.conn.exists(task_id)
-        self._rwlock.reader_release()
+        self._rwlock.writer_acquire()
+        task_key = self._task_key(task_id)
+        found = self.conn.exists(task_key)
 
         if found:
+            self._rwlock.writer_release()
             raise AlreadyExistsError(element=str(task_id))
 
-        self._rwlock.writer_acquire()
         task = Task(task_id, backend, category, backend_args,
                     archiving_cfg=archiving_cfg,
                     scheduling_cfg=scheduling_cfg)
-        self.conn.set(task_id, pickle.dumps(task))
+        self.conn.set(task_key, pickle.dumps(task))
         self._rwlock.writer_release()
 
         logger.debug("Task %s added to the registry", str(task_id))
@@ -221,15 +228,15 @@ class TaskRegistry:
         :raises NotFoundError: raised when the given task identifier
             is not found on the registry
         """
-        self._rwlock.reader_acquire()
-        found = self.conn.exists(task_id)
-        self._rwlock.reader_release()
+        self._rwlock.writer_acquire()
+        task_key = self._task_key(task_id)
+        found = self.conn.exists(task_key)
 
         if not found:
+            self._rwlock.writer_release()
             raise NotFoundError(element=str(task_id))
 
-        self._rwlock.writer_acquire()
-        self.conn.expire(task_id, -1)
+        self.conn.delete(task_key)
         self._rwlock.writer_release()
 
         logger.debug("Task %s removed from the registry", str(task_id))
@@ -249,14 +256,14 @@ class TaskRegistry:
             found on the registry
         """
         self._rwlock.reader_acquire()
-        found = self.conn.exists(task_id)
-        self._rwlock.reader_release()
+        task_key = self._task_key(task_id)
+        found = self.conn.exists(task_key)
 
         if not found:
+            self._rwlock.reader_release()
             raise NotFoundError(element=str(task_id))
 
-        self._rwlock.reader_acquire()
-        task_dump = self.conn.get(task_id)
+        task_dump = self.conn.get(task_key)
         task = pickle.loads(task_dump)
         self._rwlock.reader_release()
 
@@ -274,15 +281,14 @@ class TaskRegistry:
 
         :returns: a task object
         """
-        self._rwlock.reader_acquire()
-        found = self.conn.exists(task_id)
-        self._rwlock.reader_release()
+        self._rwlock.writer_acquire()
+        task_key = self._task_key(task_id)
+        found = self.conn.exists(task_key)
 
         if not found:
             logger.warning("Task %s not found, adding it", str(task_id))
 
-        self._rwlock.writer_acquire()
-        self.conn.set(task_id, pickle.dumps(task))
+        self.conn.set(task_key, pickle.dumps(task))
         self._rwlock.writer_release()
 
         logger.debug("Task %s updated", str(task_id))
@@ -295,10 +301,11 @@ class TaskRegistry:
         tasks = []
         keys = []
 
-        total, found = self.conn.scan()
+        match_prefix = "{}*".format(TASK_PREFIX)
+        total, found = self.conn.scan(match=match_prefix)
         keys.extend([f.decode("utf-8") for f in found])
         while total != 0:
-            total, found = self.conn.scan(cursor=total)
+            total, found = self.conn.scan(cursor=total, match=match_prefix)
             keys.extend([f.decode("utf-8") for f in found])
 
         keys.sort()

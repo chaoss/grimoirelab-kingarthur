@@ -130,14 +130,16 @@ class _TaskScheduler(threading.Thread):
             # Let other threads run
             time.sleep(self.polling)
 
-    def schedule_task(self, task_id, delay=0):
+    def schedule_task(self, task_id, delay=0, reset=False):
         """Schedule the task in the given queue.
 
         :param task_id: id of the task
         :param delay: delay in seconds to schedule the task
+        :param reset: initialize task counters such `age` and
+            the number of failures
 
         :raises NotFoundError: raised when the requested task is not
--           found in the registry
+           found in the registry
         :raises TaskRegistryError: raised when the requested task is not
             retrieved from the registry
         """
@@ -150,6 +152,11 @@ class _TaskScheduler(threading.Thread):
 
         self._tasks_events[task_id] = event
         task.status = TaskStatus.SCHEDULED
+
+        if reset:
+            task.num_failures = 0
+            task.age = 0
+
         self.registry.update(task_id, task)
 
         self._rwlock.writer_release()
@@ -503,10 +510,12 @@ class Scheduler:
         else:
             self._scheduler.schedule()
 
-    def schedule_task(self, task_id):
+    def schedule_task(self, task_id, reset=False):
         """Schedule a task.
 
         :param task_id: identifier of the task to schedule
+        :param reset: initialize task counters such `age` and
+            the number of failures
 
         :raises NotFoundError: raised when the requested task is not
             found in the registry
@@ -514,7 +523,7 @@ class Scheduler:
             when retrieving the task
         """
         self._scheduler.schedule_task(task_id,
-                                      delay=0)
+                                      delay=0, reset=reset)
         logger.info("Task: %s scheduled", task_id)
 
     def cancel_task(self, task_id):

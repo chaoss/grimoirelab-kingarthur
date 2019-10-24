@@ -30,7 +30,10 @@ import rq
 from .common import CH_PUBSUB, ARCHIVES_DEFAULT_PATH, Q_STORAGE_ITEMS
 from .errors import AlreadyExistsError, NotFoundError, TaskRegistryError
 from .scheduler import Scheduler
-from .tasks import ArchivingTaskConfig, SchedulingTaskConfig, TaskRegistry
+from .tasks import (ArchivingTaskConfig,
+                    SchedulingTaskConfig,
+                    TaskRegistry,
+                    TaskStatus)
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +106,26 @@ class Arthur:
             return False
         else:
             return True
+
+    def reschedule_task(self, task_id):
+        """Re-schedule a failed task.
+
+        :param task_id: id of the task
+        """
+        try:
+            task = self._tasks.get(task_id)
+        except NotFoundError as e:
+            logger.info("Cannot re-schedule %s task because it does not exist.",
+                        task_id)
+            return False
+
+        if task.status == TaskStatus.FAILED:
+            self._scheduler.schedule_task(task_id, reset=True)
+            return True
+        else:
+            logger.info("Cannot re-schedule task %s; only FAILED tasks can be rescheduled.",
+                        task_id)
+            return False
 
     def items(self):
         """Get the items fetched by the jobs."""

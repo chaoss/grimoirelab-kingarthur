@@ -36,7 +36,9 @@ from redis.exceptions import RedisError
 from arthur.arthur import Arthur
 from arthur.common import ARCHIVES_DEFAULT_PATH
 from arthur.errors import AlreadyExistsError, TaskRegistryError
-from arthur.tasks import ArchivingTaskConfig, SchedulingTaskConfig
+from arthur.tasks import (ArchivingTaskConfig,
+                          SchedulingTaskConfig,
+                          TaskStatus)
 
 from base import find_empty_redis_database
 
@@ -451,6 +453,71 @@ class TestArthur(unittest.TestCase):
         self.assertListEqual(commits, [])
 
         shutil.rmtree(new_path)
+
+    def test_reschedule(self):
+        """Check whether it reschedules a failed task"""
+
+        task_id = "arthur.task"
+        backend = "git"
+        category = "commit"
+        backend_params = {"a": "a", "b": "b"}
+        sched_params = {"max_retries": 5}
+
+        app = Arthur(self.conn, async_mode=False)
+        app.add_task(task_id, backend, category,
+                     backend_params,
+                     sched_args=sched_params)
+
+        # Set task as failed
+        t = app._tasks.tasks[0]
+        t.status = TaskStatus.FAILED
+        t.age = 100
+        t.num_failures = 5
+        app._tasks.update(task_id, t)
+
+        # Task will be scheduled again after calling the method
+        result = app.reschedule_task(task_id)
+
+        # Update task values
+        t = app._tasks.get(task_id)
+
+        self.assertEqual(result, True)
+        self.assertEqual(t.status, TaskStatus.SCHEDULED)
+        self.assertEqual(t.age, 0)
+        self.assertEqual(t.num_failures, 0)
+
+    def test_reschedule_non_existing_task(self):
+        """Check whether re-scheduling does nothing when the task does not exist"""
+
+        app = Arthur(self.conn, async_mode=False)
+        result = app.reschedule_task('no-id')
+
+        self.assertEqual(result, False)
+        self.assertEqual(len(app._tasks.tasks), 0)
+
+    def test_reschedule_non_failed_task(self):
+        """Check whether the method does nothing when re-scheduling a non failed task"""
+
+        task_id = "arthur.task"
+        backend = "git"
+        category = "commit"
+        backend_params = {"a": "a", "b": "b"}
+
+        app = Arthur(self.conn, async_mode=False)
+        app.add_task(task_id, backend, category, backend_params)
+
+        # Force a different status
+        t = app._tasks.tasks[0]
+        t.status = TaskStatus.RUNNING
+        app._tasks.update(task_id, t)
+
+        result = app.reschedule_task('arthur.task')
+
+        # The status should not have changed because
+        # the task is a non failed one
+        t = app._tasks.get(task_id)
+        self.assertEqual(result, False)
+        self.assertEqual(t.status, TaskStatus.RUNNING)
 
 
 if __name__ == "__main__":

@@ -191,17 +191,18 @@ class TaskRegistry:
         :raises AlreadyExistsError: raised when the given task identifier
             exists on the registry
         """
-        self._rwlock.writer_acquire()
+        self._rwlock.reader_acquire()
+        found = self.conn.exists(task_id)
+        self._rwlock.reader_release()
 
-        if task_id in [k.decode("utf-8") for k in self.conn.keys()]:
-            self._rwlock.writer_release()
+        if found:
             raise AlreadyExistsError(element=str(task_id))
 
+        self._rwlock.writer_acquire()
         task = Task(task_id, backend, category, backend_args,
                     archiving_cfg=archiving_cfg,
                     scheduling_cfg=scheduling_cfg)
         self.conn.set(task_id, pickle.dumps(task))
-
         self._rwlock.writer_release()
 
         logger.debug("Task %s added to the registry", str(task_id))
@@ -220,12 +221,16 @@ class TaskRegistry:
         :raises NotFoundError: raised when the given task identifier
             is not found on the registry
         """
-        self._rwlock.writer_acquire()
-        res = self.conn.delete(task_id)
-        self._rwlock.writer_release()
+        self._rwlock.reader_acquire()
+        found = self.conn.exists(task_id)
+        self._rwlock.reader_release()
 
-        if res == 0:
+        if not found:
             raise NotFoundError(element=str(task_id))
+
+        self._rwlock.writer_acquire()
+        self.conn.expire(task_id, -1)
+        self._rwlock.writer_release()
 
         logger.debug("Task %s removed from the registry", str(task_id))
 
@@ -243,14 +248,17 @@ class TaskRegistry:
         :raises NotFoundError: raised when the requested task is not
             found on the registry
         """
-        try:
-            self._rwlock.reader_acquire()
-            task_dump = self.conn.get(task_id)
-            task = pickle.loads(task_dump)
-        except TypeError:
+        self._rwlock.reader_acquire()
+        found = self.conn.exists(task_id)
+        self._rwlock.reader_release()
+
+        if not found:
             raise NotFoundError(element=str(task_id))
-        finally:
-            self._rwlock.reader_release()
+
+        self._rwlock.reader_acquire()
+        task_dump = self.conn.get(task_id)
+        task = pickle.loads(task_dump)
+        self._rwlock.reader_release()
 
         return task
 
@@ -264,19 +272,21 @@ class TaskRegistry:
         :param task_id: task identifier
         :param task: task object
 
-        :returns: a task object
-
         :raises NotFoundError: raised when the requested task is not
             found on the registry
+
+        :returns: a task object
         """
         self._rwlock.reader_acquire()
+        found = self.conn.exists(task_id)
+        self._rwlock.reader_release()
 
-        if task_id not in [k.decode("utf-8") for k in self.conn.keys()]:
-            self._rwlock.reader_release()
+        if not found:
             raise NotFoundError(element=str(task_id))
 
+        self._rwlock.writer_acquire()
         self.conn.set(task_id, pickle.dumps(task))
-        self._rwlock.reader_release()
+        self._rwlock.writer_release()
 
         logger.debug("Task %s updated", str(task_id))
 
@@ -286,9 +296,15 @@ class TaskRegistry:
 
         self._rwlock.reader_acquire()
         tasks = []
-        keys = [k.decode("utf-8") for k in self.conn.keys()]
-        keys.sort()
+        keys = []
 
+        total, found = self.conn.scan()
+        keys.extend([f.decode("utf-8") for f in found])
+        while total != 0:
+            total, found = self.conn.scan(cursor=total)
+            keys.extend([f.decode("utf-8") for f in found])
+
+        keys.sort()
         for k in keys:
             task_dump = self.conn.get(k)
             tasks.append(pickle.loads(task_dump))

@@ -32,6 +32,7 @@ import requests
 import rq
 
 from arthur.server import ArthurServer
+from arthur.tasks import TaskStatus
 
 from base import TestBaseRQ
 
@@ -122,7 +123,7 @@ class TestArthurServer(TestBaseRQ):
                             "url": "https://bugzilla.example.com/",
                             "from_date": "2016-09-19"
                         },
-                        "category": "issue",
+                        "category": "bug",
                         "archive": {
                             'archive_path': '/tmp/archive',
                             'fetch_from_archive': False
@@ -145,6 +146,50 @@ class TestArthurServer(TestBaseRQ):
 
             self.assertTrue(response.status_code, 200)
             self.assertEqual(len(server._tasks.tasks), 0)
+
+    def test_reschedule(self):
+        """Check whether tasks are rescheduled"""
+
+        with run_server(self.conn) as server:
+            backend_args = {
+                "gitpath": os.path.join(self.dir, 'data/git_log.txt'),
+                "uri": "http://example.com/"
+            }
+
+            task = server._tasks.add('arthur.git', 'git', 'commit',
+                                     backend_args)
+            server._tasks.add('arthur_extra.git', 'git', 'commit',
+                              backend_args)
+
+            # Update status to check if it is re-scheduled again
+            task.status = TaskStatus.FAILED
+            server._tasks.update('arthur.git', task)
+
+            data = {
+                "tasks": [
+                    {
+                        "task_id": "arthur.git"
+                    },
+                    {
+                        "task_id": "arthur_extra.git",
+                    }
+                ]
+            }
+
+            response = requests.post("http://127.0.0.1:8080/reschedule",
+                                     json=data, headers={'Content-Type': 'application/json'})
+            content = json.loads(response.content.decode('utf8').replace("'", '"'))
+
+            self.assertTrue(response.status_code, 200)
+            self.assertEqual(content["tasks"]["arthur.git"], True)
+            self.assertEqual(content["tasks"]["arthur_extra.git"], False)
+
+            # Only the failed task was re-scheduled again
+            task = server._tasks.get('arthur.git')
+            self.assertEqual(task.status, TaskStatus.SCHEDULED)
+
+            task = server._tasks.get('arthur_extra.git')
+            self.assertEqual(task.status, TaskStatus.NEW)
 
     def test_tasks(self):
         """Check whether tasks are retrieved"""
@@ -172,7 +217,7 @@ class TestArthurServer(TestBaseRQ):
                             "url": "https://bugzilla.example.com/",
                             "from_date": "2016-09-19"
                         },
-                        "category": "issue",
+                        "category": "bug",
                         "archive": {
                             'archive_path': '/tmp/archive',
                             'fetch_from_archive': True,

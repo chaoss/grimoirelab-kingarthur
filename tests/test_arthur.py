@@ -288,7 +288,7 @@ class TestArthur(unittest.TestCase):
 
         app = Arthur(self.conn, async_mode=False)
 
-        with self.assertRaisesRegex(ValueError, INVALID_SCHEDULER_DELAY) as ex:
+        with self.assertRaisesRegex(ValueError, INVALID_SCHEDULER_DELAY):
             app.add_task(task_id, backend, category, backend_params, sched_args=sched_params)
 
     def test_task_wrong_max_retries(self):
@@ -302,7 +302,7 @@ class TestArthur(unittest.TestCase):
 
         app = Arthur(self.conn, async_mode=False)
 
-        with self.assertRaisesRegex(ValueError, INVALID_SCHEDULER_MAX_RETRIES) as ex:
+        with self.assertRaisesRegex(ValueError, INVALID_SCHEDULER_MAX_RETRIES):
             app.add_task(task_id, backend, category, backend_params, sched_args=sched_params)
 
     def test_add_duplicated_task(self):

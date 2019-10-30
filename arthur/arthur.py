@@ -95,7 +95,7 @@ class Arthur:
         """
         try:
             self._scheduler.cancel_task(task_id)
-        except NotFoundError as e:
+        except NotFoundError:
             logger.info("Cannot cancel %s task because it does not exist.",
                         task_id)
             return False

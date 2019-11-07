@@ -198,10 +198,11 @@ class ArthurServer(Arthur):
         job_result = result.to_dict() if isinstance(result, JobResult) else None
 
         job_log = job_rq.meta.get('log', None)
+        job_number = job_rq.meta.get('job_number', None)
 
         job = {
             'job_id': job_rq.id,
-            'job_number': result.job_number,
+            'job_number': job_number,
             'job_status': job_rq.get_status(),
             'job_description': job_rq.description,
             'created_at': job_rq.created_at,

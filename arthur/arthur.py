@@ -28,7 +28,7 @@ import pickle
 import rq
 
 from .common import CH_PUBSUB, ARCHIVES_DEFAULT_PATH, Q_STORAGE_ITEMS
-from .errors import AlreadyExistsError, NotFoundError
+from .errors import AlreadyExistsError, NotFoundError, TaskRegistryError
 from .scheduler import Scheduler
 from .tasks import ArchivingTaskConfig, SchedulingTaskConfig, TaskRegistry
 
@@ -82,6 +82,8 @@ class Arthur:
                                    archiving_cfg=archiving_cfg,
                                    scheduling_cfg=scheduling_cfg)
         except AlreadyExistsError as e:
+            raise e
+        except TaskRegistryError as e:
             raise e
 
         self._scheduler.schedule_task(task.task_id)

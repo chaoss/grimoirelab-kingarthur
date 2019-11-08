@@ -152,8 +152,15 @@ class ArthurServer(Arthur):
     @cherrypy.expose
     @cherrypy.tools.json_out(handler=json_encoder)
     def task(self, task_id):
-        """Get info about a task"""
+        """Get info about a task
 
+        :param task_id: id of the task
+
+        :raises NotFoundError: raised when the requested task is not
+-           found in the registry
+        :raises TaskRegistryError: raised when the requested task is not
+            retrieved from the registry
+        """
         logger.debug("API 'task' method called for task %s", task_id)
 
         task = self._tasks.get(task_id)

@@ -92,5 +92,14 @@ class TestNotFoundError(unittest.TestCase):
         self.assertEqual(e.element, 'repository')
 
 
+class TestTaskRegistryError(unittest.TestCase):
+
+    def test_message(self):
+        """Make sure that prints the correct error"""
+
+        e = errors.TaskRegistryError(cause='error on registry')
+        self.assertEqual('error on registry', str(e))
+
+
 if __name__ == "__main__":
     unittest.main()

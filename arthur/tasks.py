@@ -39,7 +39,9 @@ import perceval.backend
 import perceval.backends
 
 from .common import MAX_JOB_RETRIES, WAIT_FOR_QUEUING
-from .errors import AlreadyExistsError, NotFoundError
+from .errors import (AlreadyExistsError,
+                     NotFoundError,
+                     TaskRegistryError)
 from .utils import RWLock
 
 
@@ -199,6 +201,8 @@ class TaskRegistry:
 
         :raises AlreadyExistsError: raised when the given task identifier
             already exists in the registry
+        :raises TaskRegistryError: raised when the given task identifier
+            is not added to the registry
         """
         self._rwlock.writer_acquire()
         try:
@@ -216,7 +220,9 @@ class TaskRegistry:
             logger.debug("Task %s added to the registry", str(task_id))
             return task
         except RedisError as e:
-            logger.error("Task %s not added: %s", str(task_id), str(e))
+            msg = "Task {} not added: {}".format(task_id, e)
+            logger.error(msg)
+            raise TaskRegistryError(cause=msg)
         finally:
             self._rwlock.writer_release()
 
@@ -231,6 +237,8 @@ class TaskRegistry:
 
         :raises NotFoundError: raised when the given task identifier
             is not found in the registry
+        :raises TaskRegistryError: raised when the given task identifier
+            is not removed from the registry
         """
         self._rwlock.writer_acquire()
         try:
@@ -244,7 +252,9 @@ class TaskRegistry:
 
             logger.debug("Task %s removed from the registry", str(task_id))
         except RedisError as e:
-            logger.error("Task %s not removed: %s", str(task_id), str(e))
+            msg = "Task {} not removed: {}".format(task_id, e)
+            logger.error(msg)
+            raise TaskRegistryError(cause=msg)
         finally:
             self._rwlock.writer_release()
 
@@ -260,7 +270,9 @@ class TaskRegistry:
         :returns: a task object
 
         :raises NotFoundError: raised when the requested task is not
-            found in the registry
+-           found in the registry
+        :raises TaskRegistryError: raised when the requested task is not
+            retrieved from the registry
         """
         self._rwlock.reader_acquire()
         try:
@@ -275,7 +287,9 @@ class TaskRegistry:
 
             return task
         except RedisError as e:
-            logger.error("Task %s not retrieved: %s", str(task_id), str(e))
+            msg = "Task {} not retrieved: {}".format(task_id, e)
+            logger.error(msg)
+            raise TaskRegistryError(cause=msg)
         finally:
             self._rwlock.reader_release()
 
@@ -290,6 +304,9 @@ class TaskRegistry:
         :param task: task object
 
         :returns: a task object
+
+        :raises TaskRegistryError: raised when the task is not
+            updated
         """
         self._rwlock.writer_acquire()
         try:
@@ -303,14 +320,23 @@ class TaskRegistry:
 
             logger.debug("Task %s updated", str(task_id))
         except RedisError as e:
-            logger.error("Task %s not updated: %s", str(task_id), str(e))
+            msg = "Task {} not updated: {}".format(task_id, e)
+            logger.error(msg)
+            raise TaskRegistryError(cause=msg)
         finally:
             self._rwlock.writer_release()
 
     @property
     def tasks(self):
-        """Get the list of tasks"""
+        """Get the list of tasks
 
+        Retrieve the list of tasks stored in the registry
+
+        :returns: a list of tasks
+
+        :raises TaskRegistryError: raised when the tasks cannot
+            be listed
+        """
         self._rwlock.reader_acquire()
         try:
             tasks = []
@@ -330,7 +356,9 @@ class TaskRegistry:
 
             return tasks
         except RedisError as e:
-            logger.error("Tasks not listed: %s", str(e))
+            msg = "Tasks not listed: {}".format(e)
+            logger.error(msg)
+            raise TaskRegistryError(cause=msg)
         finally:
             self._rwlock.reader_release()
 

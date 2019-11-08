@@ -31,6 +31,7 @@ from arthur.errors import AlreadyExistsError, NotFoundError
 from arthur.tasks import (ArchivingTaskConfig,
                           SchedulingTaskConfig,
                           Task,
+                          JobData,
                           TaskRegistry,
                           TaskStatus)
 
@@ -113,6 +114,26 @@ class TestTask(unittest.TestCase):
                      archiving_cfg=archive, scheduling_cfg=sched)
             self.assertEqual(e.exception.element, 'mock_backend')
 
+    def test_set_job(self):
+        """Check whether the job is added to the task"""
+
+        args = {
+            'from_date': '1970-01-01',
+            'component': 'test'
+        }
+        category = 'commit'
+
+        task = Task('mytask', 'git', category, args)
+
+        task.set_job('job-0', 0)
+        task.set_job('job-1', 1)
+
+        expected_job_0 = JobData('job-0', 0)
+        expected_job_1 = JobData('job-1', 1)
+
+        self.assertEqual(len(task.jobs), 2)
+        self.assertListEqual(task.jobs, [expected_job_0, expected_job_1])
+
     def test_to_dict(self):
         """Check whether the object is converted into a dict"""
 
@@ -129,17 +150,25 @@ class TestTask(unittest.TestCase):
 
         task = Task('mytask', 'git', category, args,
                     archiving_cfg=archive, scheduling_cfg=sched)
-        task.jobs.append('job-0')
-        task.jobs.append('job-1')
+        task.set_job('job-0', 0)
+        task.set_job('job-1', 1)
 
         d = task.to_dict()
 
+        expected_job_0 = {
+            'job_id': 'job-0',
+            'job_number': 0
+        }
+        expected_job_1 = {
+            'job_id': 'job-1',
+            'job_number': 1
+        }
         expected = {
             'task_id': 'mytask',
             'status': 'NEW',
             'age': 0,
             'num_failures': 0,
-            'jobs': ['job-0', 'job-1'],
+            'jobs': [expected_job_0, expected_job_1],
             'backend': 'git',
             'backend_args': args,
             'category': category,

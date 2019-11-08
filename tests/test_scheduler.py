@@ -73,7 +73,7 @@ class TestScheduler(TestBaseRQ):
 
         self.assertEqual(task.age, 1)
 
-        job = schlr._scheduler._queues[Q_CREATION_JOBS].fetch_job(task.jobs[0])
+        job = schlr._scheduler._queues[Q_CREATION_JOBS].fetch_job(task.jobs[0].id)
         result = job.return_value
 
         self.assertEqual(result.task_id, task.task_id)
@@ -109,7 +109,7 @@ class TestScheduler(TestBaseRQ):
 
         self.assertEqual(task.age, 1)
 
-        job = schlr._scheduler._queues['myqueue'].fetch_job(task.jobs[0])
+        job = schlr._scheduler._queues['myqueue'].fetch_job(task.jobs[0].id)
         result = job.return_value
 
         self.assertEqual(result.task_id, task.task_id)
@@ -156,7 +156,7 @@ class TestScheduler(TestBaseRQ):
         self.assertEqual(task.age, 1)
 
         # Get the last job run and check the result
-        job = schlr._scheduler._queues['myqueue'].fetch_job(task.jobs[3])
+        job = schlr._scheduler._queues['myqueue'].fetch_job(task.jobs[3].id)
         result = job.return_value
 
         self.assertEqual(result.task_id, task.task_id)

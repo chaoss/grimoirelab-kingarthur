@@ -195,7 +195,7 @@ class _TaskScheduler(threading.Thread):
 
         task.status = TaskStatus.ENQUEUED
         task.age += 1
-        task.jobs.append(job_id)
+        task.set_job(job_id, job_number)
 
         self._rwlock.writer_release()
 

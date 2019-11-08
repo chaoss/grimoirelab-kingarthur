@@ -40,7 +40,7 @@ from .common import (CH_PUBSUB,
                      Q_STORAGE_ITEMS,
                      WAIT_FOR_QUEUING,
                      TIMEOUT)
-from .errors import NotFoundError
+from .errors import NotFoundError, TaskRegistryError
 from .events import JobEventType, JobEventsListener
 from .jobs import execute_perceval_job
 from .tasks import TaskStatus
@@ -131,8 +131,16 @@ class _TaskScheduler(threading.Thread):
             time.sleep(self.polling)
 
     def schedule_task(self, task_id, delay=0):
-        """Schedule the task in the given queue."""
+        """Schedule the task in the given queue.
 
+        :param task_id: id of the task
+        :param delay: delay in seconds to schedule the task
+
+        :raises NotFoundError: raised when the requested task is not
+-           found in the registry
+        :raises TaskRegistryError: raised when the requested task is not
+            retrieved from the registry
+        """
         task = self.registry.get(task_id)
 
         self._rwlock.writer_acquire()
@@ -280,9 +288,19 @@ class StartedJobHandler:
             logger.debug("Task %s not found; orphan event %s for job #%s ignored",
                          task_id, event.uuid, job_id)
             return False
+        except TaskRegistryError:
+            logger.debug("Task %s wasn't retrieved; job #%s ignored",
+                         task_id, job_id)
+            return False
 
         task.status = TaskStatus.RUNNING
-        self.task_scheduler.registry.update(task_id, task)
+
+        try:
+            self.task_scheduler.registry.update(task_id, task)
+        except TaskRegistryError:
+            logger.debug("Task %s wasn't updated; job #%s ignored",
+                         task_id, job_id)
+            return False
 
         return True
 
@@ -327,6 +345,10 @@ class CompletedJobHandler:
         except NotFoundError:
             logger.debug("Task %s not found; orphan event %s for job #%s ignored",
                          task_id, event.uuid, job_id)
+            return False
+        except TaskRegistryError:
+            logger.debug("Task %s wasn't retrieved; job #%s ignored",
+                         task_id, job_id)
             return False
 
         task.num_failures = 0
@@ -396,6 +418,10 @@ class FailedJobHandler:
         except NotFoundError:
             logger.debug("Task %s not found; orphan event %s for job %s ignored",
                          task_id, event.uuid, job_id)
+            return False
+        except TaskRegistryError:
+            logger.debug("Task %s wasn't retrieved; job %s ignored",
+                         task_id, job_id)
             return False
 
         task.num_failures += 1
@@ -484,6 +510,8 @@ class Scheduler:
 
         :raises NotFoundError: raised when the requested task is not
             found in the registry
+        :raises TaskRegistryError: raised when a RedisError occurs
+            when retrieving the task
         """
         self._scheduler.schedule_task(task_id,
                                       delay=0)
@@ -496,6 +524,8 @@ class Scheduler:
 
         :raises NotFoundError: raised when the requested task is not
             found in the registry
+        :raises TaskRegistryError: raised when a RedisError occurs
+            when removing the task
         """
         self.registry.remove(task_id)
         self._scheduler.cancel_task(task_id)

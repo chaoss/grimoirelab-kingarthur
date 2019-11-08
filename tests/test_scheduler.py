@@ -24,8 +24,10 @@
 import datetime
 import os.path
 import unittest
+import unittest.mock
 
 from dateutil.tz import UTC
+from redis.exceptions import RedisError
 
 from perceval.backend import Summary
 
@@ -137,20 +139,24 @@ class TestScheduler(TestBaseRQ):
         archiving_opts = None
         scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=0)
 
-        registry = TaskRegistry()
+        registry = TaskRegistry(self.conn)
         task = registry.add('mytask', 'git', category, args,
                             archiving_cfg=archiving_opts,
                             scheduling_cfg=scheduler_opts)
 
         task.num_failures = 2  # Force number of failures before scheduling the task
+        registry.update(task.task_id, task)
 
         schlr = Scheduler(self.conn, registry, async_mode=False)
         schlr.schedule_task(task.task_id)
+
+        task = registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
         self.assertEqual(task.age, 0)
 
         schlr.schedule()
 
+        task = registry.get('mytask')
         self.assertEqual(task.age, 1)
 
         job = schlr._scheduler._queues[Q_RETRYING_JOBS].fetch_job(task.jobs[0].id)
@@ -286,6 +292,36 @@ class TestStartedJobHandler(TestBaseRQ):
         handler = StartedJobHandler(self.task_scheduler)
 
         event = JobEvent(JobEventType.STARTED, 0, 'mytask', None)
+
+        handled = handler(event)
+        self.assertEqual(handled, False)
+
+    @unittest.mock.patch('redis.StrictRedis.get')
+    def test_ignore_event_on_get_task_registry_error(self, mock_redis_get):
+        """Check if an event is ignored when a TaskRegistryError is thrown"""
+
+        mock_redis_get.side_effect = RedisError
+
+        self.task_scheduler.registry.add('mytask', 'git', 'commit', {})
+
+        handler = StartedJobHandler(self.task_scheduler)
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
+        event = JobEvent(JobEventType.STARTED, 0, 'mytask', result)
+
+        handled = handler(event)
+        self.assertEqual(handled, False)
+
+    @unittest.mock.patch('redis.StrictRedis.exists')
+    def test_ignore_event_on_update_task_registry_error(self, mock_redis_exists):
+        """Check if an event is ignored when a TaskRegistryError is thrown"""
+
+        mock_redis_exists.side_effect = [False, True, RedisError]
+
+        self.task_scheduler.registry.add('mytask', 'git', 'commit', {})
+
+        handler = StartedJobHandler(self.task_scheduler)
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
+        event = JobEvent(JobEventType.STARTED, 0, 'mytask', result)
 
         handled = handler(event)
         self.assertEqual(handled, False)
@@ -549,6 +585,21 @@ class TestCompletedJobHandler(TestBaseRQ):
 
         handler = CompletedJobHandler(self.task_scheduler)
 
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
+        event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
+
+        handled = handler(event)
+        self.assertEqual(handled, False)
+
+    @unittest.mock.patch('redis.StrictRedis.get')
+    def test_ignore_event_on_task_registry_error(self, mock_redis_get):
+        """Check if an event is ignored when a TaskRegistryError is thrown"""
+
+        mock_redis_get.side_effect = RedisError
+
+        self.task_scheduler.registry.add('mytask', 'git', 'commit', {})
+
+        handler = CompletedJobHandler(self.task_scheduler)
         result = JobResult(0, 1, 'mytask', 'git', 'commit')
         event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
 

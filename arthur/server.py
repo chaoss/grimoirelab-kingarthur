@@ -160,8 +160,8 @@ class ArthurServer(Arthur):
 
         jobs = []
 
-        for job_id in task.jobs:
-            job_rq = rq.job.Job.fetch(job_id, connection=self.conn)
+        for job in task.jobs:
+            job_rq = rq.job.Job.fetch(job.id, connection=self.conn)
             result = job_rq.result
 
             if isinstance(result, JobResult):
@@ -172,6 +172,7 @@ class ArthurServer(Arthur):
             job = {
                 'task_id': task_id,
                 'job_id': job_rq.id,
+                'job_number': job.number,
                 'job_status': job_rq.get_status(),
                 'result': job_result
             }

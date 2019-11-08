@@ -271,6 +271,7 @@ class TestArthurServer(TestBaseRQ):
             # Check jobs data
             job = jobs[0]
             self.assertEqual(job['task_id'], 'arthur.git')
+            self.assertEqual(job['job_number'], 1)
             self.assertEqual(job['job_status'], 'finished')
 
             # TODO: mock job ids generator

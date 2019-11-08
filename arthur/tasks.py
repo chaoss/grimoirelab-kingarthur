@@ -20,6 +20,7 @@
 #     Alvaro del Castillo San Felix <acs@bitergia.com>
 #
 
+import collections
 import datetime
 import enum
 import logging
@@ -124,13 +125,22 @@ class Task:
 
         return self._has_resuming
 
+    def set_job(self, job_id, job_number):
+        """Adds a JobData tuple object to the job list of a task"""
+
+        job_tuple = JobData(job_id, job_number)
+        self.jobs.append(job_tuple)
+
     def to_dict(self):
         return {
             'task_id': self.task_id,
             'status': self.status.name,
             'age': self.age,
             'num_failures': self.num_failures,
-            'jobs': self.jobs,
+            'jobs': [{
+                'job_id': job.id,
+                'job_number': job.number
+            } for job in self.jobs],
             'created_on': self.created_on,
             'backend': self.backend,
             'backend_args': self.backend_args,
@@ -138,6 +148,9 @@ class Task:
             'archiving_cfg': self.archiving_cfg.to_dict() if self.archiving_cfg else None,
             'scheduling_cfg': self.scheduling_cfg.to_dict() if self.scheduling_cfg else None
         }
+
+
+JobData = collections.namedtuple('JobData', ['id', 'number'])
 
 
 class TaskRegistry:

@@ -18,6 +18,7 @@
 #
 # Authors:
 #     Santiago Dueñas <sduenas@bitergia.com>
+#     Miguel Ángel Fernández <mafesan@bitergia.com>
 #
 
 import datetime
@@ -28,7 +29,7 @@ from dateutil.tz import UTC
 
 from perceval.backend import Summary
 
-from arthur.common import Q_CREATION_JOBS
+from arthur.common import Q_CREATION_JOBS, Q_RETRYING_JOBS
 from arthur.errors import NotFoundError
 from arthur.events import JobEventType, JobEvent
 from arthur.jobs import JobResult
@@ -110,6 +111,43 @@ class TestScheduler(TestBaseRQ):
         self.assertEqual(task.age, 1)
 
         job = schlr._scheduler._queues['myqueue'].fetch_job(task.jobs[0].id)
+        result = job.return_value
+
+        self.assertEqual(result.task_id, task.task_id)
+        self.assertEqual(result.job_number, 1)
+        self.assertEqual(result.summary.last_uuid, '1375b60d3c23ac9b81da92523e4144abc4489d4c')
+        self.assertEqual(result.summary.max_updated_on,
+                         datetime.datetime(2014, 2, 12, 6, 10, 39, tzinfo=UTC))
+        self.assertEqual(result.summary.total, 9)
+
+    def test_schudule_task_retries_queue(self):
+        """Failed task should be rescheduled to the retries queue"""
+
+        args = {
+            'uri': 'http://example.com/',
+            'gitpath': os.path.join(self.dir, 'data/git_log.txt')
+        }
+        category = 'commit'
+        archiving_opts = None
+        scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=0)
+
+        registry = TaskRegistry()
+        task = registry.add('mytask', 'git', category, args,
+                            archiving_cfg=archiving_opts,
+                            scheduling_cfg=scheduler_opts)
+
+        task.num_failures = 2  # Force number of failures before scheduling the task
+
+        schlr = Scheduler(self.conn, registry, async_mode=False)
+        schlr.schedule_task(task.task_id)
+        self.assertEqual(task.status, TaskStatus.SCHEDULED)
+        self.assertEqual(task.age, 0)
+
+        schlr.schedule()
+
+        self.assertEqual(task.age, 1)
+
+        job = schlr._scheduler._queues[Q_RETRYING_JOBS].fetch_job(task.jobs[0].id)
         result = job.return_value
 
         self.assertEqual(result.task_id, task.task_id)

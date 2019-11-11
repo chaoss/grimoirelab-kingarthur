@@ -18,6 +18,7 @@
 # Authors:
 #     Santiago Dueñas <sduenas@bitergia.com>
 #     Alvaro del Castillo San Felix <acs@bitergia.com>
+#     Miguel Ángel Fernández <mafesan@bitergia.com>
 #
 
 ARCHIVES_DEFAULT_PATH = '~/.arthur/archives/'
@@ -26,6 +27,7 @@ CH_PUBSUB = 'ch_arthur'
 
 Q_ARCHIVE_JOBS = 'archive'
 Q_CREATION_JOBS = 'create'
+Q_RETRYING_JOBS = 'retry'
 Q_UPDATING_JOBS = 'update'
 Q_STORAGE_ITEMS = 'items'
 

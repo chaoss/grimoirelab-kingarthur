@@ -18,6 +18,7 @@
 # Authors:
 #     Santiago Dueñas <sduenas@bitergia.com>
 #     Alvaro del Castillo San Felix <acs@bitergia.com>
+#     Miguel Ángel Fernández <mafesan@bitergia.com>
 #
 
 import copy
@@ -34,6 +35,7 @@ import rq.job
 from .common import (CH_PUBSUB,
                      Q_ARCHIVE_JOBS,
                      Q_CREATION_JOBS,
+                     Q_RETRYING_JOBS,
                      Q_UPDATING_JOBS,
                      Q_STORAGE_ITEMS,
                      WAIT_FOR_QUEUING,
@@ -232,6 +234,8 @@ class _TaskScheduler(threading.Thread):
             queue_id = scheduling_cfg.queue
         elif archiving_cfg and archiving_cfg.fetch_from_archive:
             queue_id = Q_ARCHIVE_JOBS
+        elif task.num_failures > 0:
+            queue_id = Q_RETRYING_JOBS
         elif task.age > 0:
             queue_id = Q_UPDATING_JOBS
         else:
@@ -442,7 +446,7 @@ class Scheduler:
         self.async_mode = async_mode
         self._scheduler = _TaskScheduler(self.registry,
                                          self.conn,
-                                         [Q_ARCHIVE_JOBS, Q_CREATION_JOBS, Q_UPDATING_JOBS],
+                                         [Q_ARCHIVE_JOBS, Q_CREATION_JOBS, Q_RETRYING_JOBS, Q_UPDATING_JOBS],
                                          polling=SCHED_POLLING,
                                          async_mode=self.async_mode)
 

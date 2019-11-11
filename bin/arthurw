@@ -18,6 +18,7 @@
 #
 # Authors:
 #     Santiago Dueñas <sduenas@bitergia.com>
+#     Miguel Ángel Fernández <mafesan@bitergia.com>
 #
 
 import argparse
@@ -30,6 +31,7 @@ import rq.utils
 
 from arthur.common import (Q_ARCHIVE_JOBS,
                            Q_CREATION_JOBS,
+                           Q_RETRYING_JOBS,
                            Q_UPDATING_JOBS,
                            CH_PUBSUB)
 from arthur.worker import ArthurWorker
@@ -66,7 +68,7 @@ def main():
 
     conn = connect_to_redis(args.database)
 
-    queues = args.queues or [Q_ARCHIVE_JOBS, Q_CREATION_JOBS, Q_UPDATING_JOBS]
+    queues = args.queues or [Q_ARCHIVE_JOBS, Q_CREATION_JOBS, Q_RETRYING_JOBS, Q_UPDATING_JOBS]
     burst = args.burst
 
     configure_logging(args.debug)

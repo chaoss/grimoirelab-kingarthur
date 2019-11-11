@@ -145,8 +145,8 @@ class _TaskScheduler(threading.Thread):
 
         self._rwlock.writer_release()
 
-        logger.debug("Task: %s scheduled (wait: %s)",
-                     task_id, delay)
+        logger.debug("[%s] Task: %s scheduled (wait: %s)",
+                     task.backend, task_id, delay)
 
     def cancel_task(self, task_id):
         """Cancel the given task."""
@@ -201,9 +201,9 @@ class _TaskScheduler(threading.Thread):
 
         self._rwlock.writer_release()
 
-        logger.debug("Job #%s (task: %s) (%s) enqueued in '%s'",
-                     job_id, job_args['task_id'],
-                     job_args['backend'], queue_id)
+        logger.debug("[%s] Job #%s (task: %s) enqueued in '%s'",
+                     job_args['backend'], job_id,
+                     job_args['task_id'], queue_id)
 
     def _cancel_task(self, task_id):
         event = self._tasks_events.get(task_id, None)
@@ -318,20 +318,21 @@ class CompletedJobHandler:
         result = event.payload
         job_id = event.job_id
         task_id = event.task_id
+        backend = event.payload.backend
 
         try:
             task = self.task_scheduler.registry.get(task_id)
         except NotFoundError:
-            logger.debug("Task %s not found; orphan event %s for job #%s ignored",
-                         task_id, event.uuid, job_id)
+            logger.debug("[%s] Task %s not found; orphan event %s for job #%s ignored",
+                         backend, task_id, event.uuid, job_id)
             return False
 
         task.num_failures = 0
 
         if task.archiving_cfg and task.archiving_cfg.fetch_from_archive:
             task.status = TaskStatus.COMPLETED
-            logger.info("Job #%s (task: %s - archiving) finished successfully",
-                        job_id, task_id)
+            logger.info("[%s] Job #%s (task: %s - archiving) finished successfully",
+                        backend, job_id, task_id)
             return True
 
         if task.scheduling_cfg:
@@ -339,8 +340,8 @@ class CompletedJobHandler:
 
             if task_max_age and task.age >= task_max_age:
                 task.status = TaskStatus.COMPLETED
-                logger.info("Job #%s (task: %s) finished successfully",
-                            job_id, task_id)
+                logger.info("[%s] Job #%s (task: %s) finished successfully",
+                            backend, job_id, task_id)
                 return True
 
         if result.summary.fetched > 0:
@@ -353,7 +354,7 @@ class CompletedJobHandler:
 
         self.task_scheduler.schedule_task(task_id, delay=delay)
 
-        logger.info("Task: %s re-scheduled", task_id)
+        logger.info("[%s] Task: %s re-scheduled", backend, task_id)
 
         return True
 
@@ -394,8 +395,8 @@ class FailedJobHandler:
 
         task.num_failures += 1
 
-        logger.error("Job #%s (task: %s) failed; error: %s",
-                     job_id, task_id, error)
+        logger.error("[%s] Job #%s (task: %s) failed; error: %s",
+                     task.backend, job_id, task_id, error)
 
         if task.scheduling_cfg:
             task_max_retries = task.scheduling_cfg.max_retries
@@ -404,15 +405,15 @@ class FailedJobHandler:
 
         if not task.has_resuming():
             task.status = TaskStatus.FAILED
-            logger.error("Job #%s (task: %s) unable to resume; cancelled",
-                         job_id, task_id)
+            logger.error("[%s] Job #%s (task: %s) unable to resume; cancelled",
+                         task.backend, job_id, task_id)
         elif task.num_failures >= task_max_retries:
             task.status = TaskStatus.FAILED
-            logger.error("Job #%s (task: %s) max retries reached; cancelled",
-                         job_id, task_id)
+            logger.error("[%s] Job #%s (task: %s) max retries reached; cancelled",
+                         task.backend, job_id, task_id)
         else:
-            logger.error("Job #%s (task: %s) failed but will be resumed",
-                         job_id, task_id)
+            logger.error("[%s] Job #%s (task: %s) failed but will be resumed",
+                         task.backend, job_id, task_id)
 
             if result.summary.fetched > 0:
                 task.backend_args['next_from_date'] = result.summary.max_updated_on
@@ -468,9 +469,10 @@ class Scheduler:
         else:
             self._scheduler.schedule()
 
-    def schedule_task(self, task_id):
+    def schedule_task(self, task_id, backend):
         """Schedule a task.
 
+        :param backend: backend used to fetch data
         :param task_id: identifier of the task to schedule
 
         :raises NotFoundError: raised when the requested task is not
@@ -478,7 +480,7 @@ class Scheduler:
         """
         self._scheduler.schedule_task(task_id,
                                       delay=0)
-        logger.info("Task: %s scheduled", task_id)
+        logger.info("[%s] Task: %s scheduled", backend, task_id)
 
     def cancel_task(self, task_id):
         """Cancel or 'un-schedule' a task.
@@ -491,7 +493,7 @@ class Scheduler:
         self.registry.remove(task_id)
         self._scheduler.cancel_task(task_id)
 
-        logger.info("Task %s canceled", task_id)
+        logger.info("Task: %s canceled", task_id)
 
 
 def _build_job_arguments(task):

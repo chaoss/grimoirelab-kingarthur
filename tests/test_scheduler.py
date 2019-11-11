@@ -56,17 +56,18 @@ class TestScheduler(TestBaseRQ):
             'uri': 'http://example.com/',
             'gitpath': os.path.join(self.dir, 'data/git_log.txt')
         }
+        backend = 'git'
         category = 'commit'
         archiving_opts = None
         scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=0)
 
         registry = TaskRegistry()
-        task = registry.add('mytask', 'git', category, args,
+        task = registry.add('mytask', backend, category, args,
                             archiving_cfg=archiving_opts,
                             scheduling_cfg=scheduler_opts)
 
         schlr = Scheduler(self.conn, registry, async_mode=False)
-        schlr.schedule_task(task.task_id)
+        schlr.schedule_task(task.task_id, backend)
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
         self.assertEqual(task.age, 0)
 
@@ -91,18 +92,19 @@ class TestScheduler(TestBaseRQ):
             'uri': 'http://example.com/',
             'gitpath': os.path.join(self.dir, 'data/git_log.txt')
         }
+        backend = 'git'
         category = 'commit'
         archiving_opts = None
         scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=0,
                                               queue='myqueue')
 
         registry = TaskRegistry()
-        task = registry.add('mytask', 'git', category, args,
+        task = registry.add('mytask', backend, category, args,
                             archiving_cfg=archiving_opts,
                             scheduling_cfg=scheduler_opts)
 
         schlr = Scheduler(self.conn, registry, async_mode=False)
-        schlr.schedule_task(task.task_id)
+        schlr.schedule_task(task.task_id, backend)
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
         self.assertEqual(task.age, 0)
 
@@ -164,18 +166,19 @@ class TestScheduler(TestBaseRQ):
             'uri': 'http://example.com/',
             'gitpath': os.path.join(self.dir, 'data/git_log.txt')
         }
+        backend = 'git'
         category = 'commit'
         archiving_opts = None
         scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=0,
                                               queue='myqueue')
 
         registry = TaskRegistry()
-        task = registry.add('mytask', 'git', category, args,
+        task = registry.add('mytask', backend, category, args,
                             archiving_cfg=archiving_opts,
                             scheduling_cfg=scheduler_opts)
 
         schlr = Scheduler(self.conn, registry, async_mode=False)
-        schlr.schedule_task(task.task_id)
+        schlr.schedule_task(task.task_id, backend)
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
         self.assertEqual(task.age, 0)
 
@@ -185,7 +188,7 @@ class TestScheduler(TestBaseRQ):
         task.jobs = ['A', 'B', 'C']
 
         schlr = Scheduler(self.conn, registry, async_mode=False)
-        schlr.schedule_task(task.task_id)
+        schlr.schedule_task(task.task_id, backend)
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
         self.assertEqual(task.age, 0)
 
@@ -206,7 +209,7 @@ class TestScheduler(TestBaseRQ):
         registry = TaskRegistry()
 
         schlr = Scheduler(self.conn, registry, async_mode=False)
-        self.assertRaises(NotFoundError, schlr.schedule_task, 'mytask')
+        self.assertRaises(NotFoundError, schlr.schedule_task, 'mytask', 'git')
 
     def test_task_jobs_is_updated(self):
         """Test if the list of job ids for a task is updated"""
@@ -215,17 +218,18 @@ class TestScheduler(TestBaseRQ):
             'uri': 'http://example.com/',
             'gitpath': os.path.join(self.dir, 'data/git_log.txt')
         }
+        backend = 'git'
         category = 'commit'
         archiving_opts = None
         scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=0)
 
         registry = TaskRegistry()
-        task = registry.add('mytask', 'git', category, args,
+        task = registry.add('mytask', backend, category, args,
                             archiving_cfg=archiving_opts,
                             scheduling_cfg=scheduler_opts)
 
         schlr = Scheduler(self.conn, registry, async_mode=False)
-        schlr.schedule_task(task.task_id)
+        schlr.schedule_task(task.task_id, backend)
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
         self.assertEqual(task.age, 0)
         self.assertListEqual(task.jobs, [])

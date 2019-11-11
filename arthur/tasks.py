@@ -201,7 +201,7 @@ class TaskRegistry:
 
         self._rwlock.writer_release()
 
-        logger.debug("Task %s added to the registry", str(task_id))
+        logger.debug("[%s] Task %s added to the registry", task.backend, str(task_id))
 
         return task
 

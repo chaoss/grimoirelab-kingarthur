@@ -66,9 +66,8 @@ optional arguments:
   --pubsub-channel      name of redis pubsub channel on which to publish updates
 """
 
-# Logging formats
-ARTHURD_LOG_FORMAT = "[%(asctime)s] - %(message)s"
-ARTHURD_DEBUG_LOG_FORMAT = "[%(asctime)s - %(name)s - %(levelname)s] - %(message)s"
+# Logging format
+ARTHURD_LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 
 def main():
@@ -267,7 +266,7 @@ def configure_logging(log_path, debug=False, run_daemon=True):
         else:
             logging.basicConfig(filename=logfile,
                                 level=logging.DEBUG,
-                                format=ARTHURD_DEBUG_LOG_FORMAT)
+                                format=ARTHURD_LOG_FORMAT)
     else:
         if not debug:
             logging.basicConfig(stream=sys.stderr,
@@ -278,7 +277,7 @@ def configure_logging(log_path, debug=False, run_daemon=True):
         else:
             logging.basicConfig(stream=sys.stderr,
                                 level=logging.DEBUG,
-                                format=ARTHURD_DEBUG_LOG_FORMAT)
+                                format=ARTHURD_LOG_FORMAT)
 
 
 def connect_to_redis(db_url):

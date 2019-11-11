@@ -84,7 +84,7 @@ class Arthur:
         except AlreadyExistsError as e:
             raise e
 
-        self._scheduler.schedule_task(task.task_id)
+        self._scheduler.schedule_task(task.task_id, backend)
 
         return task
 

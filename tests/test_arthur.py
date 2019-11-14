@@ -28,12 +28,14 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import unittest.mock
 
 import dateutil
+from redis.exceptions import RedisError
 
 from arthur.arthur import Arthur
 from arthur.common import ARCHIVES_DEFAULT_PATH
-from arthur.errors import AlreadyExistsError
+from arthur.errors import AlreadyExistsError, TaskRegistryError
 from arthur.tasks import ArchivingTaskConfig, SchedulingTaskConfig
 
 from base import find_empty_redis_database
@@ -314,6 +316,16 @@ class TestArthur(unittest.TestCase):
 
         with self.assertRaises(AlreadyExistsError):
             app.add_task("arthur.task", "backend", "category", {"a": "a", "b": "b"})
+
+    @unittest.mock.patch('redis.StrictRedis.set')
+    def test_add_task_registry_error(self, mock_redis_set):
+        """Check whether a TaskRegistryError exception is thrown when a task cannot be added"""
+
+        mock_redis_set.side_effect = RedisError
+        app = Arthur(self.conn, async_mode=False)
+
+        with self.assertRaises(TaskRegistryError):
+            app.add_task("arthur.task", "git", "commit", {"a": "a", "b": "b"})
 
     def test_add_task_no_task_id(self):
         """Check whether an exception is thrown when the task id is missing"""

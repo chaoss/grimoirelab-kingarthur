@@ -40,7 +40,7 @@ from .common import (CH_PUBSUB,
                      Q_STORAGE_ITEMS,
                      WAIT_FOR_QUEUING,
                      TIMEOUT)
-from .errors import NotFoundError
+from .errors import NotFoundError, TaskRegistryError
 from .events import JobEventType, JobEventsListener
 from .jobs import execute_perceval_job
 from .tasks import TaskStatus
@@ -119,7 +119,7 @@ class _TaskScheduler(threading.Thread):
             logger.critical(traceback.format_exc())
 
     def schedule(self):
-        """Start scheduling tasks in loop."""""
+        """Start scheduling tasks in loop."""
 
         while True:
             self._delayer.run(blocking=False)
@@ -131,8 +131,16 @@ class _TaskScheduler(threading.Thread):
             time.sleep(self.polling)
 
     def schedule_task(self, task_id, delay=0):
-        """Schedule the task in the given queue."""
+        """Schedule the task in the given queue.
 
+        :param task_id: id of the task
+        :param delay: delay in seconds to schedule the task
+
+        :raises NotFoundError: raised when the requested task is not
+-           found in the registry
+        :raises TaskRegistryError: raised when the requested task is not
+            retrieved from the registry
+        """
         task = self.registry.get(task_id)
 
         self._rwlock.writer_acquire()
@@ -142,6 +150,7 @@ class _TaskScheduler(threading.Thread):
 
         self._tasks_events[task_id] = event
         task.status = TaskStatus.SCHEDULED
+        self.registry.update(task_id, task)
 
         self._rwlock.writer_release()
 
@@ -198,6 +207,7 @@ class _TaskScheduler(threading.Thread):
         task.status = TaskStatus.ENQUEUED
         task.age += 1
         task.set_job(job_id, job_number)
+        self.registry.update(task_id, task)
 
         self._rwlock.writer_release()
 
@@ -278,8 +288,19 @@ class StartedJobHandler:
             logger.debug("Task %s not found; orphan event %s for job #%s ignored",
                          task_id, event.uuid, job_id)
             return False
+        except TaskRegistryError:
+            logger.debug("Task %s wasn't retrieved; job #%s ignored",
+                         task_id, job_id)
+            return False
 
         task.status = TaskStatus.RUNNING
+
+        try:
+            self.task_scheduler.registry.update(task_id, task)
+        except TaskRegistryError:
+            logger.debug("Task %s wasn't updated; job #%s ignored",
+                         task_id, job_id)
+            return False
 
         return True
 
@@ -325,11 +346,16 @@ class CompletedJobHandler:
             logger.debug("Task %s not found; orphan event %s for job #%s ignored",
                          task_id, event.uuid, job_id)
             return False
+        except TaskRegistryError:
+            logger.debug("Task %s wasn't retrieved; job #%s ignored",
+                         task_id, job_id)
+            return False
 
         task.num_failures = 0
 
         if task.archiving_cfg and task.archiving_cfg.fetch_from_archive:
             task.status = TaskStatus.COMPLETED
+            self.task_scheduler.registry.update(task_id, task)
             logger.info("Job #%s (task: %s - archiving) finished successfully",
                         job_id, task_id)
             return True
@@ -339,6 +365,7 @@ class CompletedJobHandler:
 
             if task_max_age and task.age >= task_max_age:
                 task.status = TaskStatus.COMPLETED
+                self.task_scheduler.registry.update(task_id, task)
                 logger.info("Job #%s (task: %s) finished successfully",
                             job_id, task_id)
                 return True
@@ -349,6 +376,7 @@ class CompletedJobHandler:
             if result.summary.max_offset:
                 task.backend_args['next_offset'] = result.summary.max_offset
 
+        self.task_scheduler.registry.update(task_id, task)
         delay = task.scheduling_cfg.delay if task.scheduling_cfg else WAIT_FOR_QUEUING
 
         self.task_scheduler.schedule_task(task_id, delay=delay)
@@ -391,6 +419,10 @@ class FailedJobHandler:
             logger.debug("Task %s not found; orphan event %s for job %s ignored",
                          task_id, event.uuid, job_id)
             return False
+        except TaskRegistryError:
+            logger.debug("Task %s wasn't retrieved; job %s ignored",
+                         task_id, job_id)
+            return False
 
         task.num_failures += 1
 
@@ -404,10 +436,12 @@ class FailedJobHandler:
 
         if not task.has_resuming():
             task.status = TaskStatus.FAILED
+            self.task_scheduler.registry.update(task_id, task)
             logger.error("Job #%s (task: %s) unable to resume; cancelled",
                          job_id, task_id)
         elif task.num_failures >= task_max_retries:
             task.status = TaskStatus.FAILED
+            self.task_scheduler.registry.update(task_id, task)
             logger.error("Job #%s (task: %s) max retries reached; cancelled",
                          job_id, task_id)
         else:
@@ -420,6 +454,7 @@ class FailedJobHandler:
                 if result.summary.max_offset:
                     task.backend_args['next_offset'] = result.summary.max_offset
 
+            self.task_scheduler.registry.update(task_id, task)
             delay = task.scheduling_cfg.delay if task.scheduling_cfg else WAIT_FOR_QUEUING
 
             self.task_scheduler.schedule_task(task_id, delay=delay)
@@ -475,6 +510,8 @@ class Scheduler:
 
         :raises NotFoundError: raised when the requested task is not
             found in the registry
+        :raises TaskRegistryError: raised when a RedisError occurs
+            when retrieving the task
         """
         self._scheduler.schedule_task(task_id,
                                       delay=0)
@@ -487,6 +524,8 @@ class Scheduler:
 
         :raises NotFoundError: raised when the requested task is not
             found in the registry
+        :raises TaskRegistryError: raised when a RedisError occurs
+            when removing the task
         """
         self.registry.remove(task_id)
         self._scheduler.cancel_task(task_id)

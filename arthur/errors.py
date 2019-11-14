@@ -55,3 +55,9 @@ class NotFoundError(BaseError):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.element = kwargs['element']
+
+
+class TaskRegistryError(BaseError):
+    """Generic error for TaskRegistry"""
+
+    message = "%(cause)s"

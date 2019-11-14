@@ -25,16 +25,21 @@ import unittest
 import unittest.mock
 
 import dateutil
+from redis.exceptions import RedisError
 
 from arthur.common import MAX_JOB_RETRIES, WAIT_FOR_QUEUING
-from arthur.errors import AlreadyExistsError, NotFoundError
+from arthur.errors import (AlreadyExistsError,
+                           NotFoundError,
+                           TaskRegistryError)
 from arthur.tasks import (ArchivingTaskConfig,
                           SchedulingTaskConfig,
                           Task,
                           JobData,
                           TaskRegistry,
-                          TaskStatus)
+                          TaskStatus,
+                          logger)
 
+from base import TestBaseRQ
 
 INVALID_ARCHIVE_PATH_ERROR = "'archive_path' must be a str"
 INVALID_ARCHIVED_AFTER_ERROR = "'archived_after' must be either a str or a datetime"
@@ -190,16 +195,66 @@ class TestTask(unittest.TestCase):
         self.assertDictEqual(d, expected)
 
 
-class TestTaskRegistry(unittest.TestCase):
+class TestTaskRegistry(TestBaseRQ):
     """Unit tests for TaskRegistry"""
 
     def test_empty_registry(self):
         """Check empty registry on init"""
 
-        registry = TaskRegistry()
+        registry = TaskRegistry(self.conn)
         tasks = registry.tasks
 
         self.assertListEqual(tasks, [])
+
+    def test_tasks(self):
+        """Test to list tasks in the registry"""
+
+        registry = TaskRegistry(self.conn)
+        expected = []
+        for i in range(0, 20):
+            task_id = 'mytask{}'.format(i)
+            expected.append(task_id)
+            registry.add(task_id, 'git', 'commit', {})
+
+        tasks = registry.tasks
+        self.assertEqual(len(tasks), 20)
+
+        for t in tasks:
+            self.assertIn(t.task_id, expected)
+
+    @unittest.mock.patch('redis.StrictRedis.scan')
+    def test_tasks_error(self, mock_redis_set):
+        """Test whether the lock is released in case of a Redis error and a TaskRegistryError is thrown"""
+
+        mock_redis_set.side_effect = RedisError
+
+        registry = TaskRegistry(self.conn)
+        registry.add('mytask', 'git', 'commit', {})
+        self.assertGreater(registry._rwlock._readers_mutex._value, 0)
+        with self.assertRaises(TaskRegistryError):
+            _ = registry.tasks
+            self.assertGreater(registry._rwlock._readers_mutex._value, 0)
+
+    def test_matched_tasks(self):
+        """Test to list tasks in the registry when other data is stored in Redis"""
+
+        registry = TaskRegistry(self.conn)
+
+        self.conn.set("key1", 'value')
+        self.conn.set("key2", 1)
+        self.conn.set("key3", b'x')
+
+        expected = []
+        for i in range(0, 20):
+            task_id = 'mytask{}'.format(i)
+            expected.append(task_id)
+            registry.add(task_id, 'git', 'commit', {})
+
+        tasks = registry.tasks
+        self.assertEqual(len(tasks), 20)
+
+        for t in tasks:
+            self.assertIn(t.task_id, expected)
 
     def test_add_task(self):
         """Test to add tasks to the registry"""
@@ -212,16 +267,15 @@ class TestTaskRegistry(unittest.TestCase):
                                       archived_after=None)
         sched = SchedulingTaskConfig(delay=10, max_retries=2)
 
-        registry = TaskRegistry()
+        registry = TaskRegistry(self.conn)
         before = datetime.datetime.now().timestamp()
-        new_task = registry.add('mytask', 'git', 'commit', args)
+        _ = registry.add('mytask', 'git', 'commit', args)
 
         tasks = registry.tasks
         self.assertEqual(len(tasks), 1)
 
         task = tasks[0]
         self.assertIsInstance(task, Task)
-        self.assertEqual(task, new_task)
         self.assertEqual(task.task_id, 'mytask')
         self.assertEqual(task.status, TaskStatus.NEW)
         self.assertEqual(task.age, 0)
@@ -249,8 +303,11 @@ class TestTaskRegistry(unittest.TestCase):
         self.assertEqual(task0.backend, 'git')
         self.assertEqual(task0.category, 'commit')
         self.assertDictEqual(task0.backend_args, args)
-        self.assertEqual(task0.archiving_cfg, archive)
-        self.assertEqual(task0.scheduling_cfg, sched)
+        self.assertEqual(task0.archiving_cfg.archive_path, archive.archive_path)
+        self.assertEqual(task0.archiving_cfg.archived_after, archive.archived_after)
+        self.assertEqual(task0.archiving_cfg.fetch_from_archive, archive.fetch_from_archive)
+        self.assertEqual(task0.scheduling_cfg.delay, sched.delay)
+        self.assertEqual(task0.scheduling_cfg.max_retries, sched.max_retries)
         self.assertGreater(task0.created_on, before)
 
         task1 = tasks[1]
@@ -258,9 +315,9 @@ class TestTaskRegistry(unittest.TestCase):
         self.assertGreater(task0.created_on, task1.created_on)
 
     def test_add_existing_task(self):
-        """Check if it raises an exception when an exisiting task is added again"""
+        """Check if it raises an exception when an existing task is added again"""
 
-        registry = TaskRegistry()
+        registry = TaskRegistry(self.conn)
         registry.add('mytask', 'git', 'commit', {})
 
         with self.assertRaises(AlreadyExistsError):
@@ -276,6 +333,18 @@ class TestTaskRegistry(unittest.TestCase):
         self.assertEqual(task.category, 'commit')
         self.assertDictEqual(task.backend_args, {})
 
+    @unittest.mock.patch('redis.StrictRedis.set')
+    def test_add_task_error(self, mock_redis_cmd):
+        """Test whether the lock is released in case of a Redis error and a TaskRegistryError is thrown"""
+
+        mock_redis_cmd.side_effect = RedisError
+
+        registry = TaskRegistry(self.conn)
+        self.assertGreater(registry._rwlock._access_mutex._value, 0)
+        with self.assertRaises(TaskRegistryError):
+            registry.add('mytask', 'git', 'commit', {})
+            self.assertGreater(registry._rwlock._access_mutex._value, 0)
+
     def test_remove_task(self):
         """Test to remove a task from the registry"""
 
@@ -284,7 +353,7 @@ class TestTaskRegistry(unittest.TestCase):
             'component': 'test'
         }
 
-        registry = TaskRegistry()
+        registry = TaskRegistry(self.conn)
         registry.add('mytask', 'git', 'commit', args)
         registry.add('newtask', 'bugzilla', 'issue', None)
         registry.add('atask', 'git', 'commit', None)
@@ -302,7 +371,7 @@ class TestTaskRegistry(unittest.TestCase):
     def test_remove_not_found(self):
         """Check whether it raises an exception when a task is not found"""
 
-        registry = TaskRegistry()
+        registry = TaskRegistry(self.conn)
 
         with self.assertRaises(NotFoundError):
             registry.remove('mytask')
@@ -314,6 +383,19 @@ class TestTaskRegistry(unittest.TestCase):
 
         self.assertEqual(len(registry.tasks), 1)
 
+    @unittest.mock.patch('redis.StrictRedis.delete')
+    def test_remove_task_error(self, mock_redis_cmd):
+        """Test whether the lock is released in case of a Redis error and an error TaskRegistryError is thrown"""
+
+        mock_redis_cmd.side_effect = RedisError
+
+        registry = TaskRegistry(self.conn)
+        registry.add('mytask', 'git', 'commit', {})
+        self.assertGreater(registry._rwlock._access_mutex._value, 0)
+        with self.assertRaises(TaskRegistryError):
+            registry.remove('mytask')
+            self.assertGreater(registry._rwlock._access_mutex._value, 0)
+
     def test_get_task(self):
         """Test to get a task from the registry"""
 
@@ -322,7 +404,7 @@ class TestTaskRegistry(unittest.TestCase):
             'component': 'test'
         }
 
-        registry = TaskRegistry()
+        registry = TaskRegistry(self.conn)
         registry.add('mytask', 'git', 'commit', args)
         registry.add('newtask', 'bugzilla', 'issue', None)
         registry.add('atask', 'git', 'commit', None)
@@ -338,7 +420,7 @@ class TestTaskRegistry(unittest.TestCase):
     def test_get_task_not_found(self):
         """Check whether it raises an exception when a task is not found"""
 
-        registry = TaskRegistry()
+        registry = TaskRegistry(self.conn)
 
         with self.assertRaises(NotFoundError):
             registry.get('mytask')
@@ -347,6 +429,88 @@ class TestTaskRegistry(unittest.TestCase):
 
         with self.assertRaises(NotFoundError):
             registry.get('mytask')
+
+    @unittest.mock.patch('redis.StrictRedis.get')
+    def test_get_task_error(self, mock_redis_cmd):
+        """Test whether the lock is released in case of a Redis error and a TaskRegistryError is thrown"""
+
+        mock_redis_cmd.side_effect = RedisError
+
+        registry = TaskRegistry(self.conn)
+        registry.add('mytask', 'git', 'commit', {})
+        self.assertGreater(registry._rwlock._access_mutex._value, 0)
+        with self.assertRaises(TaskRegistryError):
+            registry.get('mytask')
+            self.assertGreater(registry._rwlock._access_mutex._value, 0)
+
+    def test_update_task(self):
+        """Test to update tasks in the registry"""
+
+        args = {
+            'from_date': '1970-01-01',
+            'component': 'test'
+        }
+
+        registry = TaskRegistry(self.conn)
+        before = datetime.datetime.now().timestamp()
+        _ = registry.add('mytask', 'git', 'commit', args)
+
+        tasks = registry.tasks
+        self.assertEqual(len(tasks), 1)
+
+        task = tasks[0]
+        self.assertIsInstance(task, Task)
+        self.assertEqual(task.task_id, 'mytask')
+        self.assertEqual(task.status, TaskStatus.NEW)
+        self.assertEqual(task.age, 0)
+        self.assertListEqual(task.jobs, [])
+        self.assertEqual(task.category, 'commit')
+        self.assertEqual(task.backend, 'git')
+        self.assertDictEqual(task.backend_args, args)
+        self.assertEqual(task.archiving_cfg, None)
+        self.assertEqual(task.scheduling_cfg, None)
+        self.assertGreater(task.created_on, before)
+
+        task.status = TaskStatus.COMPLETED
+        task.age = 1
+        registry.update('mytask', task)
+
+        tasks = registry.tasks
+        self.assertEqual(len(tasks), 1)
+
+        task = tasks[0]
+        self.assertIsInstance(task, Task)
+        self.assertEqual(task.task_id, 'mytask')
+        self.assertEqual(task.status, TaskStatus.COMPLETED)
+        self.assertEqual(task.age, 1)
+        self.assertListEqual(task.jobs, [])
+        self.assertEqual(task.category, 'commit')
+        self.assertEqual(task.backend, 'git')
+        self.assertDictEqual(task.backend_args, args)
+        self.assertEqual(task.archiving_cfg, None)
+        self.assertEqual(task.scheduling_cfg, None)
+        self.assertGreater(task.created_on, before)
+
+    def test_update_task_not_found(self):
+        """Check whether it raises an exception when a task is not found"""
+
+        registry = TaskRegistry(self.conn)
+
+        with self.assertLogs(logger, level='WARNING') as cm:
+            registry.update('mytask', None)
+            self.assertEqual(cm.output[0], 'WARNING:arthur.tasks:Task mytask not found, adding it')
+
+    @unittest.mock.patch('redis.StrictRedis.exists')
+    def test_update_task_error(self, mock_redis_cmd):
+        """Test whether the lock is released in case of a Redis error and a TaskRegistryError is thrown"""
+
+        mock_redis_cmd.side_effect = RedisError
+
+        registry = TaskRegistry(self.conn)
+        self.assertGreater(registry._rwlock._access_mutex._value, 0)
+        with self.assertRaises(TaskRegistryError):
+            registry.update('mytask', None)
+            self.assertGreater(registry._rwlock._access_mutex._value, 0)
 
 
 class TestArchivingTaskConfig(unittest.TestCase):

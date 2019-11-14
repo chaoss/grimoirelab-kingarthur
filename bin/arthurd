@@ -140,7 +140,7 @@ def read_config_file(filepath):
 
     :returns: a configuration parameters dictionary
     """
-    config = configparser.SafeConfigParser()
+    config = configparser.ConfigParser()
     config.read(filepath)
 
     args = {}
@@ -249,7 +249,7 @@ def configure_logging(log_path, debug=False, run_daemon=True):
 
     :param log_path: path where logs will be stored
     :param debug: set the debug mode
-    :param run_daemon: run Arthun in daemon mode
+    :param run_daemon: run Arthur in daemon mode
     """
     cherrypy.config.update({'log.screen': False})
 
@@ -285,7 +285,7 @@ def connect_to_redis(db_url):
     """Create a connection with a Redis database"""
 
     conn = redis.StrictRedis.from_url(db_url)
-    logging.debug("Redis connection stablished with %s.", db_url)
+    logging.debug("Redis connection established with %s.", db_url)
 
     return conn
 

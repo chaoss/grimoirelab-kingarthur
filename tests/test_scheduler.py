@@ -24,8 +24,10 @@
 import datetime
 import os.path
 import unittest
+import unittest.mock
 
 from dateutil.tz import UTC
+from redis.exceptions import RedisError
 
 from perceval.backend import Summary
 
@@ -60,18 +62,21 @@ class TestScheduler(TestBaseRQ):
         archiving_opts = None
         scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=0)
 
-        registry = TaskRegistry()
+        registry = TaskRegistry(self.conn)
         task = registry.add('mytask', 'git', category, args,
                             archiving_cfg=archiving_opts,
                             scheduling_cfg=scheduler_opts)
 
         schlr = Scheduler(self.conn, registry, async_mode=False)
         schlr.schedule_task(task.task_id)
+
+        task = registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
         self.assertEqual(task.age, 0)
 
         schlr.schedule()
 
+        task = registry.get('mytask')
         self.assertEqual(task.age, 1)
 
         job = schlr._scheduler._queues[Q_CREATION_JOBS].fetch_job(task.jobs[0].id)
@@ -96,18 +101,21 @@ class TestScheduler(TestBaseRQ):
         scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=0,
                                               queue='myqueue')
 
-        registry = TaskRegistry()
+        registry = TaskRegistry(self.conn)
         task = registry.add('mytask', 'git', category, args,
                             archiving_cfg=archiving_opts,
                             scheduling_cfg=scheduler_opts)
 
         schlr = Scheduler(self.conn, registry, async_mode=False)
         schlr.schedule_task(task.task_id)
+
+        task = registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
         self.assertEqual(task.age, 0)
 
         schlr.schedule()
 
+        task = registry.get('mytask')
         self.assertEqual(task.age, 1)
 
         job = schlr._scheduler._queues['myqueue'].fetch_job(task.jobs[0].id)
@@ -131,20 +139,24 @@ class TestScheduler(TestBaseRQ):
         archiving_opts = None
         scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=0)
 
-        registry = TaskRegistry()
+        registry = TaskRegistry(self.conn)
         task = registry.add('mytask', 'git', category, args,
                             archiving_cfg=archiving_opts,
                             scheduling_cfg=scheduler_opts)
 
         task.num_failures = 2  # Force number of failures before scheduling the task
+        registry.update(task.task_id, task)
 
         schlr = Scheduler(self.conn, registry, async_mode=False)
         schlr.schedule_task(task.task_id)
+
+        task = registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
         self.assertEqual(task.age, 0)
 
         schlr.schedule()
 
+        task = registry.get('mytask')
         self.assertEqual(task.age, 1)
 
         job = schlr._scheduler._queues[Q_RETRYING_JOBS].fetch_job(task.jobs[0].id)
@@ -169,13 +181,15 @@ class TestScheduler(TestBaseRQ):
         scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=0,
                                               queue='myqueue')
 
-        registry = TaskRegistry()
+        registry = TaskRegistry(self.conn)
         task = registry.add('mytask', 'git', category, args,
                             archiving_cfg=archiving_opts,
                             scheduling_cfg=scheduler_opts)
 
         schlr = Scheduler(self.conn, registry, async_mode=False)
         schlr.schedule_task(task.task_id)
+
+        task = registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
         self.assertEqual(task.age, 0)
 
@@ -183,14 +197,18 @@ class TestScheduler(TestBaseRQ):
         # time running this task. Job number will be calculated
         # adding one to the length of jobs.
         task.jobs = ['A', 'B', 'C']
+        registry.update('mytask', task)
 
         schlr = Scheduler(self.conn, registry, async_mode=False)
         schlr.schedule_task(task.task_id)
+
+        task = registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
         self.assertEqual(task.age, 0)
 
         schlr.schedule()
 
+        task = registry.get('mytask')
         self.assertEqual(task.age, 1)
 
         # Get the last job run and check the result
@@ -203,7 +221,7 @@ class TestScheduler(TestBaseRQ):
     def test_not_found_task(self):
         """Raises an error when the task to schedule does not exist"""
 
-        registry = TaskRegistry()
+        registry = TaskRegistry(self.conn)
 
         schlr = Scheduler(self.conn, registry, async_mode=False)
         self.assertRaises(NotFoundError, schlr.schedule_task, 'mytask')
@@ -219,19 +237,22 @@ class TestScheduler(TestBaseRQ):
         archiving_opts = None
         scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=0)
 
-        registry = TaskRegistry()
+        registry = TaskRegistry(self.conn)
         task = registry.add('mytask', 'git', category, args,
                             archiving_cfg=archiving_opts,
                             scheduling_cfg=scheduler_opts)
 
         schlr = Scheduler(self.conn, registry, async_mode=False)
         schlr.schedule_task(task.task_id)
+
+        task = registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
         self.assertEqual(task.age, 0)
         self.assertListEqual(task.jobs, [])
 
         schlr.schedule()
 
+        task = registry.get('mytask')
         self.assertEqual(task.age, 1)
         self.assertEqual(len(task.jobs), 1)
 
@@ -241,7 +262,7 @@ class TestStartedJobHandler(TestBaseRQ):
 
     def setUp(self):
         super().setUp()
-        self.registry = TaskRegistry()
+        self.registry = TaskRegistry(self.conn)
         self.task_scheduler = _TaskScheduler(self.registry, self.conn, [])
 
     def test_initialization(self):
@@ -255,12 +276,14 @@ class TestStartedJobHandler(TestBaseRQ):
 
         handler = StartedJobHandler(self.task_scheduler)
 
-        task = self.registry.add('mytask', 'git', 'commit', {})
+        _ = self.registry.add('mytask', 'git', 'commit', {})
 
         event = JobEvent(JobEventType.STARTED, 0, 'mytask', None)
 
         handled = handler(event)
         self.assertEqual(handled, True)
+
+        task = self.registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.RUNNING)
 
     def test_ignore_orphan_event(self):
@@ -273,13 +296,43 @@ class TestStartedJobHandler(TestBaseRQ):
         handled = handler(event)
         self.assertEqual(handled, False)
 
+    @unittest.mock.patch('redis.StrictRedis.get')
+    def test_ignore_event_on_get_task_registry_error(self, mock_redis_get):
+        """Check if an event is ignored when a TaskRegistryError is thrown"""
+
+        mock_redis_get.side_effect = RedisError
+
+        self.task_scheduler.registry.add('mytask', 'git', 'commit', {})
+
+        handler = StartedJobHandler(self.task_scheduler)
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
+        event = JobEvent(JobEventType.STARTED, 0, 'mytask', result)
+
+        handled = handler(event)
+        self.assertEqual(handled, False)
+
+    @unittest.mock.patch('redis.StrictRedis.exists')
+    def test_ignore_event_on_update_task_registry_error(self, mock_redis_exists):
+        """Check if an event is ignored when a TaskRegistryError is thrown"""
+
+        mock_redis_exists.side_effect = [False, True, RedisError]
+
+        self.task_scheduler.registry.add('mytask', 'git', 'commit', {})
+
+        handler = StartedJobHandler(self.task_scheduler)
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
+        event = JobEvent(JobEventType.STARTED, 0, 'mytask', result)
+
+        handled = handler(event)
+        self.assertEqual(handled, False)
+
 
 class TestCompletedJobHandler(TestBaseRQ):
     """Unit tests for CompletedJobHandler"""
 
     def setUp(self):
         super().setUp()
-        self.registry = TaskRegistry()
+        self.registry = TaskRegistry(self.conn)
         self.task_scheduler = _TaskScheduler(self.registry, self.conn, [])
 
     def test_initialization(self):
@@ -293,7 +346,7 @@ class TestCompletedJobHandler(TestBaseRQ):
 
         handler = CompletedJobHandler(self.task_scheduler)
 
-        task = self.registry.add('mytask', 'git', 'commit', {})
+        _ = self.registry.add('mytask', 'git', 'commit', {})
 
         result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
@@ -307,6 +360,8 @@ class TestCompletedJobHandler(TestBaseRQ):
 
         handled = handler(event)
         self.assertEqual(handled, True)
+
+        task = self.registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
 
     def test_task_rescheduling_age(self):
@@ -332,6 +387,8 @@ class TestCompletedJobHandler(TestBaseRQ):
 
         handled = handler(event)
         self.assertEqual(handled, True)
+
+        task = self.registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
 
     def test_task_rescheduling_unlimited_age(self):
@@ -357,6 +414,8 @@ class TestCompletedJobHandler(TestBaseRQ):
 
         handled = handler(event)
         self.assertEqual(handled, True)
+
+        task = self.registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
 
     def test_task_not_rescheduled_age_limit(self):
@@ -365,10 +424,11 @@ class TestCompletedJobHandler(TestBaseRQ):
         handler = CompletedJobHandler(self.task_scheduler)
 
         scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=0, max_age=3)
-        task = self.registry.add('mytask', 'git', 'commit', {},
-                                 scheduling_cfg=scheduler_opts)
+        task = self.task_scheduler.registry.add('mytask', 'git', 'commit', {},
+                                                scheduling_cfg=scheduler_opts)
         # Force the age to its pre-defined limit
         task.age = 3
+        self.task_scheduler.registry.update('mytask', task)
 
         result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
@@ -382,6 +442,8 @@ class TestCompletedJobHandler(TestBaseRQ):
 
         handled = handler(event)
         self.assertEqual(handled, True)
+
+        task = self.task_scheduler.registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.COMPLETED)
 
     def test_task_not_rescheduled_archive_task(self):
@@ -390,8 +452,7 @@ class TestCompletedJobHandler(TestBaseRQ):
         handler = CompletedJobHandler(self.task_scheduler)
 
         archiving_cfg = ArchivingTaskConfig('/tmp/archive', True)
-        task = self.registry.add('mytask', 'git', 'commit', {},
-                                 archiving_cfg=archiving_cfg)
+        _ = self.task_scheduler.registry.add('mytask', 'git', 'commit', {}, archiving_cfg=archiving_cfg)
 
         result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
@@ -405,6 +466,8 @@ class TestCompletedJobHandler(TestBaseRQ):
 
         handled = handler(event)
         self.assertEqual(handled, True)
+
+        task = self.task_scheduler.registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.COMPLETED)
 
     def test_task_rescheduled_with_next_from_date(self):
@@ -412,7 +475,7 @@ class TestCompletedJobHandler(TestBaseRQ):
 
         handler = CompletedJobHandler(self.task_scheduler)
 
-        task = self.registry.add('mytask', 'git', 'commit', {})
+        _ = self.task_scheduler.registry.add('mytask', 'git', 'commit', {})
         result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
         summary = Summary()
@@ -425,6 +488,8 @@ class TestCompletedJobHandler(TestBaseRQ):
 
         handled = handler(event)
         self.assertEqual(handled, True)
+
+        task = self.task_scheduler.registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
 
         # The field is updated to the max date received
@@ -437,7 +502,7 @@ class TestCompletedJobHandler(TestBaseRQ):
 
         handler = CompletedJobHandler(self.task_scheduler)
 
-        task = self.registry.add('mytask', 'git', 'commit', {})
+        _ = self.task_scheduler.registry.add('mytask', 'git', 'commit', {})
         result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
         summary = Summary()
@@ -452,6 +517,8 @@ class TestCompletedJobHandler(TestBaseRQ):
 
         handled = handler(event)
         self.assertEqual(handled, True)
+
+        task = self.task_scheduler.registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
 
         # Both fields are updated to the max value received
@@ -465,7 +532,7 @@ class TestCompletedJobHandler(TestBaseRQ):
 
         handler = CompletedJobHandler(self.task_scheduler)
 
-        task = self.registry.add('mytask', 'git', 'commit', {})
+        _ = self.task_scheduler.registry.add('mytask', 'git', 'commit', {})
         result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
         summary = Summary()
@@ -478,6 +545,8 @@ class TestCompletedJobHandler(TestBaseRQ):
 
         handled = handler(event)
         self.assertEqual(handled, True)
+
+        task = self.task_scheduler.registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
 
         # Both fields are not updated
@@ -489,7 +558,7 @@ class TestCompletedJobHandler(TestBaseRQ):
 
         handler = CompletedJobHandler(self.task_scheduler)
 
-        task = self.registry.add('mytask', 'git', 'commit', {})
+        task = self.task_scheduler.registry.add('mytask', 'git', 'commit', {})
 
         # Force to a pre-defined number of failures
         task.num_failures = 2
@@ -506,6 +575,8 @@ class TestCompletedJobHandler(TestBaseRQ):
 
         handled = handler(event)
         self.assertEqual(handled, True)
+
+        task = self.task_scheduler.registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
         self.assertEqual(task.num_failures, 0)
 
@@ -520,13 +591,28 @@ class TestCompletedJobHandler(TestBaseRQ):
         handled = handler(event)
         self.assertEqual(handled, False)
 
+    @unittest.mock.patch('redis.StrictRedis.get')
+    def test_ignore_event_on_task_registry_error(self, mock_redis_get):
+        """Check if an event is ignored when a TaskRegistryError is thrown"""
+
+        mock_redis_get.side_effect = RedisError
+
+        self.task_scheduler.registry.add('mytask', 'git', 'commit', {})
+
+        handler = CompletedJobHandler(self.task_scheduler)
+        result = JobResult(0, 1, 'mytask', 'git', 'commit')
+        event = JobEvent(JobEventType.COMPLETED, 0, 'mytask', result)
+
+        handled = handler(event)
+        self.assertEqual(handled, False)
+
 
 class TestFailedJobHandler(TestBaseRQ):
     """Unit tests for CompletedJobHandler"""
 
     def setUp(self):
         super().setUp()
-        self.registry = TaskRegistry()
+        self.registry = TaskRegistry(self.conn)
         self.task_scheduler = _TaskScheduler(self.registry, self.conn, [])
 
     def test_initialization(self):
@@ -540,7 +626,7 @@ class TestFailedJobHandler(TestBaseRQ):
 
         handler = FailedJobHandler(self.task_scheduler)
 
-        task = self.registry.add('mytask', 'git', 'commit', {})
+        _ = self.registry.add('mytask', 'git', 'commit', {})
 
         result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
@@ -559,6 +645,8 @@ class TestFailedJobHandler(TestBaseRQ):
         # It won't be scheduled because max_retries is not set
         handled = handler(event)
         self.assertEqual(handled, True)
+
+        task = self.registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.FAILED)
 
     def test_task_not_rescheduled_not_resume(self):
@@ -586,6 +674,8 @@ class TestFailedJobHandler(TestBaseRQ):
 
         handled = handler(event)
         self.assertEqual(handled, True)
+
+        task = self.registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.FAILED)
         self.assertEqual(task.num_failures, 1)
 
@@ -595,11 +685,11 @@ class TestFailedJobHandler(TestBaseRQ):
         handler = FailedJobHandler(self.task_scheduler)
 
         scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=3)
-        task = self.registry.add('mytask', 'git', 'commit', {},
-                                 scheduling_cfg=scheduler_opts)
+        task = self.task_scheduler.registry.add('mytask', 'git', 'commit', {}, scheduling_cfg=scheduler_opts)
 
         # Force to a pre-defined number of failures
         task.num_failures = 2
+        self.task_scheduler.registry.update('mytask', task)
 
         result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
@@ -617,6 +707,8 @@ class TestFailedJobHandler(TestBaseRQ):
 
         handled = handler(event)
         self.assertEqual(handled, True)
+
+        task = self.task_scheduler.registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.FAILED)
         self.assertEqual(task.num_failures, 3)
 
@@ -626,8 +718,7 @@ class TestFailedJobHandler(TestBaseRQ):
         handler = FailedJobHandler(self.task_scheduler)
 
         scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=3)
-        task = self.registry.add('mytask', 'git', 'commit', {},
-                                 scheduling_cfg=scheduler_opts)
+        _ = self.task_scheduler.registry.add('mytask', 'git', 'commit', {}, scheduling_cfg=scheduler_opts)
 
         result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
@@ -645,6 +736,8 @@ class TestFailedJobHandler(TestBaseRQ):
 
         handled = handler(event)
         self.assertEqual(handled, True)
+
+        task = self.task_scheduler.registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
 
         # The field is updated to the max date received
@@ -659,8 +752,7 @@ class TestFailedJobHandler(TestBaseRQ):
         handler = FailedJobHandler(self.task_scheduler)
 
         scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=3)
-        task = self.registry.add('mytask', 'git', 'commit', {},
-                                 scheduling_cfg=scheduler_opts)
+        _ = self.registry.add('mytask', 'git', 'commit', {}, scheduling_cfg=scheduler_opts)
 
         result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
@@ -680,6 +772,8 @@ class TestFailedJobHandler(TestBaseRQ):
 
         handled = handler(event)
         self.assertEqual(handled, True)
+
+        task = self.registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
 
         # Both fields are updated to the max value received
@@ -695,8 +789,7 @@ class TestFailedJobHandler(TestBaseRQ):
         handler = FailedJobHandler(self.task_scheduler)
 
         scheduler_opts = SchedulingTaskConfig(delay=0, max_retries=3)
-        task = self.registry.add('mytask', 'git', 'commit', {},
-                                 scheduling_cfg=scheduler_opts)
+        _ = self.task_scheduler.registry.add('mytask', 'git', 'commit', {}, scheduling_cfg=scheduler_opts)
 
         result = JobResult(0, 1, 'mytask', 'git', 'commit')
 
@@ -714,6 +807,8 @@ class TestFailedJobHandler(TestBaseRQ):
 
         handled = handler(event)
         self.assertEqual(handled, True)
+
+        task = self.task_scheduler.registry.get('mytask')
         self.assertEqual(task.status, TaskStatus.SCHEDULED)
 
         # Both fields are not updated

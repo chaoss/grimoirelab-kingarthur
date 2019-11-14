@@ -28,7 +28,7 @@ import pickle
 import rq
 
 from .common import CH_PUBSUB, ARCHIVES_DEFAULT_PATH, Q_STORAGE_ITEMS
-from .errors import AlreadyExistsError, NotFoundError
+from .errors import AlreadyExistsError, NotFoundError, TaskRegistryError
 from .scheduler import Scheduler
 from .tasks import ArchivingTaskConfig, SchedulingTaskConfig, TaskRegistry
 
@@ -49,7 +49,7 @@ class Arthur:
         rq.push_connection(self.conn)
 
         self.archive_path = base_archive_path
-        self._tasks = TaskRegistry()
+        self._tasks = TaskRegistry(self.conn)
         self._scheduler = Scheduler(self.conn, self._tasks,
                                     pubsub_channel=pubsub_channel,
                                     async_mode=async_mode)
@@ -63,7 +63,7 @@ class Arthur:
 
         :param task_id: id of the task
         :param backend: name of the backend
-        :param category: category of the items to fecth
+        :param category: category of the items to fetch
         :param backend_args: args needed to initialize the backend
         :param archive_args: args needed to initialize the archive
         :param sched_args: scheduling args for this task
@@ -83,6 +83,8 @@ class Arthur:
                                    scheduling_cfg=scheduling_cfg)
         except AlreadyExistsError as e:
             raise e
+        except TaskRegistryError as e:
+            raise e
 
         self._scheduler.schedule_task(task.task_id)
 
@@ -95,7 +97,7 @@ class Arthur:
         """
         try:
             self._scheduler.cancel_task(task_id)
-        except NotFoundError as e:
+        except NotFoundError:
             logger.info("Cannot cancel %s task because it does not exist.",
                         task_id)
             return False

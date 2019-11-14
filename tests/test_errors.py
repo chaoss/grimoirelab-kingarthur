@@ -36,7 +36,7 @@ class MockErrorArgs(errors.BaseError):
 
 class TestBaseError(unittest.TestCase):
 
-    def test_subblass_with_no_args(self):
+    def test_subclass_with_no_args(self):
         """Check subclasses that do not require arguments.
 
         Arguments passed to the constructor should be ignored.
@@ -90,6 +90,15 @@ class TestNotFoundError(unittest.TestCase):
 
         e = errors.NotFoundError(element='repository')
         self.assertEqual(e.element, 'repository')
+
+
+class TestTaskRegistryError(unittest.TestCase):
+
+    def test_message(self):
+        """Make sure that prints the correct error"""
+
+        e = errors.TaskRegistryError(cause='error on registry')
+        self.assertEqual('error on registry', str(e))
 
 
 if __name__ == "__main__":

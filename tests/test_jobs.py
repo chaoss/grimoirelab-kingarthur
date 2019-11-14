@@ -97,7 +97,7 @@ def setup_mock_bugzilla_server():
 
         http_requests.append(httpretty.last_request())
 
-        return (200, headers, body)
+        return 200, headers, body
 
     httpretty.register_uri(httpretty.GET,
                            BUGZILLA_BUGLIST_URL,
@@ -150,13 +150,13 @@ def setup_mock_redmine_server(max_failures=0):
             updated_on = params['updated_on'][0]
             offset = params['offset'][0]
 
-            if (updated_on == '>=1970-01-01T00:00:00Z' and offset == '0'):
+            if updated_on == '>=1970-01-01T00:00:00Z' and offset == '0':
                 body = issues_body
-            elif (updated_on == '>=1970-01-01T00:00:00Z' and offset == '3'):
+            elif updated_on == '>=1970-01-01T00:00:00Z' and offset == '3':
                 body = issues_next_body
-            elif (updated_on == '>=2016-07-27T00:00:00Z' and offset == '0'):
+            elif updated_on == '>=2016-07-27T00:00:00Z' and offset == '0':
                 body = issues_next_body
-            elif (updated_on == '>=2011-12-08T17:58:37Z' and offset == '0'):
+            elif updated_on == '>=2011-12-08T17:58:37Z' and offset == '0':
                 body = issues_next_body
             else:
                 body = issues_empty_body
@@ -186,7 +186,7 @@ def setup_mock_redmine_server(max_failures=0):
 
         http_requests.append(last_request)
 
-        return (status, headers, body)
+        return status, headers, body
 
     for url in REDMINE_URL_LIST:
         httpretty.register_uri(httpretty.GET,

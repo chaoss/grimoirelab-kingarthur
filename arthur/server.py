@@ -136,6 +136,26 @@ class ArthurServer(Arthur):
         return result
 
     @cherrypy.expose
+    @cherrypy.tools.json_in()
+    @cherrypy.tools.json_out(handler=json_encoder)
+    def reschedule(self):
+        """Re-schedule failed tasks"""
+
+        payload = cherrypy.request.json
+
+        logger.debug("Reading tasks to re-schedule...")
+        task_ids = {}
+
+        for task_data in payload['tasks']:
+            task_id = task_data['task_id']
+            rescheduled = super().reschedule_task(task_id)
+            task_ids[task_id] = rescheduled
+
+        result = {'tasks': task_ids}
+
+        return result
+
+    @cherrypy.expose
     @cherrypy.tools.json_out(handler=json_encoder)
     def tasks(self):
         """List tasks"""

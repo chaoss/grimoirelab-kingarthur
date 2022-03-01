@@ -38,10 +38,10 @@ from arthur.worker import ArthurWorker
 
 
 ARTHURW_USAGE_MSG = \
-"""%(prog)s [-g] [-d <database>] [--burst] [<queue1>...<queueN>] | --help """
+    """%(prog)s [-g] [-d <database>] [--burst] [<queue1>...<queueN>] | --help """
 
 ARTHURW_DESC_MSG = \
-"""King Arthur's worker. It will run Perceval jobs on the quest
+    """King Arthur's worker. It will run Perceval jobs on the quest
 to retrieve data from software repositories.
 
 positional arguments:
@@ -93,7 +93,7 @@ def parse_args():
                                      add_help=False)
 
     parser.add_argument('-?', '--help', action='help',
-                       help=argparse.SUPPRESS)
+                        help=argparse.SUPPRESS)
     parser.add_argument('-g', '--debug', dest='debug',
                         action='store_true',
                         help=argparse.SUPPRESS)

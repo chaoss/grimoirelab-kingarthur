@@ -95,9 +95,11 @@ setup(name="kingarthur",
       ],
       tests_require=['httpretty==0.8.6', 'fakeredis'],
       test_suite='tests',
-      scripts=[
-          'bin/arthurd',
-          'bin/arthurw'
-      ],
+      entry_points={
+          'console_scripts': [
+              'arthurd=arthur.bin.arthurd:main'
+              'arthurw=arthur.bin.arthurw:main'
+          ]
+      },
       cmdclass=cmdclass,
       zip_safe=False)

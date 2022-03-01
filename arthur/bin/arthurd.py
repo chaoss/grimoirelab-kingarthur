@@ -36,12 +36,12 @@ from arthur.writers import ElasticItemsWriter
 
 
 ARTHURD_USAGE_MSG = \
-"""%(prog)s [-c <file>] [-g] [-h <host>] [-p <port>] [-d <database>]
+    """%(prog)s [-c <file>] [-g] [-h <host>] [-p <port>] [-d <database>]
                [--es-index <index>] [--log-path <path>] [--archive-path <cpath>]
                [--no-archive] [--no-daemon] | --help """
 
 ARTHURD_DESC_MSG = \
-"""King Arthur commands his loyal knight Perceval on the quest
+    """King Arthur commands his loyal knight Perceval on the quest
 to retrieve data from software repositories.
 
 This command runs an Arthur daemon that waits for HTTP requests

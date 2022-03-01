@@ -82,7 +82,7 @@ setup(name="kingarthur",
       packages=[
           'arthur'
       ],
-      python_requires='>=3.4',
+      python_requires='>=3.7',
       setup_requires=['wheel'],
       install_requires=[
           'python-dateutil>=2.8.0',
@@ -95,9 +95,11 @@ setup(name="kingarthur",
       ],
       tests_require=['httpretty==0.8.6', 'fakeredis'],
       test_suite='tests',
-      scripts=[
-          'bin/arthurd',
-          'bin/arthurw'
-      ],
+      entry_points={
+          'console_scripts': [
+              'arthurd=arthur.bin.arthurd:main'
+              'arthurw=arthur.bin.arthurw:main'
+          ]
+      },
       cmdclass=cmdclass,
       zip_safe=False)

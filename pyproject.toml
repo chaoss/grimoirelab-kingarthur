@@ -1,0 +1,66 @@
+[tool.poetry]
+name = "kingarthur"
+version = "0.1.20"
+description = "Distributed job queue platform for scheduling Perceval jobs"
+authors = [
+    "GrimoireLab Developers"]
+
+license = "GPL-3.0+"
+
+readme = "README.md"
+
+homepage = "https://chaoss.github.io/grimoirelab/"
+repository = "https://github.com/chaoss/grimoirelab-kingarthur"
+
+keywords = [
+    "development",
+    "grimoirelab"
+]
+
+packages = [
+    { include = "arthur" },
+    { include = "tests", format = "sdist" },
+]
+
+include = [
+    { path = "AUTHORS", format = "sdist" },
+    { path = "NEWS", format = "sdist" },
+    { path = "README.md", format = "sdist" },
+]
+
+classifiers = [
+   "Development Status :: 4 - Beta",
+   "Intended Audience :: Developers",
+   "Intended Audience :: Science/Research",
+   "Topic :: Software Development",
+   "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+   "Programming Language :: Python :: 3"
+]
+
+[tool.poetry.urls]
+"Bug Tracker" = "https://github.com/chaoss/grimoirelab-kingarthur/issues"
+
+[tool.poetry.scripts]
+arthurd = 'arthur.bin.arthurd:main'
+arthurw = 'arthur.bin.arthurw:main'
+
+[tool.poetry.dependencies]
+python = "^3.7"
+
+python-dateutil = ">=2.8.0"
+redis = "3.0.0"
+rq = "1.0.0"
+cheroot = ">=8.2.1"
+CherryPy = ">=17.4.2"
+perceval = ">=0.12.23"
+grimoirelab-toolkit = ">=0.1.10"
+
+[tool.poetry.dev-dependencies]
+httpretty = "0.8.6"
+fakeredis = "^1.7.1"
+coverage = "^6.3.2"
+flake8 = "^4.0.1"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

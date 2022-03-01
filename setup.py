@@ -82,7 +82,7 @@ setup(name="kingarthur",
       packages=[
           'arthur'
       ],
-      python_requires='>=3.4',
+      python_requires='>=3.7',
       setup_requires=['wheel'],
       install_requires=[
           'python-dateutil>=2.8.0',

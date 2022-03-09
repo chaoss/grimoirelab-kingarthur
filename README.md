@@ -1,4 +1,4 @@
-# Arthur [![Build Status](https://github.com/chaoss/grimoirelab-kingarthur/workflows/build/badge.svg)](https://github.com/chaoss/grimoirelab-kingarthur/actions?query=workflow:build+branch:master+event:push) [![Coverage Status](https://coveralls.io/repos/github/chaoss/grimoirelab-kingarthur/badge.svg?branch=master)](https://coveralls.io/github/chaoss/grimoirelab-kingarthur?branch=master)
+# Arthur [![Build Status](https://github.com/chaoss/grimoirelab-kingarthur/workflows/tests/badge.svg)](https://github.com/chaoss/grimoirelab-kingarthur/actions?query=workflow:tests+branch:master+event:push) [![Coverage Status](https://coveralls.io/repos/github/chaoss/grimoirelab-kingarthur/badge.svg?branch=master)](https://coveralls.io/github/chaoss/grimoirelab-kingarthur?branch=master)
 
 King Arthur commands his loyal knight Perceval on the quest to fetch
 data from software repositories.

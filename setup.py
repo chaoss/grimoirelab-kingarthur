@@ -97,7 +97,7 @@ setup(name="kingarthur",
       test_suite='tests',
       entry_points={
           'console_scripts': [
-              'arthurd=arthur.bin.arthurd:main'
+              'arthurd=arthur.bin.arthurd:main',
               'arthurw=arthur.bin.arthurw:main'
           ]
       },

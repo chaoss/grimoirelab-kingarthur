@@ -102,14 +102,13 @@ optional arguments:
 
 ## Requirements
 
-* Python >= 3.4
-* Redis >= 2.3 and < 3.0
-* python3-dateutil >= 2.6
-* python3-redis >= 2.10 and <= 2.10.6
-* python3-rq >= 0.6 and <=0.12.0
-* python3-cherrypy >= 8.1.0 and <=11.0.0
-* grimoirelab-toolkit >= 0.1.10
-* perceval >= 0.12.23
+King Arthur requires Python 3.7 or later plus
+[Perceval](https://github.com/chaoss/grimoirelab-perceval/ to run.
+For other Python dependencies, please check the `pyproject.toml`
+file included on this repository.
+
+Redis (>= 2.3 and < 3.0) database will also be needed to schedule
+and execute Perceval jobs.
 
 ## Installation
 

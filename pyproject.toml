@@ -52,8 +52,8 @@ redis = "3.0.0"
 rq = "1.0.0"
 cheroot = ">=8.2.1"
 CherryPy = ">=17.4.2"
-perceval = "^0.18"
-grimoirelab-toolkit = "^0.3"
+perceval = ">=0.19"
+grimoirelab-toolkit = ">=0.3"
 
 [tool.poetry.dev-dependencies]
 httpretty = "0.8.6"

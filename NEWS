@@ -1,5 +1,16 @@
 # Releases
 
+## King Arthur 0.2.1 - (2022-06-24)
+
+**Others:**
+
+ * GrimoireLab dependencies update\
+   Dependencies have been updated to use the latest versions of
+   GrimoireLab packages:
+     - grimoirelab-toolkit >= 0.3
+     - perceval >= 0.19
+
+
 ## King Arthur 0.2.0 - (2022-06-03)
 
 **New features:**

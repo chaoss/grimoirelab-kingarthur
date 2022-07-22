@@ -357,7 +357,7 @@ pyparsing = ">=2.0.2,<3.0.5 || >3.0.5"
 
 [[package]]
 name = "perceval"
-version = "0.19.1"
+version = "0.20.0rc2"
 description = "Send Sir Perceval on a quest to fetch and gather data from software repositories."
 category = "main"
 optional = false
@@ -839,8 +839,8 @@ packaging = [
     {file = "packaging-21.3.tar.gz", hash = "sha256:dd47c42927d89ab911e606518907cc2d3a1f38bbd026385970643f9c5b8ecfeb"},
 ]
 perceval = [
-    {file = "perceval-0.19.1-py3-none-any.whl", hash = "sha256:d8b5222b8eaeb81c3fb64ddb8805b563061b21b62ae3fe4501d5d9e38fed5da3"},
-    {file = "perceval-0.19.1.tar.gz", hash = "sha256:9964a5dc78718d3c45dc05e63ec895667c71418d272fbfde3a6958cf99db73fc"},
+    {file = "perceval-0.20.0rc2-py3-none-any.whl", hash = "sha256:9d929ccdaa03f4331fa7a493e236a23b96f8362d1eabd3a5fc2c5131dbe501a5"},
+    {file = "perceval-0.20.0rc2.tar.gz", hash = "sha256:3c6faa9383345368a7462ea93a6d5cbf9380ab451f9abf83adb61beba11b26e6"},
 ]
 portend = [
     {file = "portend-3.1.0-py3-none-any.whl", hash = "sha256:9e735cee3a5c1961f09e3f3ba6dc498198c2d70b473d98d0d1504b8d1e7a3d61"},

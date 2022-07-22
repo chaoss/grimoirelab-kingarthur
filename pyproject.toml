@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "kingarthur"
-version = "0.2.1"
+version = "0.2.2-rc.1"
 description = "Distributed job queue platform for scheduling Perceval jobs"
 authors = [
     "GrimoireLab Developers"]

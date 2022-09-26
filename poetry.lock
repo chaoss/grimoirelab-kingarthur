@@ -370,7 +370,7 @@ python-versions = ">=3.5"
 
 [[package]]
 name = "perceval"
-version = "0.20.0rc14"
+version = "0.20.0rc15"
 description = "Send Sir Perceval on a quest to fetch and gather data from software repositories."
 category = "main"
 optional = false
@@ -909,8 +909,8 @@ more-itertools = [
     {file = "more_itertools-8.14.0-py3-none-any.whl", hash = "sha256:1bc4f91ee5b1b31ac7ceacc17c09befe6a40a503907baf9c839c229b5095cfd2"},
 ]
 perceval = [
-    {file = "perceval-0.20.0rc14-py3-none-any.whl", hash = "sha256:d926d0610e1bfed7e3a025e60da9436774e81fcc66b8d8bd74dafa61cf7f7208"},
-    {file = "perceval-0.20.0rc14.tar.gz", hash = "sha256:63192276d4c24ad19a0c5fd0986ab8a93c321d4661918b114e77a05955a9f060"},
+    {file = "perceval-0.20.0rc15-py3-none-any.whl", hash = "sha256:6b9267ed99bf7f067dbb188754852bb04d31fac4ebdcb6c5366732eb74ca3fe1"},
+    {file = "perceval-0.20.0rc15.tar.gz", hash = "sha256:fb97545ba506a9d2a7846cbc2853c2d13939e007e3dae70053ec96b2d69b2f6c"},
 ]
 portend = [
     {file = "portend-3.1.0-py3-none-any.whl", hash = "sha256:9e735cee3a5c1961f09e3f3ba6dc498198c2d70b473d98d0d1504b8d1e7a3d61"},

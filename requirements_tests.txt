@@ -1,2 +1,0 @@
-httpretty==0.8.6
-fakeredis==1.0.3

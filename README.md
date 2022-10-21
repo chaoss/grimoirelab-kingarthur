@@ -1,4 +1,4 @@
-# Arthur [![Build Status](https://github.com/chaoss/grimoirelab-kingarthur/workflows/tests/badge.svg)](https://github.com/chaoss/grimoirelab-kingarthur/actions?query=workflow:tests+branch:master+event:push) [![Coverage Status](https://coveralls.io/repos/github/chaoss/grimoirelab-kingarthur/badge.svg?branch=master)](https://coveralls.io/github/chaoss/grimoirelab-kingarthur?branch=master)
+# Arthur [![Build Status](https://github.com/chaoss/grimoirelab-kingarthur/workflows/tests/badge.svg)](https://github.com/chaoss/grimoirelab-kingarthur/actions?query=workflow:tests+branch:master+event:push) [![Coverage Status](https://coveralls.io/repos/github/chaoss/grimoirelab-kingarthur/badge.svg?branch=master)](https://coveralls.io/github/chaoss/grimoirelab-kingarthur?branch=master)  [![PyPI version](https://badge.fury.io/py/kingarthur.svg)](https://badge.fury.io/py/kingarthur)
 
 King Arthur commands his loyal knight Perceval on the quest to fetch
 data from software repositories.
@@ -20,6 +20,59 @@ re-schedule it to retrieve new data.
 By default, items fetched by each job will be published using a Redis queue.
 Additionally, they can be written to an Elastic Search index.
 
+## Requirements
+
+ * Python >= 3.7
+ * Redis (>= 2.3 and < 3.0) database will also be needed to schedule and execute Perceval jobs. 
+
+You will also need some other libraries for running the tool, you can find the
+whole list of dependencies in [pyproject.toml](pyproject.toml) file.
+
+## Installation
+
+There are several ways to install Arthur on your system: packages or source 
+code using Poetry or pip.
+
+### PyPI
+
+Arthur can be installed using pip, a tool for installing Python packages. 
+To do it, run the next command:
+```
+$ pip install kingarthur
+```
+
+### Source code
+
+To install from the source code you will need to clone the repository first:
+```
+$ git clone https://github.com/chaoss/grimoirelab-kingarthur
+$ cd grimoirelab-kingarthur
+```
+
+Then use pip or Poetry to install the package along with its dependencies.
+
+#### Pip
+To install the package from local directory run the following command:
+```
+$ pip install .
+```
+In case you are a developer, you should install kingarthur in editable mode:
+```
+$ pip install -e .
+```
+
+#### Poetry
+We use [poetry](https://python-poetry.org/) for dependency management and 
+packaging. You can install it following its [documentation](https://python-poetry.org/docs/#installation).
+Once you have installed it, you can install kingarthur and the dependencies in 
+a project isolated environment using:
+```
+$ poetry install
+```
+To spaw a new shell within the virtual environment use:
+```
+$ poetry shell
+```
 
 ## Usage
 
@@ -98,23 +151,6 @@ optional arguments:
   -g, --debug           set debug mode on
   -d, --database        URL database connection (default: 'redis://localhost/8')
   -b, --burst           Run in burst mode (quit after all work is done)
-```
-
-## Requirements
-
-King Arthur requires Python 3.7 or later plus
-[Perceval](https://github.com/chaoss/grimoirelab-perceval/ to run.
-For other Python dependencies, please check the `pyproject.toml`
-file included on this repository.
-
-Redis (>= 2.3 and < 3.0) database will also be needed to schedule
-and execute Perceval jobs.
-
-## Installation
-
-```
-$ pip3 install -r requirements.txt
-$ python3 setup.py install
 ```
 
 ## How to run it

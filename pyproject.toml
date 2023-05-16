@@ -48,7 +48,7 @@ arthurw = 'arthur.bin.arthurw:main'
 python = "^3.7"
 
 python-dateutil = ">=2.8.0"
-redis = "3.0.0"
+redis = "4.4.4"
 rq = "1.0.0"
 cheroot = ">=8.2.1"
 CherryPy = ">=17.4.2"
